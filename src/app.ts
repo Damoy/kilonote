@@ -42,6 +42,8 @@ export interface Doc {
   color: string | null;
   groupId: string | null;
   missing: boolean;
+  /** Modifié sur le disque alors que l'onglet a des changements non enregistrés. */
+  conflict: boolean;
   scroll: ReturnType<EditorView["scrollSnapshot"]> | null;
   pendingScrollTop: number;
   timer?: ReturnType<typeof setTimeout>;
@@ -156,6 +158,7 @@ export class App {
     window.addEventListener("blur", () => this.flushAutosaves());
     setInterval(() => document.hasFocus() && this.active?.path && void this.checkExternalChanges([this.active]), 4000);
     this.backend.onFileDrop((paths) => void this.openPaths(paths));
+    this.backend.onOpenRequest((paths) => void this.openPaths(paths));
     this.backend.onCloseRequested(() => this.beforeClose());
 
     await this.restoreSession();
@@ -255,14 +258,18 @@ export class App {
   }
 
   private quietSettings = false;
-  private onSettingsSaved(text: string) {
+  /** Enregistrement automatique : on applique en silence si le JSON est valide (il peut être en cours de frappe). */
+  private onSettingsSaved(text: string, auto: boolean) {
+    let parsed: Partial<Settings>;
     try {
-      this.settings = mergeSettings(parseJsonc<Partial<Settings>>(text));
-      this.applySettings();
-      if (!this.quietSettings) toast("Paramètres appliqués", { kind: "success", timeout: 1600 });
+      parsed = parseJsonc<Partial<Settings>>(text);
     } catch (e) {
-      toast(`Erreur dans settings.json : ${(e as Error).message}`, { kind: "error" });
+      if (!auto) toast(`Erreur dans settings.json : ${(e as Error).message}`, { kind: "error" });
+      return;
     }
+    this.settings = mergeSettings(parsed);
+    this.applySettings();
+    if (!auto && !this.quietSettings) toast("Paramètres appliqués", { kind: "success", timeout: 1600 });
   }
 
   // -------------------------------------------------------------------------
@@ -288,6 +295,7 @@ export class App {
       color: init.color ?? null,
       groupId: init.groupId ?? null,
       missing: false,
+      conflict: false,
       scroll: null,
       pendingScrollTop: init.scrollTop ?? 0,
       saving: null,
@@ -399,11 +407,12 @@ export class App {
         requestAnimationFrame(() => (this.view.scrollDOM.scrollTop = top));
         doc.pendingScrollTop = 0;
       }
-      this.view.focus();
     } else {
       this.view.setState(this.blankState());
     }
+    // D'abord afficher l'éditeur (l'écran d'accueil le masque), ensuite le focaliser.
     this.emit("active");
+    if (doc) this.view.focus();
   }
 
   /** Met la ligne `line` (1-based) au centre de l'écran, avec une sélection optionnelle (dans la ligne). */
@@ -467,13 +476,14 @@ export class App {
   private scheduleAutosave(doc: Doc) {
     if (!this.settings.autosave || !doc.path || doc.missing) return;
     clearTimeout(doc.timer);
-    doc.timer = setTimeout(() => void this.save(doc, { auto: true }), this.settings.autosave_delay);
+    doc.timer = setTimeout(() => {
+      if (doc.dirty) void this.save(doc, { auto: true });
+    }, this.settings.autosave_delay);
   }
 
   flushAutosaves() {
     for (const d of this.docs) {
-      if (d.dirty && d.path && !d.missing && this.settings.autosave) {
-        clearTimeout(d.timer);
+      if (d.dirty && d.path && !d.missing && !d.conflict && this.settings.autosave) {
         void this.save(d, { auto: true });
       }
     }
@@ -482,6 +492,8 @@ export class App {
 
   async save(doc: Doc, opts: { auto?: boolean } = {}): Promise<boolean> {
     if (!doc.path) return opts.auto ? false : this.saveAs(doc);
+    clearTimeout(doc.timer);
+    if (opts.auto && doc.conflict) return false;
     if (doc.saving) await doc.saving;
     const run = (async () => {
       const path = doc.path!;
@@ -490,11 +502,7 @@ export class App {
       const meta = await this.backend.stat(path);
       if (meta && doc.mtime && Math.abs(meta.mtime - doc.mtime) > 1) {
         if (opts.auto) {
-          toast(`« ${basename(path)} » a été modifié en dehors de KiloNote.`, {
-            kind: "error",
-            timeout: 12000,
-            action: { label: "Écraser", run: () => { doc.mtime = 0; void this.save(doc); } },
-          });
+          this.flagConflict(doc);
           return false;
         }
         const r = await confirm({
@@ -514,11 +522,12 @@ export class App {
         doc.mtime = written.mtime;
         doc.savedText = snapshot;
         doc.missing = false;
+        doc.conflict = false;
         const wasDirty = doc.dirty;
         doc.dirty = !doc.state.doc.eq(snapshot);
         if (wasDirty !== doc.dirty) this.emit("docs");
         this.emit("saved");
-        if (samePath(path, this.settingsPath)) this.onSettingsSaved(text);
+        if (samePath(path, this.settingsPath)) this.onSettingsSaved(text, !!opts.auto);
         return true;
       } catch (e) {
         toast(`Échec de l'enregistrement de ${basename(path)} : ${e}`, { kind: "error" });
@@ -569,6 +578,7 @@ export class App {
       doc.mtime = ft.mtime;
       doc.encoding = ft.encoding;
       doc.missing = false;
+      doc.conflict = false;
       clearTimeout(doc.timer);
       this.emit("docs");
       this.emit("selection");
@@ -584,7 +594,7 @@ export class App {
     try {
       let changed = false;
       for (const doc of docs) {
-        if (!doc.path || doc.saving) continue;
+        if (!doc.path || doc.saving || doc.conflict) continue;
         const meta = await this.backend.stat(doc.path);
         if (!meta) {
           if (!doc.missing) {
@@ -599,14 +609,7 @@ export class App {
         }
         if (doc.mtime && Math.abs(meta.mtime - doc.mtime) > 1) {
           if (!doc.dirty) await this.reloadDoc(doc);
-          else {
-            doc.mtime = meta.mtime; // pour ne pas redemander en boucle
-            toast(`« ${this.docName(doc)} » a été modifié en dehors de KiloNote.`, {
-              kind: "error",
-              timeout: 15000,
-              action: { label: "Recharger", run: () => void this.reloadDoc(doc, true) },
-            });
-          }
+          else this.flagConflict(doc);
         }
       }
       if (changed) this.emit("docs");
@@ -615,12 +618,38 @@ export class App {
     }
   }
 
+  /**
+   * Le fichier a changé sur le disque alors que l'onglet contient des modifications :
+   * on suspend l'enregistrement automatique et on laisse l'utilisateur choisir.
+   */
+  private flagConflict(doc: Doc) {
+    if (doc.conflict) return;
+    doc.conflict = true;
+    clearTimeout(doc.timer);
+    this.emit("docs");
+    toast(`« ${this.docName(doc)} » a été modifié par un autre programme.`, {
+      kind: "error",
+      timeout: 30000,
+      actions: [
+        { label: "Recharger", run: () => this.resolveConflict(doc, "disk") },
+        { label: "Garder ma version", run: () => this.resolveConflict(doc, "mine") },
+      ],
+    });
+  }
+
+  resolveConflict(doc: Doc, keep: "disk" | "mine") {
+    if (keep === "disk") return this.reloadDoc(doc, true);
+    doc.conflict = false;
+    doc.mtime = 0; // pas de nouvelle vérification : on écrase
+    return this.save(doc);
+  }
+
   // -------------------------------------------------------------------------
   // Fermeture des onglets
 
   async closeDoc(doc: Doc, opts: { force?: boolean } = {}): Promise<boolean> {
     if (doc.dirty && !opts.force) {
-      if (doc.path && this.settings.autosave && !doc.missing) {
+      if (doc.path && this.settings.autosave && !doc.missing && !doc.conflict) {
         clearTimeout(doc.timer);
         if (!(await this.save(doc))) return false;
       } else {
@@ -1181,6 +1210,7 @@ export class App {
     const items = [{ id: "auto", label: "Automatique — suit le système" }, ...THEMES.map((t) => ({ id: t.id, label: t.label }))];
     openPicker({
       placeholder: "Thème",
+      initial: Math.max(0, items.findIndex((t) => t.id === original)),
       provide: (q) => ({
         items: fuzzyFilter(q, items, (t) => t.label).map(({ item, result }) => ({
           label: item.label, icon: "palette", positions: result.positions, value: item.id, hint: item.id === original ? "actuel" : undefined,
@@ -1207,6 +1237,7 @@ export class App {
     const resolve = (id: string | null) => (id ? (theme.colors as Record<string, string>)[id] ?? null : null);
     openPicker({
       placeholder: "Couleur d'accent",
+      initial: Math.max(0, opts.findIndex((o) => resolve(o.id) === original)),
       provide: (q) => ({
         items: fuzzyFilter(q, opts, (o) => o.label).map(({ item, result }) => ({
           label: item.label, color: item.id ?? "accent", positions: result.positions, value: item.id,
@@ -1407,7 +1438,7 @@ export class App {
   private async beforeClose(): Promise<boolean> {
     this.sessionReady = true;
     if (!this.settings.hot_exit) {
-      const unsaved = this.docs.filter((d) => d.dirty && (!d.path || !this.settings.autosave || d.missing));
+      const unsaved = this.docs.filter((d) => d.dirty && (!d.path || !this.settings.autosave || d.missing || d.conflict));
       if (unsaved.length) {
         const r = await confirm({
           title: "Quitter sans enregistrer ?",
@@ -1421,7 +1452,7 @@ export class App {
     const pending: Promise<boolean>[] = [];
     for (const d of this.docs) {
       clearTimeout(d.timer);
-      if (d.dirty && d.path && !d.missing && this.settings.autosave) pending.push(this.save(d, { auto: true }));
+      if (d.dirty && d.path && !d.missing && !d.conflict && this.settings.autosave) pending.push(this.save(d, { auto: true }));
     }
     await Promise.all(pending);
     await this.backend.writeText(this.sessionPath, JSON.stringify(this.sessionData())).catch(() => {});
@@ -1451,7 +1482,7 @@ export class App {
 
   showAbout() {
     void confirm({
-      title: "KiloNote 0.1.0",
+      title: `KiloNote ${__APP_VERSION__}`,
       message: "Des notes légères comme un kilooctet. Éditeur rapide, tâches todo / ongoing / done, archives et bilan annuel. Fait avec Tauri et CodeMirror.",
       okLabel: "Super !",
       cancelLabel: "Fermer",

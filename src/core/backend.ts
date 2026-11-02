@@ -49,6 +49,8 @@ export interface Backend {
   /** Le gestionnaire renvoie false pour annuler la fermeture. */
   onCloseRequested(handler: () => Promise<boolean>): void;
   onFileDrop(handler: (paths: string[]) => void): void;
+  /** Fichiers demandés par une seconde instance de l'application. */
+  onOpenRequest(handler: (paths: string[]) => void): void;
 }
 
 function detectPlatform(): Platform {
@@ -67,6 +69,7 @@ export async function createTauriBackend(): Promise<Backend> {
   const { invoke } = await import("@tauri-apps/api/core");
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
   const { getCurrentWebview } = await import("@tauri-apps/api/webview");
+  const { listen } = await import("@tauri-apps/api/event");
   const dialog = await import("@tauri-apps/plugin-dialog");
   const opener = await import("@tauri-apps/plugin-opener");
   const win = getCurrentWindow();
@@ -127,6 +130,9 @@ export async function createTauriBackend(): Promise<Backend> {
       void getCurrentWebview().onDragDropEvent((ev) => {
         if (ev.payload.type === "drop" && ev.payload.paths.length) handler(ev.payload.paths);
       });
+    },
+    onOpenRequest(handler) {
+      void listen<string[]>("kilonote://open-paths", (ev) => handler(ev.payload));
     },
   };
 }
@@ -302,5 +308,6 @@ export function createWebBackend(): Backend {
       window.addEventListener("beforeunload", () => void handler());
     },
     onFileDrop() {},
+    onOpenRequest() {},
   };
 }

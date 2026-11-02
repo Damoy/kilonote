@@ -17,7 +17,8 @@ export class StatusBar {
   private encoding = h("span", { class: "st-item st-dim" });
   private eol = h("button", { class: "st-item", title: "Fins de ligne" });
   private lang = h("button", { class: "st-item", title: "Type de document" });
-  private save = h("span", { class: "st-item st-save" });
+  private save = h("button", { class: "st-item st-save" });
+  private counted: unknown = null;
 
   constructor(private app: App, el: HTMLElement) {
     const sidebarBtn = h("button", { class: "st-item st-icon", title: `Barre latérale (${shortcutFor("view.sidebar")})`, onclick: () => app.sidebar.toggle() }, icon("sidebar"));
@@ -31,6 +32,19 @@ export class StatusBar {
     this.tasks.addEventListener("click", () => app.openQuickOpen("@"));
     this.eol.addEventListener("click", (e) => this.eolMenu(e));
     this.lang.addEventListener("click", (e) => this.langMenu(e));
+    this.save.addEventListener("click", (e) => {
+      const doc = app.active;
+      if (!doc?.conflict) return;
+      showMenu(
+        [
+          { header: "Conflit avec le disque" },
+          { label: "Recharger la version du disque", icon: "refresh", action: () => app.resolveConflict(doc, "disk") },
+          { label: "Garder ma version (écraser)", icon: "check", action: () => app.resolveConflict(doc, "mine") },
+        ],
+        e.clientX,
+        (e.currentTarget as HTMLElement).getBoundingClientRect().top - 4,
+      );
+    });
 
     const slow = debounce(() => this.updateCounts(), 250);
     app.on("selection", () => {
@@ -44,7 +58,7 @@ export class StatusBar {
 
   private update() {
     this.updatePos();
-    this.updateCounts();
+    this.updateCounts(true);
     this.updateMeta();
   }
 
@@ -64,8 +78,12 @@ export class StatusBar {
     this.pos.textContent = text;
   }
 
-  private updateCounts() {
+  /** Mots et tâches : recalculés seulement si le texte a changé. */
+  private updateCounts(force = false) {
     const doc = this.app.active;
+    const current = doc ? this.app.view.state.doc : null;
+    if (!force && current === this.counted) return;
+    this.counted = current;
     this.tasks.replaceChildren();
     if (!doc) {
       this.words.textContent = "";
@@ -96,7 +114,12 @@ export class StatusBar {
     this.eol.textContent = doc.eol === "\r\n" ? "CRLF" : "LF";
     this.lang.textContent = LANG_LABELS[doc.lang];
     this.save.replaceChildren();
-    if (doc.missing) {
+    this.save.title = "";
+    if (doc.conflict) {
+      this.save.textContent = "conflit";
+      this.save.title = "Modifié par un autre programme : cliquer pour choisir";
+      this.save.className = "st-item st-save warn";
+    } else if (doc.missing) {
       this.save.textContent = "supprimé du disque";
       this.save.className = "st-item st-save warn";
     } else if (doc.dirty) {
@@ -117,10 +140,7 @@ export class StatusBar {
     const set = (eol: "\n" | "\r\n") => {
       if (doc.eol === eol) return;
       doc.eol = eol;
-      if (doc.path) {
-        doc.mtime = doc.mtime || 0;
-        void this.app.save(doc);
-      }
+      if (doc.path) void this.app.save(doc);
       this.updateMeta();
     };
     showMenu(

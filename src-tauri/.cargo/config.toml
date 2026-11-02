@@ -1,0 +1,4 @@
+# Les bibliothèques C de Microsoft référencent des fichiers de débogage (.pdb)
+# qui ne sont pas distribués : avertissement LNK4099 sans conséquence.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/IGNORE:4099"]

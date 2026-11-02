@@ -324,7 +324,8 @@ button.st-item:hover { background: var(--kn-hover); color: var(--kn-fg); }
 .st-save .kn-icon { width: 13px; height: 13px; }
 .st-save.ok { color: var(--kn-green); }
 .st-save.dirty { color: var(--kn-yellow); }
-.st-save.warn { color: var(--kn-red); }
+.st-save.warn { color: var(--kn-red); font-weight: 600; }
+.st-save:not(.warn) { cursor: default; }
 .st-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 
 /* ------------------------------------------------------------------ Éditeur */
@@ -388,9 +389,11 @@ button.st-item:hover { background: var(--kn-hover); color: var(--kn-fg); }
 #welcome { flex: 1; display: flex; align-items: center; justify-content: center; overflow: auto; background: var(--kn-bg); }
 .wl-inner { width: min(460px, 90%); display: flex; flex-direction: column; align-items: center; padding: 40px 0; }
 .kilo svg { width: 100%; height: 100%; overflow: visible; }
-.wl-kilo { width: 132px; height: 132px; animation: kilo-float 4.5s ease-in-out infinite; filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.18)); }
-.kilo-eye { transform-box: fill-box; transform-origin: center; animation: kilo-blink 5.5s infinite; }
-@keyframes kilo-float { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-6px) rotate(1deg); } }
+/* 40×40 pixels dessinés : 160 px = 4 px d'écran par pixel, rendu net. */
+.wl-kilo { width: 160px; height: 160px; animation: kilo-hop 3.2s steps(1) infinite; filter: drop-shadow(0 8px 0 rgba(0, 0, 0, 0.16)); }
+.kilo-eyes { transform-box: fill-box; transform-origin: center; animation: kilo-blink 5.5s infinite; }
+/* Petit saut « 8 bits » : déplacement par paliers de pixels, pas de glissé. */
+@keyframes kilo-hop { 0%, 70%, 100% { transform: translateY(0); } 75%, 85% { transform: translateY(-4px); } 80% { transform: translateY(-8px); } }
 @keyframes kilo-blink { 0%, 93%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.12); } }
 .wl-title { margin: 14px 0 2px; font-size: 30px; font-weight: 750; letter-spacing: -0.02em; color: var(--kn-fg); }
 .wl-title span { color: var(--kn-accent); }
@@ -489,7 +492,7 @@ button.st-item:hover { background: var(--kn-hover); color: var(--kn-fg); }
 
 .kn-toasts { position: fixed; right: 14px; bottom: calc(var(--status-h) + 12px); display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
 .kn-toast {
-  display: flex; align-items: center; gap: 10px; max-width: 460px;
+  display: flex; align-items: center; gap: 10px; max-width: 580px;
   padding: 8px 8px 8px 12px; border-radius: 10px;
   background: var(--kn-bg-alt); border: 1px solid var(--kn-border); box-shadow: var(--shadow);
   color: var(--kn-fg); animation: toast-in 180ms var(--ease);

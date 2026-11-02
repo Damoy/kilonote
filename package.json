@@ -12,7 +12,10 @@
     "tauri": "tauri",
     "app:dev": "tauri dev",
     "app:build": "tauri build",
-    "icons": "tauri icon src-tauri/icons/app-icon.svg"
+    "icons": "python3 scripts/generate-icons.py && tauri icon docs/kilo-1024.png -o src-tauri/icons && python3 scripts/generate-icons.py && rm -rf src-tauri/icons/android src-tauri/icons/ios",
+    "build:windows": "bash scripts/build-windows.sh",
+    "install:windows": "bash scripts/build-windows.sh --install",
+    "release": "bash scripts/release.sh"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",

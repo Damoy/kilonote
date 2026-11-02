@@ -17,6 +17,8 @@ export interface PickItem {
 export interface PickerSource {
   placeholder: string;
   query?: string;
+  /** Élément sélectionné à l'ouverture (sinon le premier). */
+  initial?: number;
   provide(query: string): { items: PickItem[]; empty?: string };
   pick(item: PickItem, query: string): unknown;
   highlight?(item: PickItem | null): void;
@@ -43,6 +45,7 @@ export function openPicker(src: PickerSource) {
   let items: PickItem[] = [];
   let sel = 0;
   let closed = false;
+  let firstRender = true;
 
   const close = (picked: boolean) => {
     if (closed) return;
@@ -95,7 +98,8 @@ export function openPicker(src: PickerSource) {
       });
       list.append(row);
     });
-    select(0);
+    select(firstRender ? (src.initial ?? 0) : 0);
+    firstRender = false;
   };
 
   const choose = (i: number) => {
@@ -135,4 +139,3 @@ export function openPicker(src: PickerSource) {
   input.setSelectionRange(input.value.length, input.value.length);
 }
 
-export const isPickerOpen = () => current !== null;

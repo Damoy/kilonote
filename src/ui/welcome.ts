@@ -20,8 +20,8 @@ const TIPS = [
 
 export function mascot(cls = "kilo"): HTMLElement {
   const wrap = h("div", { class: cls });
-  // SVG maison et statique : insertion sûre.
-  wrap.innerHTML = kiloSvg.replace(/<rect x="(94|144)" y="94"/g, '<rect class="kilo-eye" x="$1" y="94"');
+  // SVG pixel art maison et statique (scripts/generate-icons.py) : insertion sûre.
+  wrap.innerHTML = kiloSvg;
   return wrap;
 }
 

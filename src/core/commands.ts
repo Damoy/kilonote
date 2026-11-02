@@ -22,9 +22,6 @@ export function registerCommands(list: Command[]) {
   for (const c of list) commands.set(c.id, c);
 }
 
-export const allCommands = () => [...commands.values()].filter((c) => !c.hidden);
-export const getCommand = (id: string) => commands.get(id);
-
 export function runCommand(id: string): boolean {
   const c = commands.get(id);
   if (!c) return false;
@@ -116,6 +113,8 @@ export function formatCombo(combo: string): string {
 /** Gestionnaire global (phase de capture) : renvoie true si l'évènement a été consommé. */
 export function handleKeydown(e: KeyboardEvent): boolean {
   if (e.isComposing || e.getModifierState?.("AltGraph")) return false;
+  // Une boîte de dialogue ouverte garde la main sur le clavier.
+  if (document.querySelector(".kn-modal-backdrop")) return false;
   const combo = comboFromEvent(e);
   if (!combo) return false;
   const id = bindings.get(combo);

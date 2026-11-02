@@ -22,7 +22,7 @@ export class Sidebar {
   private panels: Record<Panel, HTMLElement>;
   private switchBtns: Record<Panel, HTMLElement>;
   private taskBadge = h("span", { class: "sb-badge" });
-  private treeEl = h("div", { class: "sb-tree", tabindex: "-1" });
+  private treeEl = h("div", { class: "sb-tree" });
   private filesHeader = h("div", { class: "sb-header" });
   private tasksList = h("div", { class: "sb-list" });
   private taskFilter: TaskFilter = "open";
@@ -110,12 +110,14 @@ export class Sidebar {
     let lastFiles: string[] = [];
     app.on("workspace", () => {
       this.renderFilesHeader();
-      void this.renderTree();
-      // Relecture complète seulement si la liste des fichiers a changé.
+      // La liste des fichiers a été relue (fichier créé, archivé, renommé…) :
+      // on oublie les dossiers en cache et on relit les tâches.
       if (app.workspaceFiles !== lastFiles) {
         lastFiles = app.workspaceFiles;
+        this.cache.clear();
         tasksSoon();
       }
+      void this.renderTree();
     });
     app.on("saved", tasksQuick);
     app.on("active", () => this.markActive());

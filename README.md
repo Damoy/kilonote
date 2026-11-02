@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="src/assets/kilo.svg" width="128" alt="Kilo, la mascotte de KiloNote">
+  <img src="src/assets/kilo.svg" width="160" alt="Kilo, la mascotte de KiloNote : une disquette en pixel art">
 </p>
 
 <h1 align="center">KiloNote</h1>
@@ -10,14 +10,18 @@ KiloNote est un éditeur de notes pour Windows, macOS et Linux, dans l'esprit de
 sobre, rapide, entièrement au clavier, et pensé pour **suivre ses tâches de travail** et en
 garder l'historique. Vos notes restent de simples fichiers texte, lisibles partout.
 
-Sa mascotte s'appelle **Kilo** : une petite note avec un bit en guise d'antenne.
+Sa mascotte s'appelle **Kilo** : une disquette en pixel art (le kilo-octet incarné), avec une
+ligne de terminal sur son étiquette. Elle est dessinée pixel par pixel dans
+[`scripts/generate-icons.py`](scripts/generate-icons.py), qui produit toutes les icônes.
 
 ![KiloNote, thème Minuit : vue des tâches, groupe d'onglets « Projet MC »](docs/apercu-sombre.png)
 
 <details>
-<summary>Thème clair « Papier »</summary>
+<summary>Thème clair « Papier » et application Windows</summary>
 
 ![KiloNote, thème Papier](docs/apercu-clair.png)
+
+![KiloNote sous Windows 11 : écran d'accueil avec Kilo](docs/apercu-windows.png)
 
 </details>
 
@@ -72,39 +76,65 @@ majuscules ou minuscules. Vos fichiers existants fonctionnent tels quels.
 
 ## Installation
 
-### Installeurs
+### Windows
 
-Les installeurs sont produits automatiquement par GitHub Actions (onglet *Releases* du dépôt) :
+Lancez `KiloNote_x.y.z_x64-setup.exe` : l'installation se fait **sans droits administrateur**,
+dans `%LOCALAPPDATA%\KiloNote`, avec un raccourci dans le menu Démarrer. Ouvrez KiloNote puis
+clic droit sur son icône dans la barre des tâches → **Épingler à la barre des tâches**.
+Le fichier `KiloNote.exe` seul est aussi une version portable (rien à installer).
 
-| Système | Fichier | Remarque |
-|---|---|---|
-| Windows 10/11 | `KiloNote_x.y.z_x64-setup.exe` | s'installe **sans droits administrateur** |
-| macOS (Intel et Apple Silicon) | `KiloNote_x.y.z_universal.dmg` | |
-| Linux | `.AppImage` (portable), `.deb`, `.rpm` | |
+L'application n'étant pas signée numériquement, SmartScreen peut afficher un avertissement :
+*Informations complémentaires* → *Exécuter quand même*.
 
-L'application n'étant pas signée numériquement :
-- **Windows** : si SmartScreen s'affiche, cliquez sur *Informations complémentaires* → *Exécuter quand même*.
-- **macOS** : la première fois, clic droit sur KiloNote → *Ouvrir* (ou `xattr -cr /Applications/KiloNote.app`).
+### macOS et Linux
 
-Pour publier une version : mettez à jour la version dans `src-tauri/tauri.conf.json` et `package.json`,
-puis `git tag v0.1.0 && git push --tags`. Une release brouillon est créée avec les installeurs.
+Les installeurs (`.dmg`, `.AppImage`, `.deb`, `.rpm`) sont produits par GitHub Actions et
+publiés dans les *Releases* du dépôt. Sur macOS, la première fois : clic droit sur KiloNote →
+*Ouvrir* (application non signée).
 
-### Depuis les sources
+## Construire
 
-Prérequis : [Node.js](https://nodejs.org) 20+, [Rust](https://rustup.rs) stable, et les
-[dépendances système de Tauri](https://tauri.app/start/prerequisites/) :
+| Commande | Effet |
+|---|---|
+| `npm run build:windows` | installeur + exe portable Windows dans `dist-windows/`, **depuis Linux ou WSL** |
+| `npm run install:windows` | idem, puis installe/met à jour KiloNote sous Windows (depuis WSL) |
+| `scripts\build-windows.ps1 [-Install]` | même chose, directement sous Windows (PowerShell) |
+| `npm run app:build` | build natif pour le système courant |
+| `npm run app:dev` | application en mode développement |
+| `npm run dev` | interface seule dans le navigateur, avec des notes de démonstration |
+| `npm test` | tests unitaires |
+| `npm run icons` | régénère toutes les icônes depuis le pixel art de `scripts/generate-icons.py` |
 
-- **Windows** : Microsoft C++ Build Tools (WebView2 est déjà présent sur Windows 10/11)
-- **macOS** : `xcode-select --install`
-- **Debian/Ubuntu** : `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev`
+**Depuis WSL/Linux (recommandé, rien à installer sous Windows)** : il faut Node.js et
+[Rust](https://rustup.rs). Au premier lancement, `scripts/setup-windows-cross.sh` prépare la
+compilation croisée : cible Rust Windows, `cargo-xwin` (qui télécharge les bibliothèques
+Windows de Microsoft), LLVM et NSIS — extraits dans `~/.local/share/kilonote-toolchain`, sans
+droits root.
+
+**Sous Windows** : Node.js, Rust et les Build Tools C++ de Visual Studio (commandes `winget`
+dans l'aide du script : `Get-Help scripts\build-windows.ps1`).
+
+**Linux natif** : `sudo apt install libwebkit2gtk-4.1-dev build-essential libssl-dev libayatana-appindicator3-dev librsvg2-dev`
+puis `npm run app:build`.
+
+On peut passer un dossier ou un fichier en argument : `KiloNote.exe C:\notes`. Si KiloNote est
+déjà ouvert, la fenêtre existante revient au premier plan et ouvre le fichier.
+
+## Publier une nouvelle version
 
 ```bash
-npm install
-npm run app:dev      # lance l'application en mode développement
-npm run app:build    # produit l'installeur dans src-tauri/target/release/bundle/
+npm run release -- patch      # 0.1.0 → 0.1.1   (minor : 0.2.0, major : 1.0.0, ou 1.4.2)
+npm run release -- patch --dry-run   # pour voir ce qui serait fait
 ```
 
-On peut aussi passer un dossier ou un fichier en argument : `kilonote ~/notes` ou `kilonote mc.txt`.
+Le script vérifie que tout est commité, met la version à jour partout, lance les tests,
+crée le commit « Version X.Y.Z » et le tag `vX.Y.Z`, puis pousse sur GitHub. GitHub Actions
+construit alors les installeurs des trois systèmes et les publie dans la release.
+Avec `--local`, l'installeur Windows est construit sur votre machine et publié immédiatement
+via [GitHub CLI](https://cli.github.com) (`gh auth login` au préalable).
+
+Prérequis : un dépôt GitHub configuré comme `origin`
+(`git remote add origin git@github.com:<vous>/kilonote.git && git push -u origin main`).
 
 ## Raccourcis
 
@@ -166,12 +196,6 @@ Emplacement du fichier : `%APPDATA%\dev.damoy.kilonote\` (Windows),
 
 ## Développement
 
-```bash
-npm run dev     # interface seule dans le navigateur, avec des notes de démonstration
-npm test        # tests unitaires (tâches, bilan, chemins, paramètres…)
-npm run build   # vérification des types + build du front
-```
-
 Architecture :
 
 ```
@@ -181,7 +205,8 @@ src/
   ui/           onglets et groupes, barre latérale, palette, menus, barre d'état, accueil
   app.ts        contrôleur : documents, enregistrement, session, commandes
   report.ts     bilan d'activité
-src-tauri/      backend natif Rust : lecture/écriture atomique, archives, corbeille
+src-tauri/      backend natif Rust : lecture/écriture atomique, archives, corbeille, instance unique
+scripts/        build Windows (WSL ou PowerShell), publication, génération des icônes pixel art
 ```
 
 Choix techniques : [Tauri 2](https://tauri.app) (fenêtre native, ~10 Mo au lieu de ~150 Mo pour

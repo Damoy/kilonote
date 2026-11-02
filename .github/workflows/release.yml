@@ -1,6 +1,6 @@
-# Construit les installeurs Windows, macOS et Linux et les attache à une
-# release GitHub (brouillon). Déclenchement : pousser un tag « v0.1.0 »,
-# ou lancer le workflow à la main depuis l'onglet Actions.
+# Construit les installeurs Windows, macOS et Linux et les publie dans la
+# release GitHub correspondante. Déclenchement : scripts/release.sh (qui pousse
+# un tag « vX.Y.Z »), ou manuellement depuis l'onglet Actions.
 name: Publier
 
 on:
@@ -58,6 +58,6 @@ jobs:
             - **Windows** : `KiloNote_x.y.z_x64-setup.exe` (installation sans droits administrateur)
             - **macOS** : `KiloNote_x.y.z_universal.dmg`
             - **Linux** : `.AppImage` (portable), `.deb` ou `.rpm`
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

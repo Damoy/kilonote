@@ -8,13 +8,21 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, UNIX_EPOCH};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_window_state::StateFlags;
 
 const BOM: &[u8] = &[0xEF, 0xBB, 0xBF];
 /// Dossiers ignorés lors du parcours d'un espace de travail.
 const SKIP_DIRS: &[&str] = &[
-    ".git", ".svn", ".hg", "node_modules", "target", "__pycache__", ".idea", ".vscode", ".cache",
+    ".git",
+    ".svn",
+    ".hg",
+    "node_modules",
+    "target",
+    "__pycache__",
+    ".idea",
+    ".vscode",
+    ".cache",
 ];
 
 #[derive(Serialize)]
@@ -53,15 +61,20 @@ fn meta_of(p: &Path) -> Option<Meta> {
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
         .map(|d| d.as_millis() as f64)
         .unwrap_or(0.0);
-    Some(Meta { mtime, size: m.len(), is_dir: m.is_dir() })
+    Some(Meta {
+        mtime,
+        size: m.len(),
+        is_dir: m.is_dir(),
+    })
 }
 
 /// Windows-1252 : les octets 0x80–0x9F ont des correspondances spécifiques,
 /// le reste est identique à Latin-1. Fréquent pour les vieux fichiers Notepad.
 fn decode_cp1252(bytes: &[u8]) -> String {
     const HIGH: [char; 32] = [
-        '€', '\u{81}', '‚', 'ƒ', '„', '…', '†', '‡', 'ˆ', '‰', 'Š', '‹', 'Œ', '\u{8D}', 'Ž', '\u{8F}',
-        '\u{90}', '‘', '’', '“', '”', '•', '–', '—', '˜', '™', 'š', '›', 'œ', '\u{9D}', 'ž', 'Ÿ',
+        '€', '\u{81}', '‚', 'ƒ', '„', '…', '†', '‡', 'ˆ', '‰', 'Š', '‹', 'Œ', '\u{8D}', 'Ž',
+        '\u{8F}', '\u{90}', '‘', '’', '“', '”', '•', '–', '—', '˜', '™', 'š', '›', 'œ', '\u{9D}',
+        'ž', 'Ÿ',
     ];
     bytes
         .iter()
@@ -75,14 +88,23 @@ fn decode_cp1252(bytes: &[u8]) -> String {
 fn decode_utf16(bytes: &[u8], little_endian: bool) -> String {
     let units: Vec<u16> = bytes
         .chunks_exact(2)
-        .map(|c| if little_endian { u16::from_le_bytes([c[0], c[1]]) } else { u16::from_be_bytes([c[0], c[1]]) })
+        .map(|c| {
+            if little_endian {
+                u16::from_le_bytes([c[0], c[1]])
+            } else {
+                u16::from_be_bytes([c[0], c[1]])
+            }
+        })
         .collect();
     String::from_utf16_lossy(&units)
 }
 
 fn decode(bytes: Vec<u8>) -> (String, &'static str) {
     if bytes.starts_with(BOM) {
-        return (String::from_utf8_lossy(&bytes[3..]).into_owned(), "UTF-8 BOM");
+        return (
+            String::from_utf8_lossy(&bytes[3..]).into_owned(),
+            "UTF-8 BOM",
+        );
     }
     if bytes.starts_with(&[0xFF, 0xFE]) {
         return (decode_utf16(&bytes[2..], true), "UTF-16 LE");
@@ -102,7 +124,11 @@ async fn read_text(path: String) -> Result<FileText, String> {
     let bytes = fs::read(&p).map_err(err)?;
     let (text, encoding) = decode(bytes);
     let mtime = meta_of(&p).map(|m| m.mtime).unwrap_or(0.0);
-    Ok(FileText { text, encoding: encoding.into(), mtime })
+    Ok(FileText {
+        text,
+        encoding: encoding.into(),
+        mtime,
+    })
 }
 
 /// Écriture atomique : fichier temporaire voisin puis renommage.
@@ -121,7 +147,10 @@ async fn write_text(path: String, text: String, bom: Option<bool>) -> Result<Met
     }
     payload.extend_from_slice(text.as_bytes());
 
-    let file_name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let file_name = target
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let tmp = target.with_file_name(format!(".{file_name}.kilonote-tmp"));
     let atomic = (|| -> std::io::Result<()> {
         let mut f = File::create(&tmp)?;
@@ -173,7 +202,11 @@ async fn append_lines(path: String, lines: Vec<String>) -> Result<Meta, String> 
         out.push_str(line);
         out.push_str(eol);
     }
-    let mut f = OpenOptions::new().create(true).append(true).open(&p).map_err(err)?;
+    let mut f = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&p)
+        .map_err(err)?;
     f.write_all(out.as_bytes()).map_err(err)?;
     f.sync_all().map_err(err)?;
     meta_of(&p).ok_or_else(|| "fichier introuvable après écriture".into())
@@ -203,10 +236,18 @@ async fn list_dir(path: String, show_hidden: bool) -> Result<Vec<Entry>, String>
             }
             // `metadata` suit les liens symboliques : un lien vers un dossier reste un dossier.
             let is_dir = fs::metadata(e.path()).map(|m| m.is_dir()).unwrap_or(false);
-            Some(Entry { name, path: e.path().to_string_lossy().into_owned(), is_dir })
+            Some(Entry {
+                name,
+                path: e.path().to_string_lossy().into_owned(),
+                is_dir,
+            })
         })
         .collect();
-    out.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+    out.sort_by(|a, b| {
+        b.is_dir
+            .cmp(&a.is_dir)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
     Ok(out)
 }
 
@@ -261,7 +302,12 @@ async fn create_dir(path: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn create_file(path: String) -> Result<(), String> {
-    OpenOptions::new().write(true).create_new(true).open(&path).map(|_| ()).map_err(err)
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+        .map(|_| ())
+        .map_err(err)
 }
 
 #[tauri::command]
@@ -284,13 +330,11 @@ fn config_dir(app: AppHandle) -> Result<String, String> {
     Ok(dir.to_string_lossy().into_owned())
 }
 
-/// Chemins passés en ligne de commande (`kilonote notes/` ou `kilonote mc.txt`).
-#[tauri::command]
-fn startup_paths() -> Vec<String> {
-    std::env::args()
-        .skip(1)
+/// Chemins existants parmi des arguments de ligne de commande, rendus absolus.
+fn resolve_paths(args: impl IntoIterator<Item = String>, cwd: &Path) -> Vec<String> {
+    args.into_iter()
         .filter(|a| !a.starts_with('-'))
-        .filter_map(|a| fs::canonicalize(&a).ok())
+        .filter_map(|a| fs::canonicalize(cwd.join(a)).ok())
         .map(|p| {
             let s = p.to_string_lossy().into_owned();
             // Sous Windows, canonicalize renvoie un préfixe \\?\ peu lisible.
@@ -299,8 +343,28 @@ fn startup_paths() -> Vec<String> {
         .collect()
 }
 
+/// Chemins passés en ligne de commande (`kilonote notes/` ou `kilonote mc.txt`).
+#[tauri::command]
+fn startup_paths() -> Vec<String> {
+    let cwd = std::env::current_dir().unwrap_or_default();
+    resolve_paths(std::env::args().skip(1), &cwd)
+}
+
 fn main() {
     tauri::Builder::default()
+        // Une seule fenêtre KiloNote : relancer l'application (raccourci épinglé,
+        // « Ouvrir avec »…) ramène la fenêtre existante et y ouvre les fichiers.
+        .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+            let paths = resolve_paths(argv.into_iter().skip(1), Path::new(&cwd));
+            if !paths.is_empty() {
+                let _ = app.emit("kilonote://open-paths", paths);
+            }
+        }))
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_state_flags(StateFlags::all() & !StateFlags::VISIBLE)

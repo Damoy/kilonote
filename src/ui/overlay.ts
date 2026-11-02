@@ -228,7 +228,10 @@ export function confirm(opts: ConfirmOptions): Promise<"ok" | "alt" | "cancel"> 
       resolve(r);
     };
     const onKey = (e: KeyboardEvent) => {
+      const focused = document.activeElement;
       if (e.key === "Escape") finish("cancel");
+      // Entrée sur un bouton qui a le focus : c'est ce bouton qui compte.
+      else if (e.key === "Enter" && focused instanceof HTMLButtonElement && content.contains(focused)) return;
       else if (e.key === "Enter") finish("ok");
       else return;
       e.preventDefault();
@@ -260,6 +263,7 @@ export function confirm(opts: ConfirmOptions): Promise<"ok" | "alt" | "cancel"> 
 export interface ToastOptions {
   kind?: "info" | "success" | "error";
   action?: { label: string; run: () => unknown };
+  actions?: { label: string; run: () => unknown }[];
   timeout?: number;
 }
 
@@ -279,14 +283,13 @@ export function toast(message: string, opts: ToastOptions = {}) {
     el.classList.add("leaving");
     setTimeout(() => el.remove(), 180);
   };
-  if (opts.action) {
-    const a = opts.action;
+  for (const a of [...(opts.action ? [opts.action] : []), ...(opts.actions ?? [])]) {
     el.append(
       h("button", {
         class: "kn-toast-action",
         onclick: () => {
           dismiss();
-          a.run();
+          void Promise.resolve(a.run()).catch((e) => console.error(e));
         },
       }, a.label),
     );
