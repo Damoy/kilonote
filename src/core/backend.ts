@@ -1,5 +1,5 @@
-// Accès au système : implémentation Tauri (application) et implémentation
-// « démo » en mémoire (navigateur), utile pour tester l'interface sans Rust.
+// System access: the Tauri implementation (desktop app) and an in-memory
+// "demo" implementation (browser), handy to work on the interface without Rust.
 
 import { basename, dirname, isInside, join } from "./path";
 
@@ -46,10 +46,10 @@ export interface Backend {
   setDark(dark: boolean): void;
   show(): Promise<void>;
   toggleFullscreen(): Promise<void>;
-  /** Le gestionnaire renvoie false pour annuler la fermeture. */
+  /** The handler returns false to cancel closing. */
   onCloseRequested(handler: () => Promise<boolean>): void;
   onFileDrop(handler: (paths: string[]) => void): void;
-  /** Fichiers demandés par une seconde instance de l'application. */
+  /** Files requested by a second instance of the application. */
   onOpenRequest(handler: (paths: string[]) => void): void;
 }
 
@@ -95,15 +95,15 @@ export async function createTauriBackend(): Promise<Backend> {
     },
     startupPaths: () => invoke<string[]>("startup_paths"),
     async pickFolder() {
-      const r = await dialog.open({ directory: true, multiple: false, title: "Ouvrir un dossier" });
+      const r = await dialog.open({ directory: true, multiple: false, title: "Open folder" });
       return typeof r === "string" ? r : null;
     },
     async pickFiles() {
-      const r = await dialog.open({ multiple: true, title: "Ouvrir des fichiers" });
+      const r = await dialog.open({ multiple: true, title: "Open files" });
       return Array.isArray(r) ? r : r ? [r] : [];
     },
     async pickSavePath(defaultPath) {
-      return (await dialog.save({ defaultPath, title: "Enregistrer sous" })) ?? null;
+      return (await dialog.save({ defaultPath, title: "Save as" })) ?? null;
     },
     openUrl: (url) => opener.openUrl(url),
     openPath: (path) => opener.openPath(path),
@@ -138,41 +138,41 @@ export async function createTauriBackend(): Promise<Backend> {
 }
 
 // ---------------------------------------------------------------------------
-// Démo navigateur : un petit système de fichiers persistant dans localStorage.
+// Browser demo: a small file system persisted in localStorage.
 
-const DEMO_KEY = "kilonote-demo-fs-v1";
+const DEMO_KEY = "kilonote-demo-fs-v2";
 const DEMO_ROOT = "/Notes";
 
 function demoSeed(): Record<string, string> {
   return {
     "/Notes/mc.txt": [
-      "# Projet MC",
+      "# Project MC",
       "",
-      "- appeler collègue X pour le planning - ongoing",
-      "- relire la spec de l'API v2 - todo",
-      "- préparer la démo client du 14/11 - todo",
-      "- corriger le bug d'export CSV #bug - blocked",
+      "- call colleague X about the schedule - ongoing",
+      "- review the API v2 spec - todo",
+      "- prepare the client demo on 14/11 - todo",
+      "- fix the CSV export bug #bug - blocked",
       "",
-      "Notes de réunion 2026-10-28 avec @julie :",
-      "- valider le budget avant fin novembre",
-      "- voir https://wiki.example.com/mc pour la doc",
+      "Meeting notes 2026-10-28 with @julie:",
+      "- approve the budget before the end of November",
+      "- see https://wiki.example.com/mc for the docs",
     ].join("\n"),
     "/Notes/mc_done.txt": [
-      "- mettre en place la CI - done [2026-01-15]",
-      "- migrer la base vers Postgres 17 - done [2026-03-02]",
-      "- former l'équipe support - ok [2026-06-20]",
-      "- revue de code du module paiement - done [2026-10-30]",
+      "- set up CI - done [2026-01-15]",
+      "- migrate the database to Postgres 17 - done [2026-03-02]",
+      "- train the support team - ok [2026-06-20]",
+      "- code review of the payment module - done [2026-10-30]",
     ].join("\n"),
-    "/Notes/perso.md": [
-      "# Perso",
+    "/Notes/personal.md": [
+      "# Personal",
       "",
-      "## Idées",
-      "- apprendre le **Rust** - ongoing",
-      "- lire *Le Petit Prince* en anglais - todo",
+      "## Ideas",
+      "- learn **Rust** - ongoing",
+      "- read *The Little Prince* in French - todo",
       "",
-      "> Les notes les plus légères sont les plus utiles.",
+      "> The lightest notes are the most useful.",
     ].join("\n"),
-    "/Notes/archives/2025.txt": "- vieux projet terminé - done [2025-12-01]\n",
+    "/Notes/archives/2025.txt": "- old project wrapped up - done [2025-12-01]\n",
   };
 }
 
@@ -201,7 +201,7 @@ export function createWebBackend(): Backend {
     try {
       localStorage.setItem(DEMO_KEY, JSON.stringify(out));
     } catch {
-      /* quota : tant pis pour la démo */
+      /* quota exceeded: fine for a demo */
     }
   };
   const meta = (p: string): Meta | null => {
@@ -221,7 +221,7 @@ export function createWebBackend(): Backend {
     platform: detectPlatform(),
     async readText(path) {
       const f = files.get(path);
-      if (!f) throw new Error(`Fichier introuvable : ${path}`);
+      if (!f) throw new Error(`File not found: ${path}`);
       return { text: f.text, encoding: "UTF-8", mtime: f.mtime };
     },
     async writeText(path, text) {
@@ -254,11 +254,11 @@ export function createWebBackend(): Backend {
       ensureDirs(path);
     },
     async createFile(path) {
-      if (files.has(path)) throw new Error("Le fichier existe déjà");
+      if (files.has(path)) throw new Error("The file already exists");
       write(path, "");
     },
     async rename(from, to) {
-      if (files.has(to) || dirs.has(to)) throw new Error(`« ${basename(to)} » existe déjà`);
+      if (files.has(to) || dirs.has(to)) throw new Error(`"${basename(to)}" already exists`);
       if (files.has(from)) {
         write(to, files.get(from)!.text);
         files.delete(from);
@@ -291,7 +291,7 @@ export function createWebBackend(): Backend {
       return [];
     },
     async pickSavePath(defaultPath) {
-      const name = window.prompt("Enregistrer sous (chemin dans la démo)", defaultPath ?? join(DEMO_ROOT, "note.txt"));
+      const name = window.prompt("Save as (path in the demo)", defaultPath ?? join(DEMO_ROOT, "note.txt"));
       return name || null;
     },
     openUrl: async (url) => void window.open(url, "_blank", "noopener"),

@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
-# Publie une nouvelle version de KiloNote sur GitHub.
+# Publishes a new KiloNote version on GitHub.
 #
 #   scripts/release.sh patch|minor|major|X.Y.Z [--local] [--dry-run]
-#   scripts/release.sh 0.1.0      première publication de la version actuelle
+#   scripts/release.sh 0.1.0      first release of the current version
 #
-#   patch   0.1.0 → 0.1.1      (corrections)
-#   minor   0.1.0 → 0.2.0      (nouveautés)
+#   patch   0.1.0 → 0.1.1      (fixes)
+#   minor   0.1.0 → 0.2.0      (new features)
 #   major   0.1.0 → 1.0.0
 #
-# Étapes :
-#   1. vérifie que tout est propre (branche main, rien en attente, dépôt GitHub « origin ») ;
-#   2. met la version à jour partout (package.json, tauri.conf.json, Cargo.toml, Cargo.lock) ;
-#   3. lance les tests et le build ;
-#   4. commit « Version X.Y.Z », tag vX.Y.Z, push.
+# Steps:
+#   1. checks that everything is clean (main branch, nothing uncommitted, "origin" remote);
+#   2. bumps the version everywhere (package.json, tauri.conf.json, Cargo.toml, Cargo.lock);
+#   3. runs the tests and the build;
+#   4. commits "Version X.Y.Z", tags vX.Y.Z, pushes.
 #
-# GitHub Actions (.github/workflows/release.yml) construit alors les installeurs
-# Windows, macOS et Linux et les publie dans la release vX.Y.Z.
+# GitHub Actions (.github/workflows/release.yml) then builds the Windows, macOS
+# and Linux installers and publishes them in the vX.Y.Z release.
 #
-#   --local    construit aussi l'installeur Windows ici et crée la release tout de suite
-#              avec GitHub CLI (gh), sans attendre la CI
-#   --dry-run  affiche ce qui serait fait, sans rien modifier
+#   --local    also builds the Windows installer here and creates the release right
+#              away with the GitHub CLI (gh), without waiting for CI
+#   --dry-run  shows what would happen, without changing anything
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -33,23 +33,23 @@ for arg in "$@"; do
   case "$arg" in
     --local) LOCAL=1 ;;
     --dry-run) DRY=1 ;;
-    -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
     patch|minor|major) BUMP="$arg" ;;
     [0-9]*.[0-9]*.[0-9]*) BUMP="$arg" ;;
-    *) die "Argument inconnu : $arg (voir --help)" ;;
+    *) die "Unknown argument: $arg (see --help)" ;;
   esac
 done
-[ -n "$BUMP" ] || die "Précisez patch, minor, major ou une version X.Y.Z (voir --help)"
+[ -n "$BUMP" ] || die "Give patch, minor, major or a version X.Y.Z (see --help)"
 
-# --- 1. Vérifications -------------------------------------------------------
+# --- 1. Checks ---------------------------------------------------------------
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
-[ "$BRANCH" = "main" ] || die "Placez-vous sur la branche main (actuellement : $BRANCH)"
-[ -z "$(git status --porcelain)" ] || die "Des modifications ne sont pas commitées : commitez-les d'abord."
-git remote get-url origin >/dev/null 2>&1 || die "Aucun dépôt distant « origin ». Créez le dépôt sur GitHub puis :
-    git remote add origin git@github.com:<vous>/kilonote.git && git push -u origin main"
+[ "$BRANCH" = "main" ] || die "Switch to the main branch first (currently: $BRANCH)"
+[ -z "$(git status --porcelain)" ] || die "There are uncommitted changes: commit them first."
+git remote get-url origin >/dev/null 2>&1 || die "No \"origin\" remote. Create the repository on GitHub, then:
+    git remote add origin git@github.com:<you>/kilonote.git && git push -u origin main"
 if [ "$LOCAL" = 1 ]; then
-  command -v gh >/dev/null 2>&1 || die "--local nécessite GitHub CLI : https://cli.github.com (puis « gh auth login »)"
-  gh auth status >/dev/null 2>&1 || die "GitHub CLI n'est pas connecté : lancez « gh auth login »"
+  command -v gh >/dev/null 2>&1 || die "--local needs the GitHub CLI: https://cli.github.com (then \"gh auth login\")"
+  gh auth status >/dev/null 2>&1 || die "The GitHub CLI is not logged in: run \"gh auth login\""
 fi
 
 CURRENT=$(node -p "require('./package.json').version")
@@ -59,22 +59,22 @@ NEXT=$(node -e '
   const next = bump === "major" ? [a + 1, 0, 0] : bump === "minor" ? [a, b + 1, 0] : bump === "patch" ? [a, b, c + 1] : bump.split(".").map(Number);
   if (next.some(Number.isNaN)) process.exit(1);
   console.log(next.join("."));
-' "$CURRENT" "$BUMP") || die "Version invalide : $BUMP"
+' "$CURRENT" "$BUMP") || die "Invalid version: $BUMP"
 TAG="v$NEXT"
-git rev-parse "$TAG" >/dev/null 2>&1 && die "Le tag $TAG existe déjà"
+git rev-parse "$TAG" >/dev/null 2>&1 && die "Tag $TAG already exists"
 PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
 
 NOTES=$(git log --no-merges --pretty='- %s' ${PREV_TAG:+$PREV_TAG..}HEAD | grep -v -- '- Version [0-9]' || true)
 say "KiloNote $CURRENT → $NEXT ($TAG)"
-printf '%s\n' "${NOTES:-- (aucun commit depuis la dernière version)}" | sed 's/^/    /'
+printf '%s\n' "${NOTES:-- (no commit since the last version)}" | sed 's/^/    /'
 
 if [ "$DRY" = 1 ]; then
-  say "Simulation : rien n'a été modifié."
+  say "Dry run: nothing was changed."
   exit 0
 fi
 
-# --- 2. Numéros de version --------------------------------------------------
-# (première publication de la version actuelle : rien à changer, on pose juste le tag)
+# --- 2. Version numbers -----------------------------------------------------
+# (first release of the current version: nothing to change, just tag it)
 [ "$NEXT" != "$CURRENT" ] && node -e '
   const fs = require("fs");
   const v = process.argv[1];
@@ -93,8 +93,8 @@ fi
   fs.writeFileSync("src-tauri/Cargo.lock", clock);
 ' "$NEXT"
 
-# --- 3. Contrôles -----------------------------------------------------------
-say "Tests et build…"
+# --- 3. Checks: tests and build ---------------------------------------------
+say "Tests and build…"
 npm test --silent
 npm run build --silent >/dev/null
 
@@ -108,12 +108,12 @@ git tag -a "$TAG" -m "KiloNote $NEXT"
 if [ "$LOCAL" = 1 ]; then
   bash scripts/build-windows.sh
   git push -q origin main "$TAG"
-  gh release create "$TAG" dist-windows/*-setup.exe --title "KiloNote $NEXT" --notes "${NOTES:-Nouvelle version.}"
-  say "Release publiée : $(gh release view "$TAG" --json url -q .url)"
-  say "La CI ajoutera les versions macOS et Linux d'ici quelques minutes."
+  gh release create "$TAG" dist-windows/*-setup.exe dist-windows/SHA256SUMS.txt --title "KiloNote $NEXT" --notes "${NOTES:-New version.}"
+  say "Release published: $(gh release view "$TAG" --json url -q .url)"
+  say "CI will add the macOS and Linux builds within a few minutes."
 else
   git push -q origin main "$TAG"
   REPO=$(git remote get-url origin | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##')
-  say "Tag $TAG poussé : GitHub Actions construit les installeurs (≈ 10 min)."
-  say "Suivi : https://github.com/$REPO/actions — release : https://github.com/$REPO/releases/tag/$TAG"
+  say "Tag $TAG pushed: GitHub Actions is building the installers (≈ 10 min)."
+  say "Progress: https://github.com/$REPO/actions — release: https://github.com/$REPO/releases/tag/$TAG"
 fi

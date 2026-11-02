@@ -1,73 +1,74 @@
-// Guide affiché par la commande « Aide : guide de KiloNote ».
+// Guide shown by the "Help: KiloNote guide" command.
 
-export const GUIDE = `# Bienvenue dans KiloNote
+export const GUIDE = `# Welcome to KiloNote
 
-KiloNote est un éditeur de notes **léger et rapide**, pensé pour suivre ses tâches
-et garder une trace de son travail. Tout est stocké dans de simples fichiers texte.
+KiloNote is a **light, fast** note-taking editor, built to track tasks and keep a
+record of your work. Everything is stored in plain text files.
 
-## Les tâches
+## Tasks
 
-Une tâche est une ligne qui se termine par \` - <statut>\` :
+A task is a line that ends with \` - <status>\`:
 
-- appeler collègue X - todo
-- préparer la démo client - ongoing
-- corriger le bug d'export - blocked
-- relire la spec - done
+- call colleague X - todo
+- prepare the client demo - ongoing
+- fix the export bug - blocked
+- review the spec - done
 
-Raccourcis :
+Shortcuts:
 
-- **Ctrl+Entrée** : transforme la ligne en tâche, puis fait tourner son statut
-  (todo → ongoing → done). Fonctionne sur plusieurs lignes sélectionnées.
-- **Clic sur un statut** : menu pour choisir le statut ou archiver.
-- **Ctrl+Maj+Entrée** : archive la tâche dans le fichier d'archive du projet.
-  Pour \`mc.txt\`, la ligne part dans \`mc_done.txt\` (créé si besoin), avec la date :
-  \`- appeler collègue X - done [2026-11-02]\`
-- **Ctrl+Maj+D** : bascule entre \`mc.txt\` et \`mc_done.txt\`.
-- Palette → « Tâche : archiver toutes les tâches terminées ».
+- **Ctrl+Enter**: turns the line into a task, then cycles its status
+  (todo → ongoing → done). Works on several selected lines.
+- **Click a status**: menu to pick a status or archive the task.
+- **Ctrl+Shift+Enter**: archives the task into the project's archive file.
+  For \`mc.txt\`, the line moves to \`mc_done.txt\` (created when needed), with the date:
+  \`- call colleague X - done [2026-11-02]\`
+- **Ctrl+Shift+D**: switches between \`mc.txt\` and \`mc_done.txt\`.
+- Command palette → "Task: Archive all completed tasks".
 
-La vue **Tâches** (Ctrl+Maj+A) liste les tâches de toutes les notes du dossier ouvert,
-avec celles en cours en premier. Survolez une tâche pour changer son statut ou l'archiver.
+The **Tasks** view (Ctrl+Shift+A) lists the tasks of every note in the open folder,
+ongoing ones first. Hover a task to change its status or archive it.
 
-## Le bilan d'activité
+## Activity report
 
-Palette → « Bilan : générer le bilan d'activité… ». KiloNote lit tous les fichiers
-\`*_done\` du dossier et produit un résumé par projet et par mois, prêt à être copié
-pour un entretien annuel. Les tâches en cours y figurent aussi.
+Command palette → "Report: Generate activity report…". KiloNote reads every
+\`*_done\` file of the folder and writes a summary by project and by month, ready
+to paste into a yearly review. Ongoing tasks are listed too.
 
-## Onglets et groupes
+## Tabs and tab groups
 
-- Clic droit sur un onglet : couleur, groupe, fermer les autres…
-- Les **groupes d'onglets** ont un nom et une couleur ; cliquez sur l'étiquette pour
-  replier ou déplier le groupe. Glissez un onglet pour le déplacer.
-- Ctrl+1…9 : aller à l'onglet n°X. Ctrl+Tab : onglet suivant.
-- Ctrl+Maj+T : rouvrir le dernier onglet fermé.
+- Right-click a tab: color, group, close others…
+- **Tab groups** have a name and a color; click the label to collapse or expand
+  the group. Drag a tab to move it.
+- Ctrl+1…9: go to tab number N. Ctrl+Tab: next tab.
+- Ctrl+Shift+T: reopen the last closed tab.
 
 ## Navigation
 
-- **Ctrl+P** : aller à un fichier du dossier (recherche floue).
-  - \`:42\` aller à la ligne 42, \`@\` titres et tâches, \`>\` commandes.
-- **Ctrl+Maj+P** : palette de commandes.
-- **Ctrl+Maj+F** : rechercher dans tous les fichiers.
-- **Ctrl+F** / **Ctrl+H** : rechercher / remplacer dans la note.
-- **Ctrl+D** : sélectionner l'occurrence suivante (multi-curseurs), **Alt+clic** : curseur supplémentaire.
-- **Alt+↑ / Alt+↓** : déplacer la ligne. **Ctrl+Maj+K** : supprimer la ligne.
+- **Ctrl+P**: go to any file of the folder (fuzzy search).
+  - \`:42\` goes to line 42, \`@\` lists headings and tasks, \`>\` runs commands.
+- **Ctrl+Shift+P**: command palette.
+- **Ctrl+Shift+F**: search in all files.
+- **Ctrl+F** / **Ctrl+H**: find / replace in the note.
+- **Ctrl+D**: select the next occurrence (multiple cursors), **Alt+click**: add a cursor.
+- **Alt+↑ / Alt+↓**: move the line. **Ctrl+Shift+K**: delete the line.
 
-## Personnalisation
+## Customization
 
-**Ctrl+,** ouvre \`settings.json\` (commenté) : thème, couleurs, police, statuts de tâches
-et leurs couleurs, suffixe d'archive, raccourcis… Enregistrez : tout s'applique aussitôt.
+**Ctrl+,** opens \`settings.json\` (with comments): theme, colors, font, task
+statuses and their colors, archive suffix, shortcuts… Save it: everything applies
+right away.
 
-- Thèmes : Minuit, Papier, Forêt, Océan, Sable, Rétro (ou automatique).
-- Palette → « Thème : couleur d'accent… » pour changer la couleur principale.
-- Ctrl+= / Ctrl+- : taille du texte. Maj+F11 : mode zen. Ctrl+B : barre latérale.
+- Themes: Midnight, Paper, Forest, Ocean, Sand, Retro (or automatic).
+- Command palette → "Theme: Accent color…" to change the main color.
+- Ctrl+= / Ctrl+-: text size. Shift+F11: zen mode. Ctrl+B: sidebar.
 
-## Sécurité de vos notes
+## Your notes are safe
 
-- Enregistrement automatique après une courte pause (désactivable).
-- Écriture atomique : un fichier n'est jamais à moitié écrit.
-- Les onglets non enregistrés sont conservés d'une session à l'autre.
-- Si un autre programme modifie une note ouverte, KiloNote la recharge (ou vous prévient).
-- La suppression passe par la corbeille du système.
+- Automatic saving after a short pause (can be turned off).
+- Atomic writes: a file is never left half-written.
+- Unsaved tabs are kept from one session to the next.
+- When another program changes an open note, KiloNote reloads it (or asks you).
+- Deleting goes through the system trash.
 
-Bonne prise de notes ! — Kilo
+Happy note-taking! — Kilo
 `;

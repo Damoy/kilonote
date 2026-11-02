@@ -1,4 +1,4 @@
-// Petits utilitaires de chemins, compatibles Windows (\) et Unix (/).
+// Small path helpers that work with both Windows (\) and Unix (/) paths.
 
 const lastSep = (p: string) => Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
 
@@ -31,14 +31,14 @@ export function join(dir: string, ...names: string[]): string {
   return out;
 }
 
-/** Extension en minuscules, sans le point (`mc.TXT` → `txt`). */
+/** Lowercase extension, without the dot (`mc.TXT` → `txt`). */
 export function extname(p: string): string {
   const b = basename(p);
   const i = b.lastIndexOf(".");
   return i > 0 ? b.slice(i + 1).toLowerCase() : "";
 }
 
-/** Nom sans extension (`mc_done.txt` → `mc_done`). */
+/** Name without extension (`mc_done.txt` → `mc_done`). */
 export function stem(p: string): string {
   const b = basename(p);
   const i = b.lastIndexOf(".");
@@ -73,7 +73,7 @@ export function isDoneFile(p: string, suffix: string): boolean {
   return !!suffix && stem(p).toLowerCase().endsWith(suffix.toLowerCase());
 }
 
-/** Nom de projet associé à un fichier (sans le suffixe d'archive). */
+/** Project name of a file (without the archive suffix). */
 export function projectName(p: string, suffix: string): string {
   const s = stem(p);
   return isDoneFile(p, suffix) ? s.slice(0, s.length - suffix.length) : s;

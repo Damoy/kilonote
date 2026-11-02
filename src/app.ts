@@ -1,4 +1,4 @@
-// Contrôleur principal : documents, onglets, groupes, session, commandes.
+// Main controller: documents, tabs, tab groups, session, commands.
 
 import { ChangeSet, EditorState, Text, type ChangeSpec, type TransactionSpec } from "@codemirror/state";
 import { EditorView, type ViewUpdate } from "@codemirror/view";
@@ -42,7 +42,7 @@ export interface Doc {
   color: string | null;
   groupId: string | null;
   missing: boolean;
-  /** Modifié sur le disque alors que l'onglet a des changements non enregistrés. */
+  /** Changed on disk while the tab has unsaved edits. */
   conflict: boolean;
   scroll: ReturnType<EditorView["scrollSnapshot"]> | null;
   pendingScrollTop: number;
@@ -110,7 +110,7 @@ export class App {
   constructor(public backend: Backend) {}
 
   // -------------------------------------------------------------------------
-  // Évènements
+  // Events
 
   on(ev: AppEvent, fn: () => void) {
     if (!this.listeners.has(ev)) this.listeners.set(ev, new Set());
@@ -124,7 +124,7 @@ export class App {
   }
 
   // -------------------------------------------------------------------------
-  // Démarrage
+  // Startup
 
   async init() {
     setPlatform(this.backend.platform);
@@ -134,6 +134,8 @@ export class App {
     this.sessionPath = join(this.configDir, "session.json");
     this.settings = mergeSettings(await this.readSettingsFile());
     this.taskCfg = this.makeTaskCfg();
+    // Shortcuts first: the widgets below show them in their tooltips.
+    setKeybindings(this.defaultKeybindings(), this.settings.keybindings);
 
     const host = document.getElementById("editor-host")!;
     this.view = new EditorView({ parent: host, state: this.blankState() });
@@ -195,7 +197,7 @@ export class App {
   }
 
   // -------------------------------------------------------------------------
-  // Paramètres
+  // Settings
 
   private async readSettingsFile(): Promise<Partial<Settings> | null> {
     try {
@@ -227,7 +229,7 @@ export class App {
     this.emit("settings");
   }
 
-  /** Modifie une valeur dans settings.json (en gardant les commentaires) puis l'applique. */
+  /** Changes one value in settings.json (keeping its comments), then applies it. */
   async updateSetting(key: keyof Settings, value: unknown) {
     const open = this.findDoc(this.settingsPath);
     let text: string;
@@ -247,7 +249,7 @@ export class App {
       this.quietSettings = true;
       await this.save(open).finally(() => (this.quietSettings = false));
     } else {
-      await this.backend.writeText(this.settingsPath, next).catch((e) => toast(`Paramètres non enregistrés : ${e}`, { kind: "error" }));
+      await this.backend.writeText(this.settingsPath, next).catch((e) => toast(`Settings not saved: ${e}`, { kind: "error" }));
     }
   }
 
@@ -258,18 +260,18 @@ export class App {
   }
 
   private quietSettings = false;
-  /** Enregistrement automatique : on applique en silence si le JSON est valide (il peut être en cours de frappe). */
+  /** On autosave, apply silently and only if the JSON is valid (it may be mid-edit). */
   private onSettingsSaved(text: string, auto: boolean) {
     let parsed: Partial<Settings>;
     try {
       parsed = parseJsonc<Partial<Settings>>(text);
     } catch (e) {
-      if (!auto) toast(`Erreur dans settings.json : ${(e as Error).message}`, { kind: "error" });
+      if (!auto) toast(`Error in settings.json: ${(e as Error).message}`, { kind: "error" });
       return;
     }
     this.settings = mergeSettings(parsed);
     this.applySettings();
-    if (!auto && !this.quietSettings) toast("Paramètres appliqués", { kind: "success", timeout: 1600 });
+    if (!auto && !this.quietSettings) toast("Settings applied", { kind: "success", timeout: 1600 });
   }
 
   // -------------------------------------------------------------------------
@@ -283,7 +285,7 @@ export class App {
     const doc: Doc = {
       id: this.nextId++,
       path: init.path,
-      title: init.title ?? (init.path ? basename(init.path) : `Sans titre ${++this.untitledCounter}`),
+      title: init.title ?? (init.path ? basename(init.path) : `Untitled ${++this.untitledCounter}`),
       state: null as unknown as EditorState,
       savedText: Text.empty,
       dirty: false,
@@ -332,7 +334,7 @@ export class App {
     return doc;
   }
 
-  /** Insère un onglet à droite de l'onglet actif (ou à la fin de son groupe). */
+  /** Inserts a tab right after the active one (or at the end of its group). */
   private insertDoc(doc: Doc) {
     if (doc.groupId) {
       const members = this.docs.filter((d) => d.groupId === doc.groupId);
@@ -360,12 +362,12 @@ export class App {
     let doc = this.findDoc(path);
     if (!doc) {
       if (isProbablyBinary(path)) {
-        await this.backend.openPath(path).catch((e) => toast(`Impossible d'ouvrir : ${e}`, { kind: "error" }));
+        await this.backend.openPath(path).catch((e) => toast(`Cannot open: ${e}`, { kind: "error" }));
         return null;
       }
       try {
         const ft = await this.backend.readText(path);
-        doc = this.findDoc(path); // ouvert entre-temps ?
+        doc = this.findDoc(path); // opened in the meantime?
         if (!doc) {
           doc = this.createDoc({
             path, text: ft.text, eol: ft.text.includes("\r\n") ? "\r\n" : ft.text.includes("\n") ? "\n" : this.defaultEol(),
@@ -377,7 +379,7 @@ export class App {
           this.emit("docs");
         }
       } catch (e) {
-        toast(`Impossible d'ouvrir ${basename(path)} : ${e}`, { kind: "error" });
+        toast(`Cannot open ${basename(path)}: ${e}`, { kind: "error" });
         return null;
       }
     }
@@ -410,12 +412,12 @@ export class App {
     } else {
       this.view.setState(this.blankState());
     }
-    // D'abord afficher l'éditeur (l'écran d'accueil le masque), ensuite le focaliser.
+    // Show the editor first (the welcome screen hides it), then focus it.
     this.emit("active");
     if (doc) this.view.focus();
   }
 
-  /** Met la ligne `line` (1-based) au centre de l'écran, avec une sélection optionnelle (dans la ligne). */
+  /** Centers line `line` (1-based) on screen, with an optional selection within that line. */
   reveal(doc: Doc, line: number, select?: [number, number]) {
     const st = doc === this.active ? this.view.state : doc.state;
     const l = st.doc.line(Math.max(1, Math.min(line, st.doc.lines)));
@@ -444,7 +446,7 @@ export class App {
     this.saveSessionSoon();
   }
 
-  /** Applique une transaction à un document, actif ou non. */
+  /** Applies a transaction to a document, whether it is active or not. */
   applyToDoc(doc: Doc, spec: TransactionSpec) {
     if (doc === this.active) this.view.dispatch(spec);
     else {
@@ -454,7 +456,7 @@ export class App {
     }
   }
 
-  /** Remplace le contenu par une modification minimale (le curseur et l'historique sont préservés). */
+  /** Replaces the content with a minimal change (cursor and undo history are preserved). */
   replaceDocContent(doc: Doc, text: string) {
     const old = doc.state.doc.toString();
     const next = text.replace(/\r\n?/g, "\n");
@@ -471,7 +473,7 @@ export class App {
   }
 
   // -------------------------------------------------------------------------
-  // Enregistrement
+  // Saving
 
   private scheduleAutosave(doc: Doc) {
     if (!this.settings.autosave || !doc.path || doc.missing) return;
@@ -498,7 +500,7 @@ export class App {
     const run = (async () => {
       const path = doc.path!;
       const snapshot = doc.state.doc;
-      // Le fichier a-t-il été modifié par un autre programme depuis son ouverture ?
+      // Has another program modified the file since it was loaded?
       const meta = await this.backend.stat(path);
       if (meta && doc.mtime && Math.abs(meta.mtime - doc.mtime) > 1) {
         if (opts.auto) {
@@ -506,9 +508,9 @@ export class App {
           return false;
         }
         const r = await confirm({
-          title: `« ${basename(path)} » a changé sur le disque`,
-          message: "Un autre programme a modifié ce fichier. Écraser avec votre version ?",
-          okLabel: "Écraser", danger: true, altLabel: "Recharger depuis le disque",
+          title: `"${basename(path)}" changed on disk`,
+          message: "Another program modified this file. Overwrite it with your version?",
+          okLabel: "Overwrite", danger: true, altLabel: "Reload from disk",
         });
         if (r === "alt") {
           await this.reloadDoc(doc, true);
@@ -530,7 +532,7 @@ export class App {
         if (samePath(path, this.settingsPath)) this.onSettingsSaved(text, !!opts.auto);
         return true;
       } catch (e) {
-        toast(`Échec de l'enregistrement de ${basename(path)} : ${e}`, { kind: "error" });
+        toast(`Could not save ${basename(path)}: ${e}`, { kind: "error" });
         return false;
       }
     })();
@@ -583,7 +585,7 @@ export class App {
       this.emit("docs");
       this.emit("selection");
     } catch (e) {
-      toast(`Rechargement impossible : ${e}`, { kind: "error" });
+      toast(`Could not reload: ${e}`, { kind: "error" });
     }
   }
 
@@ -619,20 +621,20 @@ export class App {
   }
 
   /**
-   * Le fichier a changé sur le disque alors que l'onglet contient des modifications :
-   * on suspend l'enregistrement automatique et on laisse l'utilisateur choisir.
+   * The file changed on disk while the tab has unsaved edits:
+   * pause autosave and let the user decide.
    */
   private flagConflict(doc: Doc) {
     if (doc.conflict) return;
     doc.conflict = true;
     clearTimeout(doc.timer);
     this.emit("docs");
-    toast(`« ${this.docName(doc)} » a été modifié par un autre programme.`, {
+    toast(`"${this.docName(doc)}" was modified by another program.`, {
       kind: "error",
       timeout: 30000,
       actions: [
-        { label: "Recharger", run: () => this.resolveConflict(doc, "disk") },
-        { label: "Garder ma version", run: () => this.resolveConflict(doc, "mine") },
+        { label: "Reload", run: () => this.resolveConflict(doc, "disk") },
+        { label: "Keep mine", run: () => this.resolveConflict(doc, "mine") },
       ],
     });
   }
@@ -640,12 +642,12 @@ export class App {
   resolveConflict(doc: Doc, keep: "disk" | "mine") {
     if (keep === "disk") return this.reloadDoc(doc, true);
     doc.conflict = false;
-    doc.mtime = 0; // pas de nouvelle vérification : on écrase
+    doc.mtime = 0; // skip the next check: overwrite
     return this.save(doc);
   }
 
   // -------------------------------------------------------------------------
-  // Fermeture des onglets
+  // Closing tabs
 
   async closeDoc(doc: Doc, opts: { force?: boolean } = {}): Promise<boolean> {
     if (doc.dirty && !opts.force) {
@@ -655,10 +657,10 @@ export class App {
       } else {
         if (doc !== this.active) this.activate(doc);
         const r = await confirm({
-          title: `Enregistrer « ${this.docName(doc)} » ?`,
-          message: "Les modifications seront perdues si vous ne les enregistrez pas.",
-          okLabel: "Enregistrer",
-          altLabel: "Ne pas enregistrer",
+          title: `Save "${this.docName(doc)}"?`,
+          message: "Your changes will be lost if you don't save them.",
+          okLabel: "Save",
+          altLabel: "Don't save",
         });
         if (r === "cancel") return false;
         if (r === "ok" && !(await this.save(doc))) return false;
@@ -705,9 +707,9 @@ export class App {
   }
 
   // -------------------------------------------------------------------------
-  // Groupes d'onglets
+  // Tab groups
 
-  /** Garde les onglets d'un même groupe côte à côte. */
+  /** Keeps the tabs of a group next to each other. */
   normalizeOrder() {
     const out: Doc[] = [];
     const seen = new Set<string>();
@@ -729,15 +731,15 @@ export class App {
     const used = new Set(this.groups.map((g) => g.color));
     const color = this.settings.tab_colors.find((c) => !used.has(c) && c !== "grey") ?? "blue";
     const r = await prompt({
-      title: "Nouveau groupe d'onglets",
-      placeholder: "Nom du groupe (ex. Projet MC)",
-      okLabel: "Créer",
+      title: "New tab group",
+      placeholder: "Group name (e.g. Project MC)",
+      okLabel: "Create",
       colors: { options: this.settings.tab_colors, selected: color },
     });
     if (!r) return;
     const group: TabGroup = { id: `g${Date.now().toString(36)}`, name: r.value, color: r.color ?? color, collapsed: false };
     this.groups.push(group);
-    // Le groupe prend la place du premier onglet concerné.
+    // The group takes the place of its first tab.
     const first = Math.min(...docs.map((d) => this.docs.indexOf(d)));
     const rest = this.docs.filter((d) => !docs.includes(d));
     rest.splice(Math.min(first, rest.length), 0, ...docs);
@@ -755,7 +757,7 @@ export class App {
       const last = members.length ? this.docs.indexOf(members[members.length - 1]) : this.docs.length - 1;
       this.docs.splice(last + 1, 0, doc);
     } else if (doc.groupId) {
-      // Retirer du groupe : l'onglet se place juste après le groupe.
+      // Leaving a group: the tab goes right after the group.
       const members = this.docs.filter((d) => d.groupId === doc.groupId);
       this.docs.splice(this.docs.indexOf(doc), 1);
       const last = this.docs.indexOf(members.filter((d) => d !== doc).pop() ?? doc);
@@ -769,9 +771,9 @@ export class App {
 
   async editGroup(group: TabGroup) {
     const r = await prompt({
-      title: "Modifier le groupe",
+      title: "Edit group",
       value: group.name,
-      okLabel: "Enregistrer",
+      okLabel: "Save",
       colors: { options: this.settings.tab_colors, selected: group.color },
     });
     if (!r) return;
@@ -796,7 +798,7 @@ export class App {
     this.emit("docs");
   }
 
-  /** Déplace un onglet à l'index `to` (glisser-déposer) et met à jour son groupe. */
+  /** Moves a tab to index `to` (drag and drop) and updates its group. */
   moveDoc(doc: Doc, to: number) {
     const from = this.docs.indexOf(doc);
     if (from < 0) return;
@@ -807,7 +809,7 @@ export class App {
     const right = this.docs[idx + 1];
     if (left?.groupId && left.groupId === right?.groupId) doc.groupId = left.groupId;
     else if (doc.groupId && (left?.groupId === doc.groupId || right?.groupId === doc.groupId)) {
-      /* reste dans son groupe */
+      /* stays in its group */
     } else doc.groupId = null;
     this.normalizeOrder();
     this.cleanGroups();
@@ -815,7 +817,7 @@ export class App {
   }
 
   // -------------------------------------------------------------------------
-  // Espace de travail
+  // Workspace
 
   async openFolder(path?: string) {
     const dir = path ?? (await this.backend.pickFolder());
@@ -850,7 +852,7 @@ export class App {
     return this.settings.note_extensions.includes(ext) || (!ext && !isProbablyBinary(path));
   }
 
-  /** Contenu d'un fichier : version en mémoire si l'onglet est ouvert, sinon disque. */
+  /** File contents: the in-memory version if the tab is open, otherwise read from disk. */
   async readFiles(paths: string[]): Promise<(string | null)[]> {
     const out: (string | null)[] = new Array(paths.length).fill(null);
     const toRead: number[] = [];
@@ -867,7 +869,7 @@ export class App {
   }
 
   // -------------------------------------------------------------------------
-  // Tâches
+  // Tasks
 
   private selectedLines(state: EditorState): number[] {
     const set = new Set<number>();
@@ -881,7 +883,7 @@ export class App {
     return [...set].sort((x, y) => x - y);
   }
 
-  /** Ctrl+Entrée : statut suivant (ou `target`) sur les lignes sélectionnées. */
+  /** Ctrl+Enter: next status (or `target`) on the selected lines. */
   cycleTasks(target?: string, doc = this.active, lines?: number[]) {
     if (!doc) return;
     const state = doc === this.active ? this.view.state : doc.state;
@@ -914,17 +916,17 @@ export class App {
     }
   }
 
-  /** Déplace des lignes vers le fichier d'archive (<nom>_done.<ext>). */
+  /** Moves lines to the archive file (<name>_done.<ext>). */
   async archiveLines(doc: Doc, lineNumbers: number[]) {
     if (!doc.path) {
-      toast("Enregistrez d'abord cette note pour pouvoir archiver ses tâches.", {
-        action: { label: "Enregistrer", run: () => void this.saveAs(doc) },
+      toast("Save this note first to archive its tasks.", {
+        action: { label: "Save", run: () => void this.saveAs(doc) },
       });
       return;
     }
     const suffix = this.settings.archive_suffix;
     if (isDoneFile(doc.path, suffix)) {
-      toast("Cette note est déjà un fichier d'archive.");
+      toast("This note is already an archive file.");
       return;
     }
     const state = doc === this.active ? this.view.state : doc.state;
@@ -934,7 +936,7 @@ export class App {
     const out = lines.map((l) => archivedLine(l.text, this.taskCfg, date));
     const target = doneFileFor(doc.path, suffix);
 
-    // Suppression des lignes (par blocs contigus, pour ne pas chevaucher).
+    // Remove the lines in contiguous blocks, so that changes never overlap.
     const specs: { from: number; to: number }[] = [];
     let i = 0;
     while (i < lines.length) {
@@ -955,13 +957,13 @@ export class App {
     } catch (e) {
       const current = doc === this.active ? this.view.state : doc.state;
       if (current === after) this.applyToDoc(doc, { changes: removal.invert(state.doc) });
-      toast(`Archivage impossible (${e}). Rien n'a été perdu.`, { kind: "error" });
+      toast(`Could not archive (${e}). Nothing was lost.`, { kind: "error" });
       return;
     }
     const n = out.length;
-    toast(`${n} tâche${n > 1 ? "s" : ""} archivée${n > 1 ? "s" : ""} → ${basename(target)}`, {
+    toast(`${n} task${n > 1 ? "s" : ""} archived → ${basename(target)}`, {
       kind: "success",
-      action: { label: "Ouvrir", run: () => void this.openFile(target) },
+      action: { label: "Open", run: () => void this.openFile(target) },
     });
     this.refreshWorkspaceFilesSoon();
   }
@@ -977,7 +979,7 @@ export class App {
     if (!doc) return;
     const found = findTasks(this.view.state.doc.toString(), this.taskCfg).filter((f) => isDoneStatus(f.task.key, this.taskCfg));
     if (!found.length) {
-      toast("Aucune tâche terminée dans cette note.");
+      toast("No completed task in this note.");
       return;
     }
     await this.archiveLines(doc, found.map((f) => f.line));
@@ -990,13 +992,13 @@ export class App {
       const last = d.line(d.lines);
       const prefix = d.length === 0 || last.length === 0 ? "" : "\n";
       this.applyToDoc(open, { changes: { from: d.length, insert: prefix + lines.join("\n") + "\n" } });
-      if (!(await this.save(open))) throw new Error("enregistrement de l'archive impossible");
+      if (!(await this.save(open))) throw new Error("could not save the archive");
     } else {
       await this.backend.appendLines(path, lines);
     }
   }
 
-  /** Bascule entre mc.txt et mc_done.txt. */
+  /** Switches between mc.txt and mc_done.txt. */
   async toggleDoneFile() {
     const doc = this.active;
     if (!doc?.path) return;
@@ -1007,7 +1009,7 @@ export class App {
       target = join(dirname(doc.path), s.slice(0, s.length - suffix.length) + (extname(doc.path) ? doc.path.slice(doc.path.lastIndexOf(".")) : ""));
     } else target = doneFileFor(doc.path, suffix);
     if (!(await this.backend.stat(target))) {
-      toast(`${basename(target)} n'existe pas encore : il sera créé à la première archive.`);
+      toast(`${basename(target)} doesn't exist yet: it will be created by the first archive.`);
       return;
     }
     await this.openFile(target);
@@ -1018,7 +1020,7 @@ export class App {
     if (!doc) return;
     const line = this.view.state.doc.line(lineNo);
     const task = parseTask(line.text, this.taskCfg);
-    const items: MenuItem[] = [{ header: "Statut" }];
+    const items: MenuItem[] = [{ header: "Status" }];
     for (const [name, color] of Object.entries(this.taskCfg.statuses)) {
       items.push({
         label: name,
@@ -1030,7 +1032,7 @@ export class App {
     if (doc.path && !isDoneFile(doc.path, this.settings.archive_suffix)) {
       items.push({ separator: true });
       items.push({
-        label: `Archiver dans ${basename(doneFileFor(doc.path, this.settings.archive_suffix))}`,
+        label: `Archive to ${basename(doneFileFor(doc.path, this.settings.archive_suffix))}`,
         icon: "archive",
         shortcut: shortcutFor("task.archive"),
         action: () => this.archiveLines(doc, [lineNo]),
@@ -1040,21 +1042,21 @@ export class App {
   }
 
   // -------------------------------------------------------------------------
-  // Bilan
+  // Activity report
 
   async generateReport() {
     if (!this.workspace) {
-      toast("Ouvrez d'abord le dossier qui contient vos notes.", { action: { label: "Ouvrir un dossier", run: () => void this.openFolder() } });
+      toast("Open the folder that contains your notes first.", { action: { label: "Open folder", run: () => void this.openFolder() } });
       return;
     }
     const choices: { kind: "year" | "lastYear" | "12months" | "all"; label: string }[] = [
-      { kind: "year", label: `Cette année (${new Date().getFullYear()})` },
-      { kind: "lastYear", label: `L'année dernière (${new Date().getFullYear() - 1})` },
-      { kind: "12months", label: "Les 12 derniers mois" },
-      { kind: "all", label: "Tout l'historique" },
+      { kind: "year", label: `This year (${new Date().getFullYear()})` },
+      { kind: "lastYear", label: `Last year (${new Date().getFullYear() - 1})` },
+      { kind: "12months", label: "Last 12 months" },
+      { kind: "all", label: "All time" },
     ];
     openPicker({
-      placeholder: "Période du bilan",
+      placeholder: "Report period",
       provide: (q) => ({
         items: fuzzyFilter(q, choices, (c) => c.label).map(({ item, result }) => ({
           label: item.label, icon: "chart", positions: result.positions, value: item.kind,
@@ -1085,7 +1087,7 @@ export class App {
         }));
         const period = periodFor(it.value as "year");
         const md = buildReport(sources, this.taskCfg, period);
-        this.newDoc({ text: md, title: `Bilan — ${period.label}.md`, lang: "markdown" });
+        this.newDoc({ text: md, title: `Activity report — ${period.label}.md`, lang: "markdown" });
       },
     });
   }
@@ -1095,7 +1097,7 @@ export class App {
 
   openCommandPalette(query = "") {
     openPicker({
-      placeholder: "Commande…",
+      placeholder: "Command…",
       query,
       provide: (q) => {
         const cmds = this.paletteCommands();
@@ -1103,7 +1105,7 @@ export class App {
           items: fuzzyFilter(q, cmds, (c) => c.title).map(({ item, result }) => ({
             label: item.title, hint: shortcutFor(item.id), icon: "command", positions: result.positions, value: item.id,
           })),
-          empty: "Aucune commande",
+          empty: "No matching command",
         };
       },
       pick: (it) => runCommand(it.value as string),
@@ -1116,14 +1118,14 @@ export class App {
 
   openQuickOpen(prefix = "") {
     openPicker({
-      placeholder: "Fichier… ( > commandes   : ligne   @ titres et tâches )",
+      placeholder: "File…   ( > commands   : line   @ headings and tasks )",
       query: prefix,
       provide: (q) => {
         if (q.startsWith(">")) return this.provideCommands(q.slice(1));
         if (q.startsWith(":")) {
           const n = parseInt(q.slice(1), 10);
           const total = this.active ? this.view.state.doc.lines : 0;
-          return { items: [], empty: this.active ? (n ? `Entrée pour aller à la ligne ${Math.min(n, total)} / ${total}` : `Numéro de ligne (1 – ${total})`) : "Aucun fichier ouvert" };
+          return { items: [], empty: this.active ? (n ? `Press Enter to go to line ${Math.min(n, total)} / ${total}` : `Line number (1 – ${total})`) : "No open file" };
         }
         if (q.startsWith("@")) return this.provideSymbols(q.slice(1));
         return this.provideFiles(q);
@@ -1151,12 +1153,12 @@ export class App {
       items: fuzzyFilter(q, this.paletteCommands(), (c) => c.title).map(({ item, result }) => ({
         label: item.title, hint: shortcutFor(item.id), icon: "command", positions: result.positions, value: item.id,
       })),
-      empty: "Aucune commande",
+      empty: "No matching command",
     };
   }
 
   private provideSymbols(q: string) {
-    if (!this.active) return { items: [], empty: "Aucun fichier ouvert" };
+    if (!this.active) return { items: [], empty: "No open file" };
     const doc = this.view.state.doc;
     const symbols: { label: string; line: number; icon: string; color?: string }[] = [];
     for (let i = 1; i <= doc.lines; i++) {
@@ -1172,7 +1174,7 @@ export class App {
       items: fuzzyFilter(q, symbols, (s) => s.label).map(({ item, result }) => ({
         label: item.label, icon: item.icon, color: item.color, hint: `L${item.line}`, positions: result.positions, value: item.line,
       })),
-      empty: "Aucun titre ni tâche dans cette note",
+      empty: "No heading or task in this note",
     };
   }
 
@@ -1180,7 +1182,7 @@ export class App {
     const items: { label: string; detail: string; doc?: Doc; path?: string; open: boolean }[] = [];
     const seen = new Set<string>();
     for (const d of this.docs) {
-      items.push({ label: this.docName(d), detail: d.path ? relative(this.workspace, dirname(d.path)) || "·" : "non enregistré", doc: d, open: true });
+      items.push({ label: this.docName(d), detail: d.path ? relative(this.workspace, dirname(d.path)) || "·" : "unsaved", doc: d, open: true });
       if (d.path) seen.add(d.path);
     }
     for (const p of this.workspaceFiles) {
@@ -1197,23 +1199,23 @@ export class App {
           positions: result.positions.filter((p) => p >= offset).map((p) => p - offset),
           detailPositions: result.positions.filter((p) => p < offset),
           icon: isDoneFile(item.label, this.settings.archive_suffix) ? "fileDone" : "file",
-          hint: item.open ? "ouvert" : undefined,
+          hint: item.open ? "open" : undefined,
           value: { doc: item.doc, path: item.path },
         } satisfies PickItem;
       }),
-      empty: this.workspace ? "Aucun fichier" : "Ouvrez un dossier pour chercher dans vos notes (Ctrl+Maj+O)",
+      empty: this.workspace ? "No matching file" : `Open a folder to search your notes (${shortcutFor("folder.open")})`,
     };
   }
 
   selectTheme() {
     const original = this.settings.theme;
-    const items = [{ id: "auto", label: "Automatique — suit le système" }, ...THEMES.map((t) => ({ id: t.id, label: t.label }))];
+    const items = [{ id: "auto", label: "Automatic — follows the system" }, ...THEMES.map((t) => ({ id: t.id, label: t.label }))];
     openPicker({
-      placeholder: "Thème",
+      placeholder: "Theme",
       initial: Math.max(0, items.findIndex((t) => t.id === original)),
       provide: (q) => ({
         items: fuzzyFilter(q, items, (t) => t.label).map(({ item, result }) => ({
-          label: item.label, icon: "palette", positions: result.positions, value: item.id, hint: item.id === original ? "actuel" : undefined,
+          label: item.label, icon: "palette", positions: result.positions, value: item.id, hint: item.id === original ? "current" : undefined,
         })),
       }),
       highlight: (it) => {
@@ -1231,12 +1233,12 @@ export class App {
 
   selectAccent() {
     const names = Object.keys(PALETTE_LABELS);
-    const opts = [{ id: null as string | null, label: "Couleur du thème" }, ...names.map((n) => ({ id: n as string | null, label: PALETTE_LABELS[n] }))];
+    const opts = [{ id: null as string | null, label: "Theme color" }, ...names.map((n) => ({ id: n as string | null, label: PALETTE_LABELS[n] }))];
     const original = this.settings.accent;
     const theme = findTheme(this.settings.theme, this.systemDark.matches);
     const resolve = (id: string | null) => (id ? (theme.colors as Record<string, string>)[id] ?? null : null);
     openPicker({
-      placeholder: "Couleur d'accent",
+      placeholder: "Accent color",
       initial: Math.max(0, opts.findIndex((o) => resolve(o.id) === original)),
       provide: (q) => ({
         items: fuzzyFilter(q, opts, (o) => o.label).map(({ item, result }) => ({
@@ -1262,17 +1264,17 @@ export class App {
   }
 
   // -------------------------------------------------------------------------
-  // Fichiers (explorateur)
+  // Files (explorer)
 
   async createFileIn(dir: string) {
-    const r = await prompt({ title: "Nouvelle note", value: "note.txt", selectStem: true, okLabel: "Créer", message: relative(this.workspace, dir) || undefined });
+    const r = await prompt({ title: "New note", value: "note.txt", selectStem: true, okLabel: "Create", message: relative(this.workspace, dir) || undefined });
     if (!r?.value) return;
     const name = extname(r.value) ? r.value : `${r.value}.txt`;
     const path = join(dir, name);
     try {
       await this.backend.createFile(path);
     } catch (e) {
-      toast(`Création impossible : ${e}`, { kind: "error" });
+      toast(`Could not create: ${e}`, { kind: "error" });
       return;
     }
     await this.refreshWorkspaceFiles();
@@ -1281,26 +1283,26 @@ export class App {
   }
 
   async createFolderIn(dir: string) {
-    const r = await prompt({ title: "Nouveau dossier", placeholder: "Nom du dossier", okLabel: "Créer" });
+    const r = await prompt({ title: "New folder", placeholder: "Folder name", okLabel: "Create" });
     if (!r?.value) return;
     try {
       await this.backend.createDir(join(dir, r.value));
       this.sidebar.expand(dir);
       this.sidebar.refreshTree();
     } catch (e) {
-      toast(`Création impossible : ${e}`, { kind: "error" });
+      toast(`Could not create: ${e}`, { kind: "error" });
     }
   }
 
   async renamePath(path: string) {
-    const r = await prompt({ title: "Renommer", value: basename(path), selectStem: true, okLabel: "Renommer" });
+    const r = await prompt({ title: "Rename", value: basename(path), selectStem: true, okLabel: "Rename" });
     if (!r?.value || r.value === basename(path)) return;
     const target = join(dirname(path), r.value);
     for (const d of this.docs) if (d.dirty && d.path && (samePath(d.path, path) || isInside(d.path, path))) await this.save(d);
     try {
       await this.backend.rename(path, target);
     } catch (e) {
-      toast(`Renommage impossible : ${e}`, { kind: "error" });
+      toast(`Could not rename: ${e}`, { kind: "error" });
       return;
     }
     for (const d of this.docs) {
@@ -1320,16 +1322,16 @@ export class App {
 
   async trashPath(path: string) {
     const r = await confirm({
-      title: `Mettre « ${basename(path)} » à la corbeille ?`,
-      message: "Vous pourrez le récupérer depuis la corbeille du système.",
-      okLabel: "Mettre à la corbeille",
+      title: `Move "${basename(path)}" to the trash?`,
+      message: "You can restore it from the system trash.",
+      okLabel: "Move to trash",
       danger: true,
     });
     if (r !== "ok") return;
     try {
       await this.backend.trash(path);
     } catch (e) {
-      toast(`Suppression impossible : ${e}`, { kind: "error" });
+      toast(`Could not delete: ${e}`, { kind: "error" });
       return;
     }
     for (const d of [...this.docs]) if (d.path && (samePath(d.path, path) || isInside(d.path, path))) await this.closeDoc(d, { force: true });
@@ -1337,12 +1339,12 @@ export class App {
     this.sidebar.refreshTree();
   }
 
-  async copyText(text: string, what = "Chemin copié") {
+  async copyText(text: string, what = "Path copied") {
     try {
       await navigator.clipboard.writeText(text);
       toast(what, { timeout: 1500 });
     } catch {
-      toast("Copie impossible", { kind: "error" });
+      toast("Could not copy", { kind: "error" });
     }
   }
 
@@ -1441,9 +1443,9 @@ export class App {
       const unsaved = this.docs.filter((d) => d.dirty && (!d.path || !this.settings.autosave || d.missing || d.conflict));
       if (unsaved.length) {
         const r = await confirm({
-          title: "Quitter sans enregistrer ?",
-          message: `Modifications non enregistrées : ${unsaved.map((d) => this.docName(d)).join(", ")}.`,
-          okLabel: "Quitter",
+          title: "Quit without saving?",
+          message: `Unsaved changes: ${unsaved.map((d) => this.docName(d)).join(", ")}.`,
+          okLabel: "Quit",
           danger: true,
         });
         if (r !== "ok") return false;
@@ -1460,7 +1462,7 @@ export class App {
   }
 
   // -------------------------------------------------------------------------
-  // Affichage
+  // Display
 
   updateTitle() {
     const d = this.active;
@@ -1483,14 +1485,14 @@ export class App {
   showAbout() {
     void confirm({
       title: `KiloNote ${__APP_VERSION__}`,
-      message: "Des notes légères comme un kilooctet. Éditeur rapide, tâches todo / ongoing / done, archives et bilan annuel. Fait avec Tauri et CodeMirror.",
-      okLabel: "Super !",
-      cancelLabel: "Fermer",
+      message: "Notes as light as a kilobyte. A fast editor with todo / ongoing / done tasks, archives and yearly activity reports. Built with Tauri and CodeMirror.",
+      okLabel: "Nice!",
+      cancelLabel: "Close",
     });
   }
 
   // -------------------------------------------------------------------------
-  // Commandes
+  // Commands
 
   private commandList: Command[] = [];
 
@@ -1537,7 +1539,7 @@ export class App {
   private registerStatusCommands() {
     const cmds: Command[] = Object.keys(this.taskCfg.statuses).map((name) => ({
       id: `task.set.${name}`,
-      title: `Tâche : marquer « ${name} »`,
+      title: `Task: Mark as "${name}"`,
       run: () => this.cycleTasks(name),
     }));
     this.commandList = this.commandList.filter((c) => !c.id.startsWith("task.set."));
@@ -1547,56 +1549,56 @@ export class App {
 
   private registerAllCommands() {
     const cmds: Command[] = [
-      { id: "file.new", title: "Fichier : nouvelle note", run: () => this.newDoc() },
-      { id: "file.open", title: "Fichier : ouvrir…", run: async () => { for (const p of await this.backend.pickFiles()) await this.openFile(p); } },
-      { id: "folder.open", title: "Dossier : ouvrir…", run: () => this.openFolder() },
-      { id: "folder.close", title: "Dossier : fermer", run: () => this.closeFolder() },
-      { id: "file.save", title: "Fichier : enregistrer", run: () => this.active && this.save(this.active) },
-      { id: "file.saveAs", title: "Fichier : enregistrer sous…", run: () => this.active && this.saveAs(this.active) },
-      { id: "file.saveAll", title: "Fichier : tout enregistrer", run: () => this.saveAll() },
-      { id: "file.rename", title: "Fichier : renommer…", run: () => this.active?.path && this.renamePath(this.active.path) },
-      { id: "file.reveal", title: "Fichier : afficher dans l'explorateur du système", run: () => this.active?.path && this.backend.reveal(this.active.path) },
-      { id: "file.copyPath", title: "Fichier : copier le chemin", run: () => this.active?.path && this.copyText(this.active.path) },
-      { id: "file.toggleDone", title: "Tâches : basculer entre la note et son archive (_done)", run: () => this.toggleDoneFile() },
-      { id: "file.reload", title: "Fichier : recharger depuis le disque", run: () => this.active && this.reloadDoc(this.active, true) },
-      { id: "tab.close", title: "Onglet : fermer", run: () => this.active && this.closeDoc(this.active) },
-      { id: "tab.closeOthers", title: "Onglet : fermer les autres", run: () => this.closeMany(this.docs.filter((d) => d !== this.active)) },
-      { id: "tab.closeAll", title: "Onglet : tout fermer", run: () => this.closeMany(this.docs) },
-      { id: "tab.reopen", title: "Onglet : rouvrir le dernier fermé", run: () => this.reopenClosed() },
-      { id: "tab.next", title: "Onglet : suivant", run: () => this.cycleTab(1) },
-      { id: "tab.prev", title: "Onglet : précédent", run: () => this.cycleTab(-1) },
-      { id: "tab.color", title: "Onglet : couleur…", run: () => this.active && this.tabbar.showColorMenu(this.active) },
-      { id: "tab.group", title: "Onglet : ajouter à un nouveau groupe…", run: () => this.active && this.createGroup([this.active]) },
-      { id: "tab.ungroup", title: "Onglet : retirer du groupe", run: () => this.active && this.addToGroup(this.active, null) },
-      { id: "palette.commands", title: "Palette de commandes", run: () => this.openCommandPalette() },
-      { id: "palette.files", title: "Aller au fichier…", run: () => this.openQuickOpen() },
-      { id: "palette.line", title: "Aller à la ligne…", run: () => this.openQuickOpen(":") },
-      { id: "palette.symbol", title: "Aller à un titre ou une tâche…", run: () => this.openQuickOpen("@") },
-      { id: "edit.find", title: "Édition : rechercher", run: () => this.active && openSearchPanel(this.view) },
-      { id: "edit.replace", title: "Édition : rechercher et remplacer", run: () => this.active && openSearchPanel(this.view) },
-      { id: "view.sidebar", title: "Affichage : barre latérale", run: () => this.sidebar.toggle() },
-      { id: "view.files", title: "Affichage : explorateur de fichiers", run: () => this.sidebar.show("files") },
-      { id: "view.tasks", title: "Affichage : tâches du dossier", run: () => this.sidebar.show("tasks") },
-      { id: "view.search", title: "Affichage : rechercher dans les fichiers", run: () => this.sidebar.show("search") },
-      { id: "view.zen", title: "Affichage : mode zen", run: () => this.setZen(!this.zen) },
-      { id: "view.fullscreen", title: "Affichage : plein écran", run: () => this.backend.toggleFullscreen() },
-      { id: "view.zoomIn", title: "Affichage : agrandir le texte", run: () => this.zoom(1) },
-      { id: "view.zoomOut", title: "Affichage : réduire le texte", run: () => this.zoom(-1) },
-      { id: "view.zoomReset", title: "Affichage : taille de texte par défaut", run: () => this.zoom(null) },
-      { id: "view.wrap", title: "Affichage : retour à la ligne automatique", run: () => this.updateSetting("word_wrap", !this.settings.word_wrap) },
-      { id: "view.lineNumbers", title: "Affichage : numéros de ligne", run: () => this.updateSetting("line_numbers", !this.settings.line_numbers) },
-      { id: "theme.select", title: "Thème : choisir…", run: () => this.selectTheme() },
-      { id: "theme.accent", title: "Thème : couleur d'accent…", run: () => this.selectAccent() },
-      { id: "settings.open", title: "Préférences : paramètres", run: () => this.openSettings() },
-      { id: "task.cycle", title: "Tâche : statut suivant", run: () => this.cycleTasks() },
-      { id: "task.archive", title: "Tâche : archiver la ligne dans _done", run: () => this.archiveSelection() },
-      { id: "task.archiveDone", title: "Tâche : archiver toutes les tâches terminées", run: () => this.archiveAllDone() },
-      { id: "report.generate", title: "Bilan : générer le bilan d'activité…", run: () => this.generateReport() },
-      { id: "help.guide", title: "Aide : guide de KiloNote", run: () => this.newDoc({ text: GUIDE, title: "Guide KiloNote.md", lang: "markdown" }) },
-      { id: "help.about", title: "Aide : à propos", run: () => this.showAbout() },
+      { id: "file.new", title: "File: New note", run: () => this.newDoc() },
+      { id: "file.open", title: "File: Open…", run: async () => { for (const p of await this.backend.pickFiles()) await this.openFile(p); } },
+      { id: "folder.open", title: "Folder: Open…", run: () => this.openFolder() },
+      { id: "folder.close", title: "Folder: Close", run: () => this.closeFolder() },
+      { id: "file.save", title: "File: Save", run: () => this.active && this.save(this.active) },
+      { id: "file.saveAs", title: "File: Save as…", run: () => this.active && this.saveAs(this.active) },
+      { id: "file.saveAll", title: "File: Save all", run: () => this.saveAll() },
+      { id: "file.rename", title: "File: Rename…", run: () => this.active?.path && this.renamePath(this.active.path) },
+      { id: "file.reveal", title: "File: Reveal in file manager", run: () => this.active?.path && this.backend.reveal(this.active.path) },
+      { id: "file.copyPath", title: "File: Copy path", run: () => this.active?.path && this.copyText(this.active.path) },
+      { id: "file.toggleDone", title: "Tasks: Switch between note and its _done archive", run: () => this.toggleDoneFile() },
+      { id: "file.reload", title: "File: Reload from disk", run: () => this.active && this.reloadDoc(this.active, true) },
+      { id: "tab.close", title: "Tab: Close", run: () => this.active && this.closeDoc(this.active) },
+      { id: "tab.closeOthers", title: "Tab: Close others", run: () => this.closeMany(this.docs.filter((d) => d !== this.active)) },
+      { id: "tab.closeAll", title: "Tab: Close all", run: () => this.closeMany(this.docs) },
+      { id: "tab.reopen", title: "Tab: Reopen last closed", run: () => this.reopenClosed() },
+      { id: "tab.next", title: "Tab: Next", run: () => this.cycleTab(1) },
+      { id: "tab.prev", title: "Tab: Previous", run: () => this.cycleTab(-1) },
+      { id: "tab.color", title: "Tab: Color…", run: () => this.active && this.tabbar.showColorMenu(this.active) },
+      { id: "tab.group", title: "Tab: Add to new group…", run: () => this.active && this.createGroup([this.active]) },
+      { id: "tab.ungroup", title: "Tab: Remove from group", run: () => this.active && this.addToGroup(this.active, null) },
+      { id: "palette.commands", title: "Command palette", run: () => this.openCommandPalette() },
+      { id: "palette.files", title: "Go to file…", run: () => this.openQuickOpen() },
+      { id: "palette.line", title: "Go to line…", run: () => this.openQuickOpen(":") },
+      { id: "palette.symbol", title: "Go to heading or task…", run: () => this.openQuickOpen("@") },
+      { id: "edit.find", title: "Edit: Find", run: () => this.active && openSearchPanel(this.view) },
+      { id: "edit.replace", title: "Edit: Find and replace", run: () => this.active && openSearchPanel(this.view) },
+      { id: "view.sidebar", title: "View: Toggle sidebar", run: () => this.sidebar.toggle() },
+      { id: "view.files", title: "View: File explorer", run: () => this.sidebar.show("files") },
+      { id: "view.tasks", title: "View: Folder tasks", run: () => this.sidebar.show("tasks") },
+      { id: "view.search", title: "View: Search in files", run: () => this.sidebar.show("search") },
+      { id: "view.zen", title: "View: Zen mode", run: () => this.setZen(!this.zen) },
+      { id: "view.fullscreen", title: "View: Full screen", run: () => this.backend.toggleFullscreen() },
+      { id: "view.zoomIn", title: "View: Increase text size", run: () => this.zoom(1) },
+      { id: "view.zoomOut", title: "View: Decrease text size", run: () => this.zoom(-1) },
+      { id: "view.zoomReset", title: "View: Reset text size", run: () => this.zoom(null) },
+      { id: "view.wrap", title: "View: Toggle word wrap", run: () => this.updateSetting("word_wrap", !this.settings.word_wrap) },
+      { id: "view.lineNumbers", title: "View: Toggle line numbers", run: () => this.updateSetting("line_numbers", !this.settings.line_numbers) },
+      { id: "theme.select", title: "Theme: Select…", run: () => this.selectTheme() },
+      { id: "theme.accent", title: "Theme: Accent color…", run: () => this.selectAccent() },
+      { id: "settings.open", title: "Preferences: Settings", run: () => this.openSettings() },
+      { id: "task.cycle", title: "Task: Next status", run: () => this.cycleTasks() },
+      { id: "task.archive", title: "Task: Archive line to _done", run: () => this.archiveSelection() },
+      { id: "task.archiveDone", title: "Task: Archive all completed tasks", run: () => this.archiveAllDone() },
+      { id: "report.generate", title: "Report: Generate activity report…", run: () => this.generateReport() },
+      { id: "help.guide", title: "Help: KiloNote guide", run: () => this.newDoc({ text: GUIDE, title: "KiloNote guide.md", lang: "markdown" }) },
+      { id: "help.about", title: "Help: About", run: () => this.showAbout() },
     ];
     for (let i = 1; i <= 9; i++) {
-      cmds.push({ id: `tab.goto.${i}`, title: `Onglet ${i}`, hidden: true, run: () => this.gotoTab(i) });
+      cmds.push({ id: `tab.goto.${i}`, title: `Tab ${i}`, hidden: true, run: () => this.gotoTab(i) });
     }
     this.commandList = cmds;
     registerCommands(cmds);

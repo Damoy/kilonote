@@ -3,7 +3,7 @@ import { defineConfig } from "vite";
 
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as { version: string };
 
-// Configuration pensée pour Tauri : port fixe, pas d'écran d'erreur masqué.
+// Tauri-friendly setup: fixed port, errors are not hidden by a cleared screen.
 const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({

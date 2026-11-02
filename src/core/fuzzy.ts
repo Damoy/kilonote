@@ -1,13 +1,12 @@
-// Recherche floue façon Sublime Text : les lettres doivent apparaître dans
-// l'ordre ; bonus pour les lettres consécutives, les débuts de mots et le nom
-// de fichier.
+// Fuzzy matching: letters must appear in order; consecutive letters, word
+// starts and matches in the file name all get a bonus.
 
 export interface FuzzyResult {
   score: number;
   positions: number[];
 }
 
-const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const fold = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
 const isBoundary = (text: string, i: number) => {
   if (i === 0) return true;
@@ -21,7 +20,7 @@ export function fuzzyMatch(query: string, text: string): FuzzyResult | null {
   const t = fold(text);
   if (!q) return { score: 0, positions: [] };
 
-  // Correspondance exacte d'une sous-chaîne : très bon score.
+  // Exact substring match: very good score.
   const direct = t.indexOf(q);
   const positions: number[] = [];
   let score = 0;
@@ -32,7 +31,7 @@ export function fuzzyMatch(query: string, text: string): FuzzyResult | null {
     let ti = 0;
     let prev = -2;
     for (let qi = 0; qi < q.length; qi++) {
-      // Préférer un début de mot s'il y en a un plus loin pour cette lettre.
+      // Prefer a word start further on, if there is one for this letter.
       let found = -1;
       for (let j = ti; j < t.length; j++) {
         if (t[j] !== q[qi]) continue;
@@ -51,7 +50,7 @@ export function fuzzyMatch(query: string, text: string): FuzzyResult | null {
       ti = found + 1;
     }
   }
-  // Bonus si la correspondance tombe dans le nom de fichier (après le dernier séparateur).
+  // Bonus when the match falls in the file name (after the last separator).
   const lastSep = Math.max(text.lastIndexOf("/"), text.lastIndexOf("\\"));
   if (positions.length && positions[0] > lastSep) score += 60;
   score -= text.length * 0.2;

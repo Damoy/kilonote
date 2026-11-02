@@ -1,6 +1,6 @@
-// KiloNote — backend natif.
-// Toute la logique d'interface vit dans le front (TypeScript). Ici on ne garde
-// que ce qui doit être natif : accès disque rapide, écriture atomique, corbeille.
+// KiloNote — native backend.
+// All the interface logic lives in the frontend (TypeScript). Only what must be
+// native stays here: fast disk access, atomic writes, trash, single instance.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use serde::Serialize;
@@ -12,7 +12,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_window_state::StateFlags;
 
 const BOM: &[u8] = &[0xEF, 0xBB, 0xBF];
-/// Dossiers ignorés lors du parcours d'un espace de travail.
+/// Folders skipped when walking a workspace.
 const SKIP_DIRS: &[&str] = &[
     ".git",
     ".svn",
@@ -68,8 +68,8 @@ fn meta_of(p: &Path) -> Option<Meta> {
     })
 }
 
-/// Windows-1252 : les octets 0x80–0x9F ont des correspondances spécifiques,
-/// le reste est identique à Latin-1. Fréquent pour les vieux fichiers Notepad.
+/// Windows-1252: bytes 0x80–0x9F have specific mappings, the rest matches
+/// Latin-1. Common for old Notepad files.
 fn decode_cp1252(bytes: &[u8]) -> String {
     const HIGH: [char; 32] = [
         '€', '\u{81}', '‚', 'ƒ', '„', '…', '†', '‡', 'ˆ', '‰', 'Š', '‹', 'Œ', '\u{8D}', 'Ž',
@@ -131,8 +131,8 @@ async fn read_text(path: String) -> Result<FileText, String> {
     })
 }
 
-/// Écriture atomique : fichier temporaire voisin puis renommage.
-/// Si le renommage échoue (fichier verrouillé sous Windows…), on écrit directement.
+/// Atomic write: write a sibling temporary file, then rename it over the target.
+/// If renaming fails (file locked on Windows…), write the file directly.
 #[tauri::command]
 async fn write_text(path: String, text: String, bom: Option<bool>) -> Result<Meta, String> {
     let target = PathBuf::from(&path);
@@ -166,11 +166,11 @@ async fn write_text(path: String, text: String, bom: Option<bool>) -> Result<Met
         let _ = fs::remove_file(&tmp);
         fs::write(&target, &payload).map_err(err)?;
     }
-    meta_of(&target).ok_or_else(|| "fichier introuvable après écriture".into())
+    meta_of(&target).ok_or_else(|| "file not found after writing".into())
 }
 
-/// Ajoute des lignes en fin de fichier (créé si besoin), en respectant
-/// la fin de ligne déjà utilisée par le fichier (LF ou CRLF).
+/// Appends lines at the end of a file (created when needed), using the line
+/// ending the file already uses (LF or CRLF).
 #[tauri::command]
 async fn append_lines(path: String, lines: Vec<String>) -> Result<Meta, String> {
     let p = PathBuf::from(&path);
@@ -209,7 +209,7 @@ async fn append_lines(path: String, lines: Vec<String>) -> Result<Meta, String> 
         .map_err(err)?;
     f.write_all(out.as_bytes()).map_err(err)?;
     f.sync_all().map_err(err)?;
-    meta_of(&p).ok_or_else(|| "fichier introuvable après écriture".into())
+    meta_of(&p).ok_or_else(|| "file not found after writing".into())
 }
 
 #[tauri::command]
@@ -234,7 +234,7 @@ async fn list_dir(path: String, show_hidden: bool) -> Result<Vec<Entry>, String>
             if name.ends_with(".kilonote-tmp") {
                 return None;
             }
-            // `metadata` suit les liens symboliques : un lien vers un dossier reste un dossier.
+            // `metadata` follows symlinks: a link to a folder is still a folder.
             let is_dir = fs::metadata(e.path()).map(|m| m.is_dir()).unwrap_or(false);
             Some(Entry {
                 name,
@@ -251,8 +251,8 @@ async fn list_dir(path: String, show_hidden: bool) -> Result<Vec<Entry>, String>
     Ok(out)
 }
 
-/// Parcours récursif (sans suivre les liens symboliques) pour la recherche
-/// rapide de fichiers, la vue des tâches et le bilan annuel.
+/// Recursive walk (symlinks are not followed) for quick open, the tasks view
+/// and the activity report.
 #[tauri::command]
 async fn walk(root: String, show_hidden: bool, max: usize) -> Result<Vec<String>, String> {
     let mut files = Vec::new();
@@ -280,7 +280,7 @@ async fn walk(root: String, show_hidden: bool, max: usize) -> Result<Vec<String>
     Ok(files)
 }
 
-/// Lecture groupée (un seul aller-retour IPC) pour l'analyse des tâches.
+/// Batch read (a single IPC round trip) used to scan tasks.
 #[tauri::command]
 async fn read_many(paths: Vec<String>, max_size: u64) -> Vec<Option<String>> {
     paths
@@ -313,7 +313,7 @@ async fn create_file(path: String) -> Result<(), String> {
 #[tauri::command]
 async fn rename_path(from: String, to: String) -> Result<(), String> {
     if Path::new(&to).exists() && !from.eq_ignore_ascii_case(&to) {
-        return Err(format!("« {to} » existe déjà"));
+        return Err(format!("\"{to}\" already exists"));
     }
     fs::rename(&from, &to).map_err(err)
 }
@@ -330,20 +330,20 @@ fn config_dir(app: AppHandle) -> Result<String, String> {
     Ok(dir.to_string_lossy().into_owned())
 }
 
-/// Chemins existants parmi des arguments de ligne de commande, rendus absolus.
+/// Existing paths among command-line arguments, made absolute.
 fn resolve_paths(args: impl IntoIterator<Item = String>, cwd: &Path) -> Vec<String> {
     args.into_iter()
         .filter(|a| !a.starts_with('-'))
         .filter_map(|a| fs::canonicalize(cwd.join(a)).ok())
         .map(|p| {
             let s = p.to_string_lossy().into_owned();
-            // Sous Windows, canonicalize renvoie un préfixe \\?\ peu lisible.
+            // On Windows, canonicalize returns an unfriendly \\?\ prefix.
             s.strip_prefix(r"\\?\").map(str::to_owned).unwrap_or(s)
         })
         .collect()
 }
 
-/// Chemins passés en ligne de commande (`kilonote notes/` ou `kilonote mc.txt`).
+/// Paths passed on the command line (`kilonote notes/` or `kilonote mc.txt`).
 #[tauri::command]
 fn startup_paths() -> Vec<String> {
     let cwd = std::env::current_dir().unwrap_or_default();
@@ -352,8 +352,8 @@ fn startup_paths() -> Vec<String> {
 
 fn main() {
     tauri::Builder::default()
-        // Une seule fenêtre KiloNote : relancer l'application (raccourci épinglé,
-        // « Ouvrir avec »…) ramène la fenêtre existante et y ouvre les fichiers.
+        // A single KiloNote window: launching the app again (pinned shortcut,
+        // "Open with"…) brings the existing window back and opens the files there.
         .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
@@ -373,8 +373,8 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            // Le front affiche la fenêtre une fois prête (pas de flash blanc).
-            // Filet de sécurité : on l'affiche quoi qu'il arrive après un court délai.
+            // The frontend shows the window once ready (no white flash).
+            // Safety net: show it anyway after a short delay.
             if let Some(window) = app.get_webview_window("main") {
                 std::thread::spawn(move || {
                     std::thread::sleep(Duration::from_millis(2500));
@@ -401,5 +401,5 @@ fn main() {
             startup_paths
         ])
         .run(tauri::generate_context!())
-        .expect("impossible de démarrer KiloNote");
+        .expect("failed to start KiloNote");
 }

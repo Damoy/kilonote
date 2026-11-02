@@ -1,7 +1,7 @@
-// Barre d'état : position, tâches de la note, encodage, fins de ligne, langage.
+// Status bar: cursor position, tasks of the note, encoding, line endings, language.
 
 import type { App } from "../app";
-import { shortcutFor } from "../core/commands";
+import { titleWithKey } from "../core/commands";
 import { resolveColor } from "../core/themes";
 import { LANG_LABELS, type LangId, reconfigureLanguage, settingsCompartment, settingsExtensions } from "../editor/setup";
 import { findTasks } from "../editor/tasks";
@@ -11,19 +11,19 @@ import { showMenu } from "./overlay";
 export class StatusBar {
   private left = h("div", { class: "st-left" });
   private right = h("div", { class: "st-right" });
-  private pos = h("button", { class: "st-item", title: "Aller à la ligne (Ctrl+G)" });
+  private pos = h("button", { class: "st-item", title: titleWithKey("Go to line", "palette.line") });
   private words = h("span", { class: "st-item st-dim" });
-  private tasks = h("button", { class: "st-item st-tasks", title: "Titres et tâches de la note (Ctrl+R)" });
+  private tasks = h("button", { class: "st-item st-tasks", title: titleWithKey("Headings and tasks of this note", "palette.symbol") });
   private encoding = h("span", { class: "st-item st-dim" });
-  private eol = h("button", { class: "st-item", title: "Fins de ligne" });
-  private lang = h("button", { class: "st-item", title: "Type de document" });
+  private eol = h("button", { class: "st-item", title: "Line endings" });
+  private lang = h("button", { class: "st-item", title: "Document type" });
   private save = h("button", { class: "st-item st-save" });
   private counted: unknown = null;
 
   constructor(private app: App, el: HTMLElement) {
-    const sidebarBtn = h("button", { class: "st-item st-icon", title: `Barre latérale (${shortcutFor("view.sidebar")})`, onclick: () => app.sidebar.toggle() }, icon("sidebar"));
-    const themeBtn = h("button", { class: "st-item st-icon", title: "Thème", onclick: () => app.selectTheme() }, icon("palette"));
-    const settingsBtn = h("button", { class: "st-item st-icon", title: `Paramètres (${shortcutFor("settings.open")})`, onclick: () => app.openSettings() }, icon("gear"));
+    const sidebarBtn = h("button", { class: "st-item st-icon", title: titleWithKey("Sidebar", "view.sidebar"), onclick: () => app.sidebar.toggle() }, icon("sidebar"));
+    const themeBtn = h("button", { class: "st-item st-icon", title: "Theme", onclick: () => app.selectTheme() }, icon("palette"));
+    const settingsBtn = h("button", { class: "st-item st-icon", title: titleWithKey("Settings", "settings.open"), onclick: () => app.openSettings() }, icon("gear"));
     this.left.append(sidebarBtn, this.tasks);
     this.right.append(this.pos, this.words, this.encoding, this.eol, this.lang, this.save, themeBtn, settingsBtn);
     el.append(this.left, this.right);
@@ -37,9 +37,9 @@ export class StatusBar {
       if (!doc?.conflict) return;
       showMenu(
         [
-          { header: "Conflit avec le disque" },
-          { label: "Recharger la version du disque", icon: "refresh", action: () => app.resolveConflict(doc, "disk") },
-          { label: "Garder ma version (écraser)", icon: "check", action: () => app.resolveConflict(doc, "mine") },
+          { header: "Conflict with the file on disk" },
+          { label: "Reload the version on disk", icon: "refresh", action: () => app.resolveConflict(doc, "disk") },
+          { label: "Keep mine (overwrite)", icon: "check", action: () => app.resolveConflict(doc, "mine") },
         ],
         e.clientX,
         (e.currentTarget as HTMLElement).getBoundingClientRect().top - 4,
@@ -78,7 +78,7 @@ export class StatusBar {
     this.pos.textContent = text;
   }
 
-  /** Mots et tâches : recalculés seulement si le texte a changé. */
+  /** Words and tasks: recomputed only when the text changed. */
   private updateCounts(force = false) {
     const doc = this.app.active;
     const current = doc ? this.app.view.state.doc : null;
@@ -91,7 +91,7 @@ export class StatusBar {
     }
     const text = this.app.view.state.doc.toString();
     const words = text.length > 2_000_000 ? null : (text.match(/[\p{L}\p{N}][\p{L}\p{N}'’_-]*/gu)?.length ?? 0);
-    this.words.textContent = words == null ? "" : `${words} mot${words > 1 ? "s" : ""}`;
+    this.words.textContent = words == null ? "" : `${words} word${words === 1 ? "" : "s"}`;
     if (text.length > 2_000_000 || doc.lang === "jsonc") return;
     const cfg = this.app.taskCfg;
     const counts = new Map<string, number>();
@@ -110,26 +110,26 @@ export class StatusBar {
     if (!doc) return;
     const converted = doc.encoding !== "UTF-8" && doc.encoding !== "UTF-8 BOM";
     this.encoding.textContent = doc.encoding;
-    this.encoding.title = converted ? "Sera enregistré en UTF-8" : "Encodage";
+    this.encoding.title = converted ? "Will be saved as UTF-8" : "Encoding";
     this.eol.textContent = doc.eol === "\r\n" ? "CRLF" : "LF";
     this.lang.textContent = LANG_LABELS[doc.lang];
     this.save.replaceChildren();
     this.save.title = "";
     if (doc.conflict) {
-      this.save.textContent = "conflit";
-      this.save.title = "Modifié par un autre programme : cliquer pour choisir";
+      this.save.textContent = "conflict";
+      this.save.title = "Modified by another program: click to choose";
       this.save.className = "st-item st-save warn";
     } else if (doc.missing) {
-      this.save.textContent = "supprimé du disque";
+      this.save.textContent = "deleted from disk";
       this.save.className = "st-item st-save warn";
     } else if (doc.dirty) {
-      this.save.append(h("i", { class: "st-dot" }), this.app.settings.autosave && doc.path ? "enregistrement…" : "non enregistré");
+      this.save.append(h("i", { class: "st-dot" }), this.app.settings.autosave && doc.path ? "saving…" : "unsaved");
       this.save.className = "st-item st-save dirty";
     } else if (doc.path) {
-      this.save.append(icon("check"), this.app.settings.autosave ? "auto" : "enregistré");
+      this.save.append(icon("check"), this.app.settings.autosave ? "auto" : "saved");
       this.save.className = "st-item st-save ok";
     } else {
-      this.save.textContent = "brouillon";
+      this.save.textContent = "draft";
       this.save.className = "st-item st-save";
     }
   }
@@ -145,7 +145,7 @@ export class StatusBar {
     };
     showMenu(
       [
-        { header: "Fins de ligne" },
+        { header: "Line endings" },
         { label: "LF (Linux, macOS)", checked: doc.eol === "\n", action: () => set("\n") },
         { label: "CRLF (Windows)", checked: doc.eol === "\r\n", action: () => set("\r\n") },
       ],
@@ -165,7 +165,7 @@ export class StatusBar {
       this.updateMeta();
     };
     showMenu(
-      [{ header: "Type de document" }, ...(Object.keys(LANG_LABELS) as LangId[]).map((l) => ({ label: LANG_LABELS[l], checked: doc.lang === l, action: () => set(l) }))],
+      [{ header: "Document type" }, ...(Object.keys(LANG_LABELS) as LangId[]).map((l) => ({ label: LANG_LABELS[l], checked: doc.lang === l, action: () => set(l) }))],
       e.clientX,
       (e.currentTarget as HTMLElement).getBoundingClientRect().top - 4,
     );

@@ -1,6 +1,6 @@
-// Paramètres : un fichier JSON commenté, à la Sublime Text.
-// Le modèle ci-dessous sert à la fois de valeurs par défaut et de
-// documentation : il est copié tel quel lors de la première ouverture.
+// Settings: a commented JSON file.
+// The template below is both the default values and the documentation:
+// it is copied as is the first time the settings are opened.
 
 import { parseJsonc } from "./jsonc";
 
@@ -34,21 +34,21 @@ export interface Settings {
   keybindings: Record<string, string>;
 }
 
-export const SETTINGS_TEMPLATE = `// Paramètres KiloNote
-// ------------------
-// Modifiez une valeur puis enregistrez (Ctrl+S) : tout s'applique immédiatement.
-// Les commentaires et les virgules finales sont autorisés.
+export const SETTINGS_TEMPLATE = `// KiloNote settings
+// -----------------
+// Change a value and save (Ctrl+S): everything applies immediately.
+// Comments and trailing commas are allowed.
 {
-  // Thème : "auto" (suit le système), "minuit", "papier", "foret", "ocean", "sable", "retro"
-  "theme": "minuit",
-  // Couleur d'accent personnalisée (ex. "#ff8a65"), ou null pour celle du thème
+  // Theme: "auto" (follows the system), "midnight", "paper", "forest", "ocean", "sand", "retro"
+  "theme": "midnight",
+  // Custom accent color (e.g. "#ff8a65"), or null to use the theme's
   "accent": null,
-  // Surcharge de n'importe quelle couleur du thème. Clés disponibles :
+  // Override any theme color. Available keys:
   // bg, bg_alt, bg_hover, border, fg, fg_muted, fg_faint, accent, selection,
   // cursor, line, red, orange, yellow, green, cyan, blue, purple, pink, grey
   "colors": {},
 
-  // --- Éditeur ---
+  // --- Editor ---
   "font_family": "JetBrains Mono Variable, Cascadia Code, Consolas, Menlo, monospace",
   "font_size": 14,
   "line_height": 1.65,
@@ -59,22 +59,22 @@ export const SETTINGS_TEMPLATE = `// Paramètres KiloNote
   "tab_size": 4,
   "indent_with_tabs": false,
 
-  // --- Fichiers ---
-  // Enregistrement automatique après une courte pause de frappe
+  // --- Files ---
+  // Save automatically after a short pause in typing
   "autosave": true,
   "autosave_delay": 700,
-  // Garde le contenu des onglets non enregistrés entre deux sessions
+  // Keep the content of unsaved tabs between sessions
   "hot_exit": true,
-  // Fin de ligne des nouveaux fichiers : "system", "lf" ou "crlf"
+  // Line ending of new files: "system", "lf" or "crlf"
   "default_line_ending": "system",
   "show_hidden_files": false,
-  // Extensions considérées comme des notes (recherche rapide, tâches, bilan)
+  // Extensions treated as notes (quick open, tasks, activity report)
   "note_extensions": ["txt", "md", "markdown", "note", "todo", "log", "org", "rst", "text"],
 
-  // --- Tâches ---
-  // Une tâche est une ligne qui se termine par " - <statut>", par exemple :
-  //   - appeler collègue X - todo
-  // Statuts reconnus et leur couleur (nom de couleur du thème ou code hexadécimal)
+  // --- Tasks ---
+  // A task is a line that ends with " - <status>", for example:
+  //   - call colleague X - todo
+  // Known statuses and their color (a theme color name or a hex code)
   "task_statuses": {
     "todo": "blue",
     "ongoing": "orange",
@@ -83,31 +83,31 @@ export const SETTINGS_TEMPLATE = `// Paramètres KiloNote
     "done": "green",
     "ok": "green"
   },
-  // Ordre des statuts quand on appuie sur Ctrl+Entrée
+  // Status order when pressing Ctrl+Enter
   "task_cycle": ["todo", "ongoing", "done"],
-  // Statuts considérés comme terminés
+  // Statuses that mean "completed"
   "task_done_statuses": ["done", "ok"],
-  // Archivage (Ctrl+Maj+Entrée) : mc.txt → mc_done.txt
+  // Archiving (Ctrl+Shift+Enter): mc.txt → mc_done.txt
   "archive_suffix": "_done",
-  // Statut écrit dans le fichier d'archive (si la tâche n'est pas déjà terminée)
+  // Status written to the archive file (unless the task is already completed)
   "archive_status": "done",
-  // Ajoute la date d'archivage, ex. "- appeler collègue X - done [2026-11-02]"
+  // Append the archive date, e.g. "- call colleague X - done [2026-11-02]"
   "archive_date": true,
-  // Archive automatiquement une tâche dès qu'elle passe à un statut terminé
+  // Archive a task automatically as soon as it reaches a completed status
   "auto_archive": false,
 
-  // Couleurs proposées pour les onglets et les groupes d'onglets
+  // Colors offered for tabs and tab groups
   "tab_colors": ["grey", "blue", "cyan", "green", "yellow", "orange", "red", "pink", "purple"],
 
-  // Raccourcis personnalisés : { "Ctrl+Alt+T": "task.cycle", "Ctrl+W": "" (désactive) }
-  // Liste des commandes : palette (Ctrl+Maj+P).
+  // Custom shortcuts: { "Ctrl+Alt+T": "task.cycle", "Ctrl+W": "" (disables it) }
+  // Command ids are listed in the command palette (Ctrl+Shift+P).
   "keybindings": {}
 }
 `;
 
 export const DEFAULT_SETTINGS: Settings = parseJsonc<Settings>(SETTINGS_TEMPLATE);
 
-/** Fusionne les paramètres utilisateur avec les valeurs par défaut (en validant les types). */
+/** Merges user settings into the defaults (checking value types). */
 export function mergeSettings(user: Partial<Settings> | null | undefined): Settings {
   const out: Settings = structuredClone(DEFAULT_SETTINGS);
   if (!user || typeof user !== "object") return out;
@@ -121,8 +121,8 @@ export function mergeSettings(user: Partial<Settings> | null | undefined): Setti
       if (Array.isArray(v)) target[k] = v;
     } else if (typeof def === "object") {
       if (v && typeof v === "object" && !Array.isArray(v)) {
-        // Les statuts et les couleurs remplacent entièrement la valeur par défaut
-        // quand l'utilisateur les définit ; les raccourcis s'ajoutent.
+        // Statuses replace the defaults entirely when the user defines them;
+        // colors and shortcuts are merged into the defaults.
         target[k] = k === "keybindings" || k === "colors" ? { ...(def as object), ...v } : v;
       }
     } else if (typeof v === typeof def) {
@@ -140,14 +140,14 @@ export function mergeSettings(user: Partial<Settings> | null | undefined): Setti
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, Number.isFinite(n) ? n : min));
 
 /**
- * Modifie une seule valeur dans le texte du fichier de paramètres en conservant
- * les commentaires (utilisé par le sélecteur de thème, le zoom…).
+ * Changes a single value in the settings file text while keeping its comments
+ * (used by the theme picker, zoom…).
  */
 export function setSettingInText(text: string, key: string, value: unknown): string {
   const json = JSON.stringify(value);
   const re = new RegExp(`("${key}"\\s*:\\s*)(?:"(?:[^"\\\\]|\\\\.)*"|-?\\d+(?:\\.\\d+)?|true|false|null)`);
   if (re.test(text)) return text.replace(re, (_m, p1: string) => p1 + json);
-  // Clé absente : on l'ajoute juste après l'accolade ouvrante.
+  // Missing key: add it right after the opening brace.
   const i = text.indexOf("{");
   if (i < 0) return `{\n  "${key}": ${json}\n}\n`;
   const rest = text.slice(i + 1);

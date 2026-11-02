@@ -1,8 +1,8 @@
-// Barre d'onglets : couleurs par onglet, groupes repliables façon navigateur,
-// glisser-déposer à la souris (pointer events, compatible WebView2/WebKit).
+// Tab bar: per-tab colors, browser-style collapsible groups,
+// mouse drag and drop (pointer events, works in WebView2 and WebKit).
 
 import type { App, Doc, TabGroup } from "../app";
-import { shortcutFor } from "../core/commands";
+import { shortcutFor, titleWithKey } from "../core/commands";
 import { isDoneFile, relative } from "../core/path";
 import { resolveColor } from "../core/themes";
 import { h, icon } from "./dom";
@@ -18,8 +18,8 @@ export class TabBar {
     const actions = h(
       "div",
       { class: "kn-tabbar-actions" },
-      h("button", { class: "kn-icon-btn", title: `Nouvelle note (${shortcutFor("file.new")})`, onclick: () => app.newDoc() }, icon("plus")),
-      h("button", { class: "kn-icon-btn", title: "Palette de commandes", onclick: () => app.openCommandPalette() }, icon("more")),
+      h("button", { class: "kn-icon-btn", title: titleWithKey("New note", "file.new"), onclick: () => app.newDoc() }, icon("plus")),
+      h("button", { class: "kn-icon-btn", title: titleWithKey("Command palette", "palette.commands"), onclick: () => app.openCommandPalette() }, icon("more")),
     );
     el.append(this.scroller, actions);
     this.scroller.addEventListener("wheel", (e) => {
@@ -61,7 +61,7 @@ export class TabBar {
       {
         class: `kn-group-chip${group.collapsed ? " collapsed" : ""}`,
         style: { "--g": resolveColor(group.color) },
-        title: `${group.name || "Groupe"} — clic pour ${group.collapsed ? "déplier" : "replier"}`,
+        title: `${group.name || "Group"} — click to ${group.collapsed ? "expand" : "collapse"}`,
       },
       h("span", { class: "kn-group-name" }, group.name || " "),
       group.collapsed ? h("span", { class: "kn-group-count" }, String(count)) : null,
@@ -83,12 +83,12 @@ export class TabBar {
       {
         class: `kn-tab${isActive ? " active" : ""}${doc.dirty ? " dirty" : ""}${doc.missing ? " missing" : ""}${group ? " grouped" : ""}${doc.color ? " colored" : ""}`,
         style: { "--tab-c": doc.color ? resolveColor(doc.color) : null, "--g": group ? resolveColor(group.color) : null },
-        title: doc.path ? relative(app.workspace, doc.path) : `${doc.title} (non enregistré)`,
+        title: doc.path ? relative(app.workspace, doc.path) : `${doc.title} (unsaved)`,
         role: "tab",
       },
       done ? icon("fileDone", "kn-tab-icon") : null,
       h("span", { class: "kn-tab-name" }, app.docName(doc)),
-      h("button", { class: "kn-tab-close", title: "Fermer", tabindex: "-1" }, h("span", { class: "kn-tab-dirty" }), icon("x")),
+      h("button", { class: "kn-tab-close", title: "Close", tabindex: "-1" }, h("span", { class: "kn-tab-dirty" }), icon("x")),
     );
     tab.querySelector(".kn-tab-close")!.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -109,7 +109,7 @@ export class TabBar {
   }
 
   // ---------------------------------------------------------------------------
-  // Glisser-déposer
+  // Drag and drop
 
   private onPointerDown(e: PointerEvent, doc: Doc, el: HTMLElement) {
     if (e.button !== 0 || (e.target as HTMLElement).closest(".kn-tab-close")) return;
@@ -152,7 +152,7 @@ export class TabBar {
     return [...this.scroller.querySelectorAll<HTMLElement>(".kn-tab")];
   }
 
-  /** Index d'insertion dans app.docs selon la position de la souris. */
+  /** Insertion index in app.docs for the given mouse position. */
   private dropIndex(clientX: number): { docIndex: number; visualIndex: number } {
     const tabs = this.tabElements();
     const visibleDocs = this.app.docs.filter((d) => {
@@ -188,7 +188,7 @@ export class TabBar {
   showColorMenu(doc: Doc) {
     const r = this.scroller.querySelector(".kn-tab.active")?.getBoundingClientRect();
     showMenu(
-      [{ header: "Couleur de l'onglet" }, { colors: this.app.settings.tab_colors, selected: doc.color, allowNone: true, onPick: (c) => this.setColor(doc, c) }],
+      [{ header: "Tab color" }, { colors: this.app.settings.tab_colors, selected: doc.color, allowNone: true, onPick: (c) => this.setColor(doc, c) }],
       r?.left ?? 100,
       r?.bottom ?? 40,
     );
@@ -203,27 +203,27 @@ export class TabBar {
     const app = this.app;
     const idx = app.docs.indexOf(doc);
     const items: MenuItem[] = [
-      { label: "Fermer", icon: "x", shortcut: shortcutFor("tab.close"), action: () => app.closeDoc(doc) },
-      { label: "Fermer les autres", action: () => app.closeMany(app.docs.filter((d) => d !== doc)) },
-      { label: "Fermer les onglets à droite", disabled: idx === app.docs.length - 1, action: () => app.closeMany(app.docs.slice(idx + 1)) },
+      { label: "Close", icon: "x", shortcut: shortcutFor("tab.close"), action: () => app.closeDoc(doc) },
+      { label: "Close others", action: () => app.closeMany(app.docs.filter((d) => d !== doc)) },
+      { label: "Close tabs to the right", disabled: idx === app.docs.length - 1, action: () => app.closeMany(app.docs.slice(idx + 1)) },
       { separator: true },
-      { header: "Couleur" },
+      { header: "Color" },
       { colors: app.settings.tab_colors, selected: doc.color, allowNone: true, onPick: (c) => this.setColor(doc, c) },
       { separator: true },
-      { label: "Ajouter à un nouveau groupe…", icon: "plus", action: () => app.createGroup([doc]) },
+      { label: "Add to new group…", icon: "plus", action: () => app.createGroup([doc]) },
     ];
     for (const g of app.groups) {
       if (g.id === doc.groupId) continue;
-      items.push({ label: `Ajouter à « ${g.name || "groupe sans nom"} »`, color: g.color, action: () => app.addToGroup(doc, g.id) });
+      items.push({ label: `Add to "${g.name || "unnamed group"}"`, color: g.color, action: () => app.addToGroup(doc, g.id) });
     }
-    if (doc.groupId) items.push({ label: "Retirer du groupe", action: () => app.addToGroup(doc, null) });
+    if (doc.groupId) items.push({ label: "Remove from group", action: () => app.addToGroup(doc, null) });
     if (doc.path) {
       const path = doc.path;
       items.push(
         { separator: true },
-        { label: "Copier le chemin", action: () => app.copyText(path) },
-        { label: "Afficher dans l'explorateur", icon: "folderOpen", action: () => app.backend.reveal(path) },
-        { label: "Renommer…", action: () => app.renamePath(path) },
+        { label: "Copy path", action: () => app.copyText(path) },
+        { label: "Reveal in file manager", icon: "folderOpen", action: () => app.backend.reveal(path) },
+        { label: "Rename…", action: () => app.renamePath(path) },
       );
     }
     showMenu(items, x, y);
@@ -234,14 +234,14 @@ export class TabBar {
     const members = app.docs.filter((d) => d.groupId === group.id);
     showMenu(
       [
-        { header: group.name || "Groupe" },
-        { label: "Renommer / couleur…", icon: "palette", action: () => app.editGroup(group) },
+        { header: group.name || "Group" },
+        { label: "Rename / color…", icon: "palette", action: () => app.editGroup(group) },
         { colors: app.settings.tab_colors, selected: group.color, onPick: (c) => { if (c) group.color = c; app.emit("docs"); } },
-        { label: group.collapsed ? "Déplier" : "Replier", icon: group.collapsed ? "chevronDown" : "collapse", action: () => app.toggleGroup(group) },
-        { label: "Nouvelle note dans ce groupe", icon: "plus", action: () => app.newDoc({ groupId: group.id }) },
+        { label: group.collapsed ? "Expand" : "Collapse", icon: group.collapsed ? "chevronDown" : "collapse", action: () => app.toggleGroup(group) },
+        { label: "New note in this group", icon: "plus", action: () => app.newDoc({ groupId: group.id }) },
         { separator: true },
-        { label: "Dégrouper", action: () => app.ungroup(group) },
-        { label: `Fermer le groupe (${members.length})`, danger: true, icon: "x", action: () => app.closeMany(members) },
+        { label: "Ungroup", action: () => app.ungroup(group) },
+        { label: `Close group (${members.length})`, danger: true, icon: "x", action: () => app.closeMany(members) },
       ],
       x,
       y,

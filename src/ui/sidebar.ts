@@ -1,8 +1,7 @@
-// Barre latérale : explorateur de fichiers, vue des tâches du dossier,
-// recherche dans les fichiers.
+// Sidebar: file explorer, folder-wide task view, search in files.
 
 import type { App } from "../app";
-import { shortcutFor } from "../core/commands";
+import { shortcutFor, titleWithKey } from "../core/commands";
 import type { Entry } from "../core/backend";
 import { basename, dirname, extname, isDoneFile, projectName, relative, samePath } from "../core/path";
 import { resolveColor } from "../core/themes";
@@ -26,7 +25,7 @@ export class Sidebar {
   private filesHeader = h("div", { class: "sb-header" });
   private tasksList = h("div", { class: "sb-list" });
   private taskFilter: TaskFilter = "open";
-  private searchInput = h("input", { class: "kn-input sb-search-input", type: "text", placeholder: "Rechercher dans le dossier…", spellcheck: "false" });
+  private searchInput = h("input", { class: "kn-input sb-search-input", type: "text", placeholder: "Search in folder…", spellcheck: "false" });
   private searchResults = h("div", { class: "sb-list" });
   private searchCase = false;
   private searchRegex = false;
@@ -38,9 +37,9 @@ export class Sidebar {
       return b;
     };
     this.switchBtns = {
-      files: mk("files", "files", `Explorateur (${shortcutFor("view.files")})`),
-      tasks: mk("tasks", "tasks", `Tâches du dossier (${shortcutFor("view.tasks")})`, this.taskBadge),
-      search: mk("search", "search", `Rechercher dans les fichiers (${shortcutFor("view.search")})`),
+      files: mk("files", "files", titleWithKey("Explorer", "view.files")),
+      tasks: mk("tasks", "tasks", titleWithKey("Folder tasks", "view.tasks"), this.taskBadge),
+      search: mk("search", "search", titleWithKey("Search in files", "view.search")),
     };
     const switcher = h("div", { class: "sb-switch" }, this.switchBtns.files, this.switchBtns.tasks, this.switchBtns.search);
 
@@ -52,7 +51,7 @@ export class Sidebar {
     });
 
     const filterBar = h("div", { class: "sb-chips" });
-    const filters: [TaskFilter, string][] = [["open", "À traiter"], ["ongoing", "En cours"], ["all", "Toutes"]];
+    const filters: [TaskFilter, string][] = [["open", "Open"], ["ongoing", "Ongoing"], ["all", "All"]];
     for (const [f, label] of filters) {
       filterBar.append(
         h("button", {
@@ -68,15 +67,15 @@ export class Sidebar {
     const tasksPanel = h(
       "div",
       { class: "sb-panel" },
-      h("div", { class: "sb-header" }, h("span", { class: "sb-title" }, "Tâches"), h("span", { class: "kn-spacer" }),
-        h("button", { class: "kn-icon-btn", title: "Bilan d'activité", onclick: () => app.generateReport() }, icon("chart")),
-        h("button", { class: "kn-icon-btn", title: "Actualiser", onclick: () => this.renderTasks() }, icon("refresh"))),
+      h("div", { class: "sb-header" }, h("span", { class: "sb-title" }, "Tasks"), h("span", { class: "kn-spacer" }),
+        h("button", { class: "kn-icon-btn", title: "Activity report", onclick: () => app.generateReport() }, icon("chart")),
+        h("button", { class: "kn-icon-btn", title: "Refresh", onclick: () => this.renderTasks() }, icon("refresh"))),
       filterBar,
       this.tasksList,
     );
 
-    const caseBtn = h("button", { class: "sb-toggle", title: "Respecter la casse" }, "Aa");
-    const reBtn = h("button", { class: "sb-toggle", title: "Expression régulière" }, ".*");
+    const caseBtn = h("button", { class: "sb-toggle", title: "Match case" }, "Aa");
+    const reBtn = h("button", { class: "sb-toggle", title: "Regular expression" }, ".*");
     caseBtn.addEventListener("click", () => {
       this.searchCase = !this.searchCase;
       caseBtn.classList.toggle("active", this.searchCase);
@@ -90,7 +89,7 @@ export class Sidebar {
     const searchPanel = h(
       "div",
       { class: "sb-panel" },
-      h("div", { class: "sb-header" }, h("span", { class: "sb-title" }, "Rechercher")),
+      h("div", { class: "sb-header" }, h("span", { class: "sb-title" }, "Search")),
       h("div", { class: "sb-search-box" }, this.searchInput, caseBtn, reBtn),
       this.searchResults,
     );
@@ -110,8 +109,8 @@ export class Sidebar {
     let lastFiles: string[] = [];
     app.on("workspace", () => {
       this.renderFilesHeader();
-      // La liste des fichiers a été relue (fichier créé, archivé, renommé…) :
-      // on oublie les dossiers en cache et on relit les tâches.
+      // The file list was re-read (file created, archived, renamed…):
+      // drop the cached folders and rescan the tasks.
       if (app.workspaceFiles !== lastFiles) {
         lastFiles = app.workspaceFiles;
         this.cache.clear();
@@ -164,7 +163,7 @@ export class Sidebar {
 
   show(panel: Panel, fromClick = false) {
     if (this.visible && this.panel === panel && !fromClick) {
-      // Raccourci pressé deux fois : on revient à l'éditeur.
+      // Shortcut pressed twice: go back to the editor.
       if (panel === "search" && document.activeElement !== this.searchInput) this.focusSearch();
       else this.app.focusEditor();
       return;
@@ -223,10 +222,10 @@ export class Sidebar {
     if (app.workspace) {
       const ws = app.workspace;
       this.filesHeader.append(
-        h("button", { class: "kn-icon-btn", title: "Nouvelle note", onclick: () => app.createFileIn(ws) }, icon("newFile")),
-        h("button", { class: "kn-icon-btn", title: "Nouveau dossier", onclick: () => app.createFolderIn(ws) }, icon("newFolder")),
-        h("button", { class: "kn-icon-btn", title: "Actualiser", onclick: () => this.refreshTree() }, icon("refresh")),
-        h("button", { class: "kn-icon-btn", title: "Tout replier", onclick: () => { this.expanded.clear(); void this.renderTree(); } }, icon("collapse")),
+        h("button", { class: "kn-icon-btn", title: "New note", onclick: () => app.createFileIn(ws) }, icon("newFile")),
+        h("button", { class: "kn-icon-btn", title: "New folder", onclick: () => app.createFolderIn(ws) }, icon("newFolder")),
+        h("button", { class: "kn-icon-btn", title: "Refresh", onclick: () => this.refreshTree() }, icon("refresh")),
+        h("button", { class: "kn-icon-btn", title: "Collapse all", onclick: () => { this.expanded.clear(); void this.renderTree(); } }, icon("collapse")),
       );
     }
   }
@@ -260,9 +259,9 @@ export class Sidebar {
       const recent = app.recent.slice(0, 6);
       this.treeEl.replaceChildren(
         h("div", { class: "sb-empty" },
-          h("p", {}, "Aucun dossier ouvert."),
-          h("button", { class: "kn-btn primary", onclick: () => app.openFolder() }, "Ouvrir un dossier"),
-          recent.length ? h("div", { class: "sb-recent-title" }, "Récents") : null,
+          h("p", {}, "No folder open."),
+          h("button", { class: "kn-btn primary", onclick: () => app.openFolder() }, "Open folder"),
+          recent.length ? h("div", { class: "sb-recent-title" }, "Recent") : null,
           ...recent.map((r) => h("button", { class: "sb-recent", title: r, onclick: () => app.openFolder(r) }, icon("folder"), h("span", {}, basename(r)))),
         ),
       );
@@ -278,7 +277,7 @@ export class Sidebar {
   private async renderDir(dir: string, depth: number, out: DocumentFragment) {
     const entries = await this.list(dir);
     const suffix = this.app.settings.archive_suffix;
-    // Les enfants des dossiers dépliés sont chargés en parallèle.
+    // Children of expanded folders are loaded in parallel.
     await Promise.all(entries.filter((e) => e.isDir && this.expanded.has(e.path)).map((e) => this.list(e.path)));
     for (const e of entries) {
       const open = e.isDir && this.expanded.has(e.path);
@@ -320,13 +319,13 @@ export class Sidebar {
     const app = this.app;
     showMenu(
       [
-        { label: "Ouvrir", icon: "file", action: () => app.openFile(path) },
+        { label: "Open", icon: "file", action: () => app.openFile(path) },
         { separator: true },
-        { label: "Renommer…", action: () => app.renamePath(path) },
-        { label: "Copier le chemin", action: () => app.copyText(path) },
-        { label: "Afficher dans l'explorateur", icon: "folderOpen", action: () => app.backend.reveal(path) },
+        { label: "Rename…", action: () => app.renamePath(path) },
+        { label: "Copy path", action: () => app.copyText(path) },
+        { label: "Reveal in file manager", icon: "folderOpen", action: () => app.backend.reveal(path) },
         { separator: true },
-        { label: "Mettre à la corbeille", danger: true, action: () => app.trashPath(path) },
+        { label: "Move to trash", danger: true, action: () => app.trashPath(path) },
       ],
       x,
       y,
@@ -336,22 +335,22 @@ export class Sidebar {
   private showDirMenu(path: string, x: number, y: number, isRoot = false) {
     const app = this.app;
     const items: MenuItem[] = [
-      { label: "Nouvelle note ici…", icon: "newFile", action: () => { this.expanded.add(path); return app.createFileIn(path); } },
-      { label: "Nouveau dossier…", icon: "newFolder", action: () => app.createFolderIn(path) },
+      { label: "New note here…", icon: "newFile", action: () => { this.expanded.add(path); return app.createFileIn(path); } },
+      { label: "New folder…", icon: "newFolder", action: () => app.createFolderIn(path) },
       { separator: true },
-      { label: "Copier le chemin", action: () => app.copyText(path) },
-      { label: "Afficher dans l'explorateur", icon: "folderOpen", action: () => app.backend.reveal(path) },
+      { label: "Copy path", action: () => app.copyText(path) },
+      { label: "Reveal in file manager", icon: "folderOpen", action: () => app.backend.reveal(path) },
     ];
-    if (isRoot) items.push({ separator: true }, { label: "Actualiser", icon: "refresh", action: () => this.refreshTree() }, { label: "Fermer le dossier", action: () => app.closeFolder() });
-    else items.push({ separator: true }, { label: "Renommer…", action: () => app.renamePath(path) }, { label: "Mettre à la corbeille", danger: true, action: () => app.trashPath(path) });
+    if (isRoot) items.push({ separator: true }, { label: "Refresh", icon: "refresh", action: () => this.refreshTree() }, { label: "Close folder", action: () => app.closeFolder() });
+    else items.push({ separator: true }, { label: "Rename…", action: () => app.renamePath(path) }, { label: "Move to trash", danger: true, action: () => app.trashPath(path) });
     showMenu(items, x, y);
   }
 
   // ---------------------------------------------------------------------------
-  // Tâches du dossier
+  // Folder tasks
 
   private tasksToken = 0;
-  /** Contenu des notes analysées (évite de relire tout le dossier à chaque enregistrement). */
+  /** Contents of the scanned notes (avoids re-reading the whole folder on every save). */
   private taskTexts = new Map<string, string | null>();
 
   async renderTasks(full = true) {
@@ -359,7 +358,7 @@ export class Sidebar {
     const token = ++this.tasksToken;
     if (!app.workspace) {
       this.taskBadge.textContent = "";
-      this.tasksList.replaceChildren(h("div", { class: "sb-empty" }, h("p", {}, "Ouvrez un dossier pour voir les tâches de toutes vos notes."), h("button", { class: "kn-btn primary", onclick: () => app.openFolder() }, "Ouvrir un dossier")));
+      this.tasksList.replaceChildren(h("div", { class: "sb-empty" }, h("p", {}, "Open a folder to see the tasks of all your notes."), h("button", { class: "kn-btn primary", onclick: () => app.openFolder() }, "Open folder")));
       return;
     }
     const suffix = app.settings.archive_suffix;
@@ -369,7 +368,7 @@ export class Sidebar {
     if (token !== this.tasksToken) return;
     if (full) this.taskTexts.clear();
     missing.forEach((f, i) => this.taskTexts.set(f, read[i]));
-    // Les notes ouvertes font foi (contenu en mémoire, le plus récent).
+    // Open notes win (their in-memory content is the most recent).
     for (const d of app.docs) if (d.path && this.taskTexts.has(d.path)) this.taskTexts.set(d.path, d.state.doc.toString());
     const texts = files.map((f) => this.taskTexts.get(f) ?? null);
     const cfg = app.taskCfg;
@@ -389,14 +388,14 @@ export class Sidebar {
       if (tasks.length) groups.push({ path, tasks, ongoing });
     });
     this.taskBadge.textContent = ongoingTotal ? String(ongoingTotal) : "";
-    this.taskBadge.title = `${ongoingTotal} tâche(s) en cours`;
+    this.taskBadge.title = `${ongoingTotal} ongoing task${ongoingTotal > 1 ? "s" : ""}`;
     groups.sort((a, b) => b.ongoing - a.ongoing || basename(a.path).localeCompare(basename(b.path)));
     const order = cfg.cycle;
     const rank = (k: string) => (k === "ongoing" ? -1 : order.indexOf(k) < 0 ? 99 : order.indexOf(k));
 
     const frag = document.createDocumentFragment();
     if (!groups.length) {
-      frag.append(h("div", { class: "sb-empty" }, h("p", {}, this.taskFilter === "ongoing" ? "Aucune tâche en cours." : "Aucune tâche trouvée."), h("p", { class: "sb-hint" }, "Écrivez « - ma tâche - todo » ou appuyez sur Ctrl+Entrée sur une ligne.")));
+      frag.append(h("div", { class: "sb-empty" }, h("p", {}, this.taskFilter === "ongoing" ? "No ongoing task." : "No task found."), h("p", { class: "sb-hint" }, `Write "- my task - todo" or press ${shortcutFor("task.cycle")} on a line.`)));
     }
     for (const g of groups) {
       const rel = relative(app.workspace, dirname(g.path));
@@ -417,8 +416,8 @@ export class Sidebar {
           h("span", { class: "sb-task-status", style: { "--c": color } }, t.task.status),
           h("span", { class: "sb-task-text" }, t.task.text.replace(/(\*\*|\*|`)(\S(?:.*?\S)?)\1/g, "$2")),
           h("span", { class: "sb-task-actions" },
-            h("button", { class: "kn-icon-btn", title: "Statut suivant", onclick: (e: Event) => { e.stopPropagation(); void this.taskAction(g.path, t, "cycle"); } }, icon("cycle")),
-            h("button", { class: "kn-icon-btn", title: "Archiver dans _done", onclick: (e: Event) => { e.stopPropagation(); void this.taskAction(g.path, t, "archive"); } }, icon("archive"))),
+            h("button", { class: "kn-icon-btn", title: "Next status", onclick: (e: Event) => { e.stopPropagation(); void this.taskAction(g.path, t, "cycle"); } }, icon("cycle")),
+            h("button", { class: "kn-icon-btn", title: "Archive to _done", onclick: (e: Event) => { e.stopPropagation(); void this.taskAction(g.path, t, "archive"); } }, icon("archive"))),
         );
         row.addEventListener("click", () => void app.openFile(g.path, { line: t.line, select: [t.task.textFrom, t.task.textTo] }));
         frag.append(row);
@@ -427,7 +426,7 @@ export class Sidebar {
     this.tasksList.replaceChildren(frag);
   }
 
-  /** Action rapide depuis la liste, sans forcément ouvrir d'onglet. */
+  /** Quick action from the list, without necessarily opening a tab. */
   private async taskAction(path: string, t: FoundTask, action: "cycle" | "archive") {
     const app = this.app;
     const wasOpen = !!app.findDoc(path);
@@ -435,7 +434,7 @@ export class Sidebar {
     if (!doc) return;
     const line = doc.state.doc.lines >= t.line ? doc.state.doc.line(t.line) : null;
     if (!line || line.text !== t.raw) {
-      toast("La note a changé entre-temps : liste actualisée.");
+      toast("The note changed in the meantime: list refreshed.");
       void this.renderTasks();
       return;
     }
@@ -448,7 +447,7 @@ export class Sidebar {
   }
 
   // ---------------------------------------------------------------------------
-  // Recherche dans les fichiers
+  // Search in files
 
   private searchToken = 0;
   async runSearch() {
@@ -460,14 +459,14 @@ export class Sidebar {
       return;
     }
     if (!app.workspace) {
-      this.searchResults.replaceChildren(h("div", { class: "sb-empty" }, h("p", {}, "Ouvrez un dossier pour y rechercher.")));
+      this.searchResults.replaceChildren(h("div", { class: "sb-empty" }, h("p", {}, "Open a folder to search in it.")));
       return;
     }
     let re: RegExp;
     try {
       re = new RegExp(this.searchRegex ? q : q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), this.searchCase ? "g" : "gi");
     } catch (e) {
-      this.searchResults.replaceChildren(h("div", { class: "sb-empty error" }, `Expression invalide : ${(e as Error).message}`));
+      this.searchResults.replaceChildren(h("div", { class: "sb-empty error" }, `Invalid expression: ${(e as Error).message}`));
       return;
     }
     const files = app.workspaceFiles.filter((p) => app.isNoteFile(p)).slice(0, 5000);
@@ -488,7 +487,7 @@ export class Sidebar {
         const m = re.exec(line);
         if (!m || !m[0].length) continue;
         total++;
-        // Peu de contexte avant la correspondance pour qu'elle reste visible.
+        // Little context before the match so that it stays visible.
         let start = Math.max(0, m.index - 16);
         const space = line.lastIndexOf(" ", m.index - 1);
         if (start > 0 && space >= start - 8 && space < m.index) start = space + 1;
@@ -512,7 +511,7 @@ export class Sidebar {
         );
       }
     }
-    const summary = h("div", { class: "sb-summary" }, total ? `${total}${total >= LIMIT ? "+" : ""} résultat${total > 1 ? "s" : ""} dans ${fileCount} fichier${fileCount > 1 ? "s" : ""}` : "Aucun résultat");
+    const summary = h("div", { class: "sb-summary" }, total ? `${total}${total >= LIMIT ? "+" : ""} result${total > 1 ? "s" : ""} in ${fileCount} file${fileCount > 1 ? "s" : ""}` : "No results");
     this.searchResults.replaceChildren(summary, frag);
   }
 }

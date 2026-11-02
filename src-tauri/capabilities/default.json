@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissions de la fenêtre principale de KiloNote",
+  "description": "Permissions of the KiloNote main window",
   "windows": [
     "main"
   ],

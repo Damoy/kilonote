@@ -1,4 +1,4 @@
-// JSON avec commentaires (// et /* */) et virgules finales, comme Sublime Text.
+// JSON with comments (// and /* */) and trailing commas.
 
 export function stripJsonComments(src: string): string {
   let out = "";

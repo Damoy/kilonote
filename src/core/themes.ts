@@ -1,5 +1,5 @@
-// Thèmes intégrés. Toutes les couleurs passent par des variables CSS :
-// changer de thème ne recrée rien, c'est instantané.
+// Built-in themes. Every color goes through CSS variables, so switching
+// themes rebuilds nothing: it is instantaneous.
 
 export type ColorKey =
   | "bg" | "bg_alt" | "bg_hover" | "border" | "fg" | "fg_muted" | "fg_faint" | "accent"
@@ -16,14 +16,14 @@ export interface Theme {
 export const PALETTE_NAMES = ["grey", "blue", "cyan", "green", "yellow", "orange", "red", "pink", "purple"] as const;
 
 export const PALETTE_LABELS: Record<string, string> = {
-  grey: "Gris", blue: "Bleu", cyan: "Cyan", green: "Vert", yellow: "Jaune",
-  orange: "Orange", red: "Rouge", pink: "Rose", purple: "Violet",
+  grey: "Grey", blue: "Blue", cyan: "Cyan", green: "Green", yellow: "Yellow",
+  orange: "Orange", red: "Red", pink: "Pink", purple: "Purple",
 };
 
 export const THEMES: Theme[] = [
   {
-    id: "minuit",
-    label: "Minuit — sombre",
+    id: "midnight",
+    label: "Midnight — dark",
     dark: true,
     colors: {
       bg: "#1b1c22", bg_alt: "#16171c", bg_hover: "#26272f", border: "#2a2b34",
@@ -34,8 +34,8 @@ export const THEMES: Theme[] = [
     },
   },
   {
-    id: "papier",
-    label: "Papier — clair",
+    id: "paper",
+    label: "Paper — light",
     dark: false,
     colors: {
       bg: "#fbfaf7", bg_alt: "#f1efe9", bg_hover: "#e8e5dd", border: "#e2ded4",
@@ -46,8 +46,8 @@ export const THEMES: Theme[] = [
     },
   },
   {
-    id: "foret",
-    label: "Forêt — sombre vert",
+    id: "forest",
+    label: "Forest — dark green",
     dark: true,
     colors: {
       bg: "#1a201d", bg_alt: "#151a17", bg_hover: "#232b27", border: "#28302c",
@@ -59,7 +59,7 @@ export const THEMES: Theme[] = [
   },
   {
     id: "ocean",
-    label: "Océan — bleu nuit",
+    label: "Ocean — deep blue",
     dark: true,
     colors: {
       bg: "#111a24", bg_alt: "#0d151d", bg_hover: "#1a2632", border: "#1f2c39",
@@ -70,8 +70,8 @@ export const THEMES: Theme[] = [
     },
   },
   {
-    id: "sable",
-    label: "Sable — clair chaud",
+    id: "sand",
+    label: "Sand — warm light",
     dark: false,
     colors: {
       bg: "#f7f1e5", bg_alt: "#efe6d4", bg_hover: "#e6dbc5", border: "#e0d4bd",
@@ -83,7 +83,7 @@ export const THEMES: Theme[] = [
   },
   {
     id: "retro",
-    label: "Rétro — terminal ambre",
+    label: "Retro — amber terminal",
     dark: true,
     colors: {
       bg: "#14110c", bg_alt: "#100d09", bg_hover: "#211b12", border: "#2a2216",
@@ -95,12 +95,16 @@ export const THEMES: Theme[] = [
   },
 ];
 
+/** Former (French) theme ids, still accepted in settings.json. */
+const LEGACY_IDS: Record<string, string> = { minuit: "midnight", papier: "paper", foret: "forest", sable: "sand" };
+
 export function findTheme(id: string, systemDark: boolean): Theme {
-  if (id === "auto") return THEMES.find((t) => t.id === (systemDark ? "minuit" : "papier"))!;
-  return THEMES.find((t) => t.id === id) ?? THEMES[0];
+  if (id === "auto") return THEMES.find((t) => t.id === (systemDark ? "midnight" : "paper"))!;
+  const wanted = LEGACY_IDS[id] ?? id;
+  return THEMES.find((t) => t.id === wanted) ?? THEMES[0];
 }
 
-/** Résout un nom de couleur de palette (« blue ») ou renvoie la valeur telle quelle (« #ff0 »). */
+/** Resolves a palette color name ("blue"), or returns the value as is ("#ff0"). */
 export function resolveColor(value: string | undefined | null): string {
   if (!value) return "var(--kn-grey)";
   return (PALETTE_NAMES as readonly string[]).includes(value) || value === "accent" ? `var(--kn-${value})` : value;

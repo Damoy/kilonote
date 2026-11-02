@@ -1,4 +1,4 @@
-// Écran d'accueil (aucun onglet ouvert) avec Kilo, la mascotte.
+// Welcome screen (no open tab), featuring Kilo the mascot.
 
 import type { App } from "../app";
 import { shortcutFor } from "../core/commands";
@@ -6,21 +6,21 @@ import { basename } from "../core/path";
 import kiloSvg from "../assets/kilo.svg?raw";
 import { h, icon } from "./dom";
 
-// {commande} est remplacé par le raccourci actuel de la commande.
+// {command} is replaced with the command's current shortcut.
 const TIPS = [
-  "{task.cycle} sur une ligne la transforme en tâche, puis fait tourner son statut.",
-  "{task.archive} archive la tâche dans le fichier _done, avec la date du jour.",
-  "Clic droit sur un onglet : couleur et groupes d'onglets.",
-  "{palette.symbol} pour sauter à un titre ou une tâche de la note.",
-  "La palette de commandes ({palette.commands}) donne accès à tout.",
-  "Les paramètres ({settings.open}) sont un simple fichier JSON commenté.",
-  "Le bilan d'activité résume vos tâches terminées, par projet et par mois.",
-  "{file.toggleDone} bascule entre une note et son archive _done.",
+  "{task.cycle} turns a line into a task, then cycles its status.",
+  "{task.archive} moves the task to the _done file, stamped with today's date.",
+  "Right-click a tab for colors and tab groups.",
+  "{palette.symbol} jumps to a heading or a task of the note.",
+  "The command palette ({palette.commands}) gives access to everything.",
+  "Settings ({settings.open}) are a plain, commented JSON file.",
+  "The activity report sums up your completed tasks by project and by month.",
+  "{file.toggleDone} switches between a note and its _done archive.",
 ];
 
 export function mascot(cls = "kilo"): HTMLElement {
   const wrap = h("div", { class: cls });
-  // SVG pixel art maison et statique (scripts/generate-icons.py) : insertion sûre.
+  // Static, home-made pixel art SVG (scripts/generate-icons.py): safe to insert.
   wrap.innerHTML = kiloSvg;
   return wrap;
 }
@@ -48,21 +48,21 @@ export class Welcome {
         { class: "wl-inner" },
         mascot("kilo wl-kilo"),
         h("h1", { class: "wl-title" }, "Kilo", h("span", {}, "Note")),
-        h("p", { class: "wl-tagline" }, "Des notes légères comme un kilooctet."),
+        h("p", { class: "wl-tagline" }, "Notes as light as a kilobyte."),
         h(
           "div",
           { class: "wl-actions" },
-          action("Nouvelle note", "newFile", "file.new", () => app.newDoc()),
-          action(app.workspace ? "Aller au fichier" : "Ouvrir un dossier", app.workspace ? "search" : "folder", app.workspace ? "palette.files" : "folder.open", () =>
+          action("New note", "newFile", "file.new", () => app.newDoc()),
+          action(app.workspace ? "Go to file" : "Open folder", app.workspace ? "search" : "folder", app.workspace ? "palette.files" : "folder.open", () =>
             app.workspace ? app.openQuickOpen() : app.openFolder()),
-          action("Tâches en cours", "tasks", "view.tasks", () => app.sidebar.show("tasks")),
-          action("Commandes", "command", "palette.commands", () => app.openCommandPalette()),
+          action("Ongoing tasks", "tasks", "view.tasks", () => app.sidebar.show("tasks")),
+          action("Commands", "command", "palette.commands", () => app.openCommandPalette()),
         ),
         recent.length
-          ? h("div", { class: "wl-recent" }, h("div", { class: "wl-section" }, "Dossiers récents"),
+          ? h("div", { class: "wl-recent" }, h("div", { class: "wl-section" }, "Recent folders"),
               ...recent.map((r) => h("button", { class: "wl-recent-item", title: r, onclick: () => app.openFolder(r) }, icon("folder"), h("span", {}, basename(r)), h("small", {}, r))))
           : null,
-        h("div", { class: "wl-tip" }, h("strong", {}, "Astuce · "), tip.replace(/\{([\w.]+)\}/g, (_m, id: string) => key(id) || id)),
+        h("div", { class: "wl-tip" }, h("strong", {}, "Tip · "), tip.replace(/\{([\w.]+)\}/g, (_m, id: string) => key(id) || id)),
       ),
     );
   }

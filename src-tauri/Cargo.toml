@@ -1,7 +1,9 @@
 [package]
 name = "kilonote"
 version = "0.1.0"
-description = "KiloNote — prise de notes légère et élégante"
+description = "KiloNote — a light, keyboard-driven note-taking app with built-in task tracking"
+license = "MIT"
+repository = "https://github.com/Damoy/kilonote"
 authors = ["Damoy"]
 edition = "2021"
 rust-version = "1.77"

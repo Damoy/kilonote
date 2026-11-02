@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Prépare (une seule fois) la chaîne de compilation croisée Linux/WSL → Windows :
-#   - cible Rust x86_64-pc-windows-msvc + cargo-xwin (SDK Windows téléchargé automatiquement)
-#   - LLVM : clang-cl, lld-link, llvm-lib, llvm-rc (icône et métadonnées de l'exe)
-#   - NSIS : makensis (installeur .exe)
+# Sets up (once) the Linux/WSL → Windows cross-compilation toolchain:
+#   - Rust target x86_64-pc-windows-msvc + cargo-xwin (downloads the Windows SDK by itself)
+#   - LLVM: clang-cl, lld-link, llvm-lib, llvm-rc (icon and metadata of the exe)
+#   - NSIS: makensis (.exe installer)
 #
-# Sans droits root, LLVM et NSIS sont extraits des paquets Ubuntu/Debian dans
-# ~/.local/share/kilonote-toolchain (rien n'est installé dans le système).
-# Avec sudo, on peut aussi simplement faire :
+# Without root rights, LLVM and NSIS are extracted from the Ubuntu/Debian packages into
+# ~/.local/share/kilonote-toolchain (nothing is installed system-wide).
+# With sudo, you can simply run instead:
 #   sudo apt install clang lld llvm nsis
 set -euo pipefail
 
@@ -20,11 +20,11 @@ die() { printf '\033[1;31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 if ! command -v cargo >/dev/null 2>&1; then
   [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
 fi
-command -v rustup >/dev/null 2>&1 || die "Rust est requis : https://rustup.rs (curl ... | sh)"
-say "Cible Rust x86_64-pc-windows-msvc"
+command -v rustup >/dev/null 2>&1 || die "Rust is required: https://rustup.rs (curl ... | sh)"
+say "Rust target x86_64-pc-windows-msvc"
 rustup target add x86_64-pc-windows-msvc >/dev/null
 if ! command -v cargo-xwin >/dev/null 2>&1; then
-  say "Installation de cargo-xwin (quelques minutes)"
+  say "Installing cargo-xwin (a few minutes)"
   cargo install --locked cargo-xwin
 fi
 
@@ -35,13 +35,13 @@ have_system_tools() {
 }
 
 if have_system_tools; then
-  say "LLVM et NSIS déjà présents dans le système : rien à faire."
+  say "LLVM and NSIS are already installed system-wide: nothing to do."
   exit 0
 fi
 
-command -v apt-get >/dev/null 2>&1 || die "apt-get introuvable : installez clang, lld, llvm et nsis avec le gestionnaire de paquets de votre système."
+command -v apt-get >/dev/null 2>&1 || die "apt-get not found: install clang, lld, llvm and nsis with your package manager."
 
-say "Téléchargement de LLVM $LLVM_VERSION et NSIS dans $TOOLCHAIN_DIR"
+say "Downloading LLVM $LLVM_VERSION and NSIS into $TOOLCHAIN_DIR"
 debs="$TOOLCHAIN_DIR/debs"
 root="$TOOLCHAIN_DIR/root"
 mkdir -p "$debs" "$root" "$TOOLCHAIN_DIR/bin"
@@ -57,7 +57,7 @@ for deb in "$debs"/*.deb; do dpkg -x "$deb" "$root"; done
 llvm_bin="$root/usr/lib/llvm-$LLVM_VERSION/bin"
 libs="$root/usr/lib/x86_64-linux-gnu:$root/usr/lib/llvm-$LLVM_VERSION/lib"
 
-# Petits lanceurs : bibliothèques locales + noms attendus par cargo-xwin et Tauri.
+# Small launchers: local libraries + the names cargo-xwin and Tauri expect.
 wrap() { # wrap <nom> <binaire> [args…]
   local name="$1" target="$2"; shift 2
   cat >"$TOOLCHAIN_DIR/bin/$name" <<EOF
@@ -69,7 +69,7 @@ EOF
 }
 wrap clang "$llvm_bin/clang"
 wrap clang-cl "$llvm_bin/clang" --driver-mode=cl
-# lld-link, llvm-lib… sont des liens multi-usages : le nom d'appel compte.
+# lld-link, llvm-lib… are multi-call links: the name they are called by matters.
 for tool in lld-link llvm-lib llvm-rc llvm-ar llvm-mt llvm-cvtres llvm-dlltool llvm-windres llvm-ranlib; do
   wrap "$tool" "$llvm_bin/$tool"
 done
@@ -80,10 +80,10 @@ exec "$root/usr/bin/makensis" "\$@"
 EOF
 chmod +x "$TOOLCHAIN_DIR/bin/makensis"
 
-# Vérification : chaque outil doit au moins pouvoir se lancer.
+# Check: every tool must at least start.
 for tool in clang-cl lld-link llvm-lib llvm-rc makensis; do
   if "$TOOLCHAIN_DIR/bin/$tool" --version 2>&1 | grep -q "error while loading shared libraries"; then
-    die "$tool ne fonctionne pas (bibliothèque manquante)"
+    die "$tool does not work (missing library)"
   fi
 done
-say "Chaîne de compilation prête : $TOOLCHAIN_DIR/bin"
+say "Toolchain ready: $TOOLCHAIN_DIR/bin"

@@ -1,2 +1,2 @@
-/** Version de l'application (package.json), injectée par Vite. */
+/** Application version (from package.json), injected by Vite. */
 declare const __APP_VERSION__: string;

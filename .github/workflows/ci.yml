@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7
-      - name: Dépendances système (WebKitGTK)
+      - name: System dependencies (WebKitGTK)
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
@@ -25,7 +25,7 @@ jobs:
       - run: npm ci
       - name: Tests
         run: npm test
-      - name: Typage et build du front
+      - name: Type-check and build the frontend
         run: npm run build
-      - name: Vérification du backend Rust
+      - name: Check the Rust backend
         run: cargo check --manifest-path src-tauri/Cargo.toml

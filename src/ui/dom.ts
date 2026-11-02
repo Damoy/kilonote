@@ -1,4 +1,4 @@
-// Mini-utilitaires DOM (pas de framework : léger et rapide).
+// Tiny DOM helpers (no framework: light and fast).
 
 type Child = Node | string | null | undefined | false;
 type Attrs = Record<string, unknown>;
@@ -64,7 +64,7 @@ export function clear(el: Element) {
   while (el.firstChild) el.firstChild.remove();
 }
 
-/** Met en évidence les positions trouvées par la recherche floue. */
+/** Highlights the positions matched by the fuzzy search. */
 export function highlighted(text: string, positions: number[]): DocumentFragment {
   const frag = document.createDocumentFragment();
   const set = new Set(positions);

@@ -1,4 +1,4 @@
-/* KiloNote — interface. Toutes les couleurs viennent des variables --kn-* du thème. */
+/* KiloNote interface. Every color comes from the theme's --kn-* variables. */
 
 :root {
   --kn-ui-font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, Ubuntu, Cantarell, "Noto Sans", sans-serif;
@@ -81,7 +81,7 @@ kbd { font-family: var(--kn-ui-font); }
 }
 .kn-input:focus { border-color: var(--kn-accent); box-shadow: 0 0 0 3px var(--kn-accent-soft); }
 
-/* ------------------------------------------------------------------ Mise en page */
+/* ------------------------------------------------------------------ Layout */
 
 #app {
   position: relative;
@@ -123,13 +123,13 @@ body.resizing * { pointer-events: none; }
   white-space: nowrap; overflow: hidden;
 }
 
-/* Mode zen : uniquement le texte, centré. */
+/* Zen mode: only the text, centered. */
 body.zen #sidebar, body.zen #sb-resizer, body.zen #tabbar, body.zen #statusbar { display: none; }
 body.zen #app { grid-template-columns: 0 minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 0; }
 body.zen .cm-content { max-width: 78ch; margin: 0 auto; padding-top: 8vh !important; }
 body.zen .cm-gutters { display: none !important; }
 
-/* ------------------------------------------------------------------ Onglets */
+/* ------------------------------------------------------------------ Tabs */
 
 #tabbar {
   flex: none; display: flex; align-items: stretch;
@@ -203,7 +203,7 @@ body.zen .cm-gutters { display: none !important; }
 .kn-group-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 6px; }
 .kn-group-count { font-size: 0.85em; background: color-mix(in srgb, var(--kn-bg) 25%, transparent); padding: 0 5px; border-radius: 6px; }
 
-/* ------------------------------------------------------------------ Barre latérale */
+/* ------------------------------------------------------------------ Sidebar */
 
 .sb-switch {
   flex: none; display: flex; align-items: center; gap: 2px;
@@ -305,7 +305,7 @@ body.zen .cm-gutters { display: none !important; }
 .sb-hit-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--kn-fg-muted); }
 .sb-hit-text mark { color: var(--kn-bg); background: var(--kn-yellow); border-radius: 2px; padding: 0 1px; font-weight: 600; }
 
-/* ------------------------------------------------------------------ Barre d'état */
+/* ------------------------------------------------------------------ Status bar */
 
 .st-left, .st-right { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .st-item {
@@ -328,12 +328,12 @@ button.st-item:hover { background: var(--kn-hover); color: var(--kn-fg); }
 .st-save:not(.warn) { cursor: default; }
 .st-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 
-/* ------------------------------------------------------------------ Éditeur */
+/* ------------------------------------------------------------------ Editor */
 
 #editor-host .cm-scroller { user-select: text; -webkit-user-select: text; }
 #editor-host .cm-gutters { user-select: none; }
 
-/* Panneau de recherche CodeMirror */
+/* CodeMirror search panel */
 #editor-host .cm-panels { background: var(--kn-bg-alt); color: var(--kn-fg); border-color: var(--kn-border); }
 #editor-host .cm-panels-top { border-bottom: 1px solid var(--kn-border); }
 #editor-host .cm-search {
@@ -358,7 +358,7 @@ button.st-item:hover { background: var(--kn-hover); color: var(--kn-fg); }
 #editor-host .cm-search button[name="close"] { position: absolute; top: 8px; right: 10px; font-size: 18px; color: var(--kn-fg-muted); }
 #editor-host .cm-panel.cm-gotoLine { padding: 8px 12px; }
 
-/* Coloration des notes */
+/* Note highlighting */
 .kn-status {
   color: var(--c); background: color-mix(in srgb, var(--c) 15%, transparent);
   border-radius: 4px; padding: 1px 0.35em; font-weight: 650; cursor: pointer;
@@ -384,15 +384,15 @@ button.st-item:hover { background: var(--kn-hover); color: var(--kn-fg); }
 .kn-code { color: var(--kn-orange); background: color-mix(in srgb, var(--kn-fg) 6%, transparent); border-radius: 3px; }
 .kn-strong { font-weight: 750; color: var(--kn-fg); }
 
-/* ------------------------------------------------------------------ Accueil */
+/* ------------------------------------------------------------------ Welcome screen */
 
 #welcome { flex: 1; display: flex; align-items: center; justify-content: center; overflow: auto; background: var(--kn-bg); }
 .wl-inner { width: min(460px, 90%); display: flex; flex-direction: column; align-items: center; padding: 40px 0; }
 .kilo svg { width: 100%; height: 100%; overflow: visible; }
-/* 40×40 pixels dessinés : 160 px = 4 px d'écran par pixel, rendu net. */
+/* 40×40 drawn pixels: 160 px = 4 screen pixels per pixel, crisp rendering. */
 .wl-kilo { width: 160px; height: 160px; animation: kilo-hop 3.2s steps(1) infinite; filter: drop-shadow(0 8px 0 rgba(0, 0, 0, 0.16)); }
 .kilo-eyes { transform-box: fill-box; transform-origin: center; animation: kilo-blink 5.5s infinite; }
-/* Petit saut « 8 bits » : déplacement par paliers de pixels, pas de glissé. */
+/* Little "8-bit" hop: moves in whole-pixel steps, no smooth gliding. */
 @keyframes kilo-hop { 0%, 70%, 100% { transform: translateY(0); } 75%, 85% { transform: translateY(-4px); } 80% { transform: translateY(-8px); } }
 @keyframes kilo-blink { 0%, 93%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.12); } }
 .wl-title { margin: 14px 0 2px; font-size: 30px; font-weight: 750; letter-spacing: -0.02em; color: var(--kn-fg); }
@@ -418,7 +418,7 @@ button.st-item:hover { background: var(--kn-hover); color: var(--kn-fg); }
 .wl-tip { margin-top: 28px; padding: 10px 14px; border-radius: 8px; background: var(--kn-bg-alt); color: var(--kn-fg-muted); font-size: 12.5px; line-height: 1.5; border: 1px solid var(--kn-border); }
 .wl-tip strong { color: var(--kn-accent); }
 
-/* ------------------------------------------------------------------ Superpositions */
+/* ------------------------------------------------------------------ Overlays */
 
 #overlay-root { position: fixed; inset: 0; pointer-events: none; z-index: 100; }
 #overlay-root > * { pointer-events: auto; }

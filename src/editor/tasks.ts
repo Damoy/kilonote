@@ -1,11 +1,11 @@
-// Tâches : une ligne qui se termine par « - <statut> ».
-//   - appeler collègue X - todo
-//   - appeler collègue X - ongoing
-//   - appeler collègue X - done [2026-11-02]      ← dans mc_done.txt
-// Ce module est volontairement pur (sans DOM) pour être testable.
+// Tasks: a line that ends with " - <status>".
+//   - call colleague X - todo
+//   - call colleague X - ongoing
+//   - call colleague X - done [2026-11-02]      ← in mc_done.txt
+// This module is deliberately pure (no DOM) so that it is easy to test.
 
 export interface TaskConfig {
-  statuses: Record<string, string>; // nom (minuscule) → couleur
+  statuses: Record<string, string>; // lowercase name → color
   cycle: string[];
   done: Set<string>;
   archiveStatus: string;
@@ -15,13 +15,13 @@ export interface TaskConfig {
 
 export interface TaskMatch {
   indent: string;
-  bullet: string; // « - » avec son espace, ou ""
+  bullet: string; // "- " with its space, or ""
   text: string;
-  status: string; // tel qu'écrit dans le fichier
-  key: string; // statut en minuscules
-  stamp: string; // « [2026-11-02] » ou ""
-  date: string | null; // AAAA-MM-JJ si présent dans le tampon
-  /** Positions dans la ligne. */
+  status: string; // as written in the file
+  key: string; // lowercase status
+  stamp: string; // "[2026-11-02]" or ""
+  date: string | null; // YYYY-MM-DD when present in the stamp
+  /** Positions within the line. */
   textFrom: number;
   textTo: number;
   statusFrom: number;
@@ -43,7 +43,7 @@ export function makeTaskConfig(opts: {
   for (const [k, v] of Object.entries(opts.statuses ?? {})) if (k.trim()) statuses[k.trim().toLowerCase()] = v;
   const names = Object.keys(statuses).sort((a, b) => b.length - a.length).map(escapeRe);
   const alternation = names.length ? names.join("|") : "(?!)";
-  // indentation, puce optionnelle, texte, séparateur « - » (ou tiret long), statut, tampon optionnel
+  // indentation, optional bullet, text, " - " separator (or a long dash), status, optional stamp
   const regex = new RegExp(
     `^(\\s*)((?:[-*+•]|\\d{1,3}[.)])\\s+)?(.*?\\S)(\\s+[-–—]\\s+)(${alternation})(\\s+\\[[^\\]\\n]*\\])?\\s*$`,
     "i",
@@ -91,20 +91,20 @@ export interface LineChange {
 }
 
 export interface LineEdit {
-  /** Modifications relatives au début de la ligne (non chevauchantes, triées). */
+  /** Changes relative to the start of the line (sorted, non-overlapping). */
   changes: LineChange[];
-  /** Position conseillée du curseur dans la ligne (après modification). */
+  /** Suggested cursor position within the line (after the change). */
   cursor?: number;
 }
 
 const BULLET_RE = /^(\s*)((?:[-*+•]|\d{1,3}[.)])\s+)?/;
 
 /**
- * Calcule la modification quand on fait « tourner » le statut (Ctrl+Entrée).
- * Les modifications sont minimales pour que le curseur reste en place.
- * - ligne vide → « - | - todo » (curseur au milieu, prêt à écrire)
- * - ligne sans statut → on ajoute « - todo » (et une puce si besoin)
- * - tâche → statut suivant du cycle (ou `target` s'il est fourni)
+ * Computes the change made when cycling the status (Ctrl+Enter).
+ * Changes are minimal so that the cursor stays in place.
+ * - empty line → "- | - todo" (cursor in the middle, ready to type)
+ * - line without status → append " - todo" (and a bullet if needed)
+ * - task → next status of the cycle (or `target` when given)
  */
 export function cycleLine(line: string, cfg: TaskConfig, target?: string): LineEdit | null {
   const task = parseTask(line, cfg);
@@ -117,14 +117,14 @@ export function cycleLine(line: string, cfg: TaskConfig, target?: string): LineE
   if (!line.trim()) {
     return { changes: [{ from: 0, to: line.length, insert: `${line}-  - ${status}` }], cursor: line.length + 2 };
   }
-  if (/^\s*#/.test(line)) return null; // titre : on n'y touche pas
+  if (/^\s*#/.test(line)) return null; // heading: leave it alone
   const m = BULLET_RE.exec(line)!;
   const indent = m[1];
   const bodyEnd = line.replace(/\s+$/, "").length;
   const changes: LineChange[] = [];
   if (!m[2]) changes.push({ from: indent.length, to: indent.length, insert: "- " });
   if (bodyEnd <= m[0].length) {
-    // puce seule (« - ») : on prépare l'emplacement du texte
+    // bullet only ("- "): make room for the text
     const at = m[0].length;
     changes.push({ from: at, to: line.length, insert: ` - ${status}` });
     return { changes, cursor: at };
@@ -148,7 +148,7 @@ export function todayISO(d = new Date()): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/** Ligne telle qu'elle sera écrite dans le fichier d'archive. */
+/** The line as it will be written to the archive file. */
 export function archivedLine(line: string, cfg: TaskConfig, date = todayISO()): string {
   const task = parseTask(line, cfg);
   if (!task) {
@@ -173,7 +173,7 @@ export function findTasks(text: string, cfg: TaskConfig): FoundTask[] {
   const lines = text.split(/\r\n|\r|\n/);
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i];
-    // Filtre rapide avant la regex : il faut au moins un tiret suivi d'un espace.
+    // Quick filter before the regex: a dash followed by a space is required.
     if (raw.length < 5 || !/[-–—]\s/.test(raw)) continue;
     const task = parseTask(raw, cfg);
     if (task) out.push({ line: i + 1, task, raw });
@@ -181,7 +181,7 @@ export function findTasks(text: string, cfg: TaskConfig): FoundTask[] {
   return out;
 }
 
-/** Cherche une date (AAAA-MM-JJ ou JJ/MM/AAAA) n'importe où dans une ligne. */
+/** Finds a date (YYYY-MM-DD or DD/MM/YYYY) anywhere in a line. */
 export function findDateInLine(line: string): string | null {
   const iso = /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(line);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;

@@ -1,7 +1,7 @@
-# Construit les installeurs Windows, macOS et Linux et les publie dans la
-# release GitHub correspondante. Déclenchement : scripts/release.sh (qui pousse
-# un tag « vX.Y.Z »), ou manuellement depuis l'onglet Actions.
-name: Publier
+# Builds the Windows, macOS and Linux installers and publishes them in the
+# matching GitHub release. Triggered by scripts/release.sh (which pushes a
+# "vX.Y.Z" tag), or manually from the Actions tab.
+name: Release
 
 on:
   push:
@@ -26,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Dépendances système (Linux)
+      - name: System dependencies (Linux)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
@@ -54,16 +54,22 @@ jobs:
           tagName: v__VERSION__
           releaseName: "KiloNote v__VERSION__"
           releaseBody: |
-            Téléchargez l'installeur de votre système :
-            - **Windows** : `KiloNote_x.y.z_x64-setup.exe` (installation sans droits administrateur)
-            - **macOS** : `KiloNote_x.y.z_universal.dmg`
-            - **Linux** : `.AppImage` (portable), `.deb` ou `.rpm`
+            Light, keyboard-driven notes with built-in task tracking.
+
+            | System | File |
+            |---|---|
+            | Windows 10/11 | `KiloNote_<version>_x64-setup.exe`: per-user install, no administrator rights |
+            | macOS (Intel and Apple Silicon) | `KiloNote_<version>_universal.dmg` |
+            | Linux | `.AppImage` (portable), `.deb` (Debian, Ubuntu), `.rpm` (Fedora, openSUSE) |
+
+            `SHA256SUMS.txt` lists the checksum of every file. The apps are not code-signed yet:
+            see the [README](https://github.com/Damoy/kilonote#install) for the first-launch steps.
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
 
-  # Empreintes SHA-256 de tous les installeurs, publiées avec la release
-  # (pour vérifier un fichier ou l'autoriser par empreinte en entreprise).
+  # SHA-256 checksums of every installer, published with the release
+  # (to verify a file, or to allow it by hash in a corporate environment).
   checksums:
     needs: build
     runs-on: ubuntu-latest

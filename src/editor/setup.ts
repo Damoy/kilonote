@@ -1,5 +1,5 @@
-// Construction de l'éditeur CodeMirror 6 : une seule vue, un état par onglet
-// (historique d'annulation conservé par onglet).
+// CodeMirror 6 editor setup: a single view, one state per tab
+// (each tab keeps its own undo history).
 
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import {
@@ -25,11 +25,11 @@ export function langForPath(path: string | null, fallback: LangId = "text"): Lan
   if (!path) return fallback;
   const ext = extname(path);
   if (ext === "md" || ext === "markdown" || ext === "mdx") return "markdown";
-  if (ext === "json" || ext === "jsonc" || ext === "sublime-settings") return "jsonc";
+  if (ext === "json" || ext === "jsonc") return "jsonc";
   return "text";
 }
 
-export const LANG_LABELS: Record<LangId, string> = { text: "Texte", markdown: "Markdown", jsonc: "JSON" };
+export const LANG_LABELS: Record<LangId, string> = { text: "Text", markdown: "Markdown", jsonc: "JSON" };
 
 const jsonc = StreamLanguage.define<{ inComment: boolean }>({
   name: "jsonc",
@@ -61,7 +61,7 @@ const jsonc = StreamLanguage.define<{ inComment: boolean }>({
   languageData: { commentTokens: { line: "//", block: { open: "/*", close: "*/" } } },
 });
 
-// Markdown sans les langages embarqués (HTML/CSS/JS) : bien plus léger.
+// Markdown without embedded languages (HTML/CSS/JS): much lighter.
 const markdownLanguage = new Language(
   defineLanguageFacet({ commentTokens: { block: { open: "<!--", close: "-->" } } }),
   markdownParser.configure(GFM),
@@ -114,29 +114,7 @@ const theme = EditorView.theme({
   ".cm-tooltip": { backgroundColor: "var(--kn-bg-alt)", border: "1px solid var(--kn-border)", color: "var(--kn-fg)" },
 });
 
-const frenchPhrases = EditorState.phrases.of({
-  Find: "Rechercher",
-  Replace: "Remplacer",
-  next: "suivant",
-  previous: "précédent",
-  all: "tout",
-  "match case": "casse",
-  regexp: "regex",
-  "by word": "mot entier",
-  replace: "remplacer",
-  "replace all": "tout remplacer",
-  close: "fermer",
-  "current match": "occurrence courante",
-  "on line": "à la ligne",
-  "replaced $ matches": "$ occurrences remplacées",
-  "replaced match on line $": "occurrence remplacée à la ligne $",
-  "Go to line": "Aller à la ligne",
-  go: "OK",
-  "Control character": "Caractère de contrôle",
-  "Selection deleted": "Sélection supprimée",
-});
-
-/** Entrée sur une ligne à puce : la puce continue (et disparaît sur une puce vide). */
+/** Enter on a bullet line continues the list (and removes an empty bullet). */
 function continueList(view: EditorView): boolean {
   const { state } = view;
   if (state.selection.ranges.length > 1) return false;
@@ -201,7 +179,6 @@ export function createEditorState(
       notesClickHandler,
       syntaxHighlighting(highlight),
       theme,
-      frenchPhrases,
       EditorView.contentAttributes.of({ spellcheck: "false", autocorrect: "off", autocapitalize: "off" }),
       EditorView.updateListener.of(onUpdate),
     ],

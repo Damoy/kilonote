@@ -1,5 +1,5 @@
-// Coloration des notes : statuts de tâches en pastilles, titres, puces,
-// liens, dates, #tags et @mentions. Ne traite que les lignes visibles.
+// Note highlighting: task status badges, headings, bullets, links, dates,
+// #tags and @mentions. Only visible lines are processed.
 
 import { Facet, type Range } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
@@ -12,12 +12,12 @@ export const taskConfigFacet = Facet.define<TaskConfig, TaskConfig>({
     makeTaskConfig({ statuses: {}, cycle: [], done: [], archiveStatus: "done", archiveDate: false }),
 });
 
-/** true pour les fichiers texte simples (les .md ont déjà leur propre coloration). */
+/** true for plain text files (.md files have their own syntax highlighting). */
 export const plainNotesFacet = Facet.define<boolean, boolean>({
   combine: (values) => values[values.length - 1] ?? true,
 });
 
-/** Branchements fournis par l'application (menu de statut, ouverture de liens). */
+/** Hooks provided by the application (status menu, opening links). */
 export const editorHooks = {
   onStatusClick: (_view: EditorView, _line: number, _x: number, _y: number) => {},
   openUrl: (_url: string) => {},
@@ -35,7 +35,7 @@ const STRONG_RE = /\*\*[^*\n]+\*\*/g;
 
 const mark = (cls: string, attrs?: Record<string, string>) => Decoration.mark({ class: cls, attributes: attrs });
 const M = {
-  url: mark("kn-url", { title: "Ctrl+clic pour ouvrir" }),
+  url: mark("kn-url", { title: "Ctrl+click to open" }),
   date: mark("kn-date"),
   tag: mark("kn-tag"),
   mention: mark("kn-mention"),
@@ -72,7 +72,7 @@ function statusMark(key: string, color: string): Decoration {
   if (!d) {
     d = Decoration.mark({
       class: "kn-status",
-      attributes: { style: `--c:${resolveColor(color)}`, title: "Clic : changer le statut" },
+      attributes: { style: `--c:${resolveColor(color)}`, title: "Click to change the status" },
     });
     statusDeco.set(id, d);
   }
@@ -163,7 +163,7 @@ export const notesHighlighter = ViewPlugin.fromClass(
   { decorations: (v) => v.decorations },
 );
 
-/** Clic sur une pastille de statut → menu ; Ctrl/Cmd+clic sur un lien → navigateur. */
+/** Click on a status badge → menu; Ctrl/Cmd+click on a link → browser. */
 export const notesClickHandler = EditorView.domEventHandlers({
   mousedown(e, view) {
     if (e.button !== 0) return false;
@@ -179,7 +179,7 @@ export const notesClickHandler = EditorView.domEventHandlers({
     }
     const url = target.closest?.(".kn-url");
     if (url && (e.ctrlKey || e.metaKey)) {
-      // Le lien peut être découpé en plusieurs fragments : on le relit depuis la ligne.
+      // The link may be split into several fragments: read it again from the line.
       const pos = view.posAtDOM(url);
       const line = view.state.doc.lineAt(pos);
       let found: string | null = null;

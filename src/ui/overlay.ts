@@ -1,4 +1,4 @@
-// Menus contextuels, boîtes de dialogue et notifications, dans le style de l'app.
+// Context menus, dialogs and notifications, styled like the rest of the app.
 
 import { resolveColor, PALETTE_LABELS } from "../core/themes";
 import { h, icon } from "./dom";
@@ -53,7 +53,7 @@ export function showMenu(items: MenuItem[], x: number, y: number) {
       const row = h("div", { class: "kn-menu-colors" });
       if (item.allowNone) {
         row.append(
-          h("button", { class: `kn-swatch none${!item.selected ? " selected" : ""}`, title: "Aucune", onclick: () => run(() => item.onPick(null)) }),
+          h("button", { class: `kn-swatch none${!item.selected ? " selected" : ""}`, title: "None", onclick: () => run(() => item.onPick(null)) }),
         );
       }
       for (const c of item.colors) {
@@ -140,7 +140,7 @@ export interface PromptOptions {
   value?: string;
   placeholder?: string;
   okLabel?: string;
-  /** Sélectionne seulement le nom (sans l'extension) au départ. */
+  /** Initially select only the name, without the extension. */
   selectStem?: boolean;
   colors?: { options: string[]; selected: string | null };
   validate?: (value: string) => string | null;
@@ -196,7 +196,7 @@ export function prompt(opts: PromptOptions): Promise<{ value: string; color: str
       h(
         "div",
         { class: "kn-modal-actions" },
-        h("button", { class: "kn-btn", onclick: () => finish(false) }, "Annuler"),
+        h("button", { class: "kn-btn", onclick: () => finish(false) }, "Cancel"),
         h("button", { class: "kn-btn primary", onclick: () => finish(true) }, opts.okLabel ?? "OK"),
       ),
     );
@@ -215,7 +215,7 @@ export interface ConfirmOptions {
   message?: string;
   okLabel?: string;
   cancelLabel?: string;
-  /** Troisième bouton optionnel (ex. « Ne pas enregistrer »). */
+  /** Optional third button (e.g. "Don't save"). */
   altLabel?: string;
   danger?: boolean;
 }
@@ -230,7 +230,7 @@ export function confirm(opts: ConfirmOptions): Promise<"ok" | "alt" | "cancel"> 
     const onKey = (e: KeyboardEvent) => {
       const focused = document.activeElement;
       if (e.key === "Escape") finish("cancel");
-      // Entrée sur un bouton qui a le focus : c'est ce bouton qui compte.
+      // Enter on a focused button: that button wins.
       else if (e.key === "Enter" && focused instanceof HTMLButtonElement && content.contains(focused)) return;
       else if (e.key === "Enter") finish("ok");
       else return;
@@ -248,7 +248,7 @@ export function confirm(opts: ConfirmOptions): Promise<"ok" | "alt" | "cancel"> 
         { class: "kn-modal-actions" },
         opts.altLabel ? h("button", { class: "kn-btn subtle", onclick: () => finish("alt") }, opts.altLabel) : null,
         h("span", { class: "kn-spacer" }),
-        h("button", { class: "kn-btn", onclick: () => finish("cancel") }, opts.cancelLabel ?? "Annuler"),
+        h("button", { class: "kn-btn", onclick: () => finish("cancel") }, opts.cancelLabel ?? "Cancel"),
         ok,
       ),
     );
@@ -294,7 +294,7 @@ export function toast(message: string, opts: ToastOptions = {}) {
       }, a.label),
     );
   }
-  el.append(h("button", { class: "kn-toast-close", title: "Fermer", onclick: dismiss }, icon("x")));
+  el.append(h("button", { class: "kn-toast-close", title: "Close", onclick: dismiss }, icon("x")));
   host.append(el);
   const timeout = opts.timeout ?? (opts.kind === "error" ? 7000 : 3600);
   let timer = setTimeout(dismiss, timeout);

@@ -1,4 +1,4 @@
-// Palette générique (commandes, fichiers, lignes, thèmes…) façon Sublime Text.
+// Generic picker (commands, files, lines, themes…).
 
 import { resolveColor } from "../core/themes";
 import { h, highlighted, icon } from "./dom";
@@ -17,13 +17,13 @@ export interface PickItem {
 export interface PickerSource {
   placeholder: string;
   query?: string;
-  /** Élément sélectionné à l'ouverture (sinon le premier). */
+  /** Item selected when the picker opens (the first one otherwise). */
   initial?: number;
   provide(query: string): { items: PickItem[]; empty?: string };
   pick(item: PickItem, query: string): unknown;
   highlight?(item: PickItem | null): void;
   cancel?(): void;
-  /** Entrée sans élément sélectionné (ex. « :42 » pour aller à une ligne). */
+  /** Enter with no selected item (e.g. ":42" to go to a line). */
   submit?(query: string): boolean;
 }
 

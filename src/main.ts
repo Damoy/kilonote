@@ -9,15 +9,15 @@ async function main() {
   document.documentElement.dataset.backend = backend.kind;
   const app = new App(backend);
   (window as unknown as { kilonote: App }).kilonote = app;
-  // Raccourcis globaux, avant ceux de l'éditeur (phase de capture).
+  // Global shortcuts, before the editor's own (capture phase).
   window.addEventListener("keydown", (e) => {
     if (handleKeydown(e)) return;
-    // Pas de rechargement accidentel de la fenêtre dans l'application.
+    // No accidental reload of the window in the desktop app.
     if (backend.kind === "tauri" && !import.meta.env.DEV && (e.key === "F5" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "r"))) {
       e.preventDefault();
     }
   }, true);
-  // Ctrl+molette : taille du texte de l'éditeur (et pas zoom de toute l'interface).
+  // Ctrl+wheel: editor text size (instead of zooming the whole interface).
   let lastWheel = 0;
   window.addEventListener("wheel", (e) => {
     if (!e.ctrlKey || backend.kind !== "tauri") return;
@@ -26,7 +26,7 @@ async function main() {
     lastWheel = Date.now();
     app.zoom(e.deltaY < 0 ? 1 : -1);
   }, { passive: false });
-  // Pas de menu contextuel du navigateur en dehors des zones de texte.
+  // No browser context menu outside of text areas.
   window.addEventListener("contextmenu", (e) => {
     const t = e.target as HTMLElement;
     if (!t.closest(".cm-content, input, textarea")) e.preventDefault();

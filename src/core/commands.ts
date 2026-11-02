@@ -1,4 +1,4 @@
-// Registre des commandes et des raccourcis clavier.
+// Command registry and keyboard shortcuts.
 
 import type { Platform } from "./backend";
 
@@ -6,7 +6,7 @@ export interface Command {
   id: string;
   title: string;
   run: () => unknown;
-  /** Masquée dans la palette (commandes paramétrées comme tab.goto.3). */
+  /** Hidden from the palette (parameterized commands such as tab.goto.3). */
   hidden?: boolean;
 }
 
@@ -36,7 +36,7 @@ export function runCommand(id: string): boolean {
 
 const MOD_ORDER = ["Ctrl", "Alt", "Shift", "Meta"];
 
-/** Normalise « mod+shift+p », « Cmd+P »… en « Ctrl+Shift+P » / « Meta+Shift+P ». */
+/** Normalizes "mod+shift+p", "Cmd+P"… into "Ctrl+Shift+P" / "Meta+Shift+P". */
 export function normalizeCombo(combo: string): string {
   const parts = combo.split(/\+(?!$)/).map((s) => s.trim()).filter(Boolean);
   const mods = new Set<string>();
@@ -57,6 +57,7 @@ function normalizeKey(k: string): string {
   if (k.length === 1) return k.toUpperCase();
   const lower = k.toLowerCase();
   const aliases: Record<string, string> = {
+    // (French key names are accepted too: maj, entrée, échap, espace, suppr.)
     enter: "Enter", return: "Enter", entrée: "Enter", entree: "Enter", esc: "Escape", escape: "Escape", échap: "Escape",
     tab: "Tab", space: "Space", espace: "Space", suppr: "Delete",
     up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight",
@@ -72,8 +73,8 @@ function normalizeKey(k: string): string {
 export function comboFromEvent(e: KeyboardEvent): string | null {
   if (["Control", "Shift", "Alt", "Meta", "AltGraph", "CapsLock", "Dead"].includes(e.key)) return null;
   let key: string;
-  // Touches chiffres : on se base sur la touche physique (claviers AZERTY),
-  // sauf pour - = + qui servent au zoom (le « - » est sur la touche 6 en AZERTY).
+  // Digit keys: use the physical key (AZERTY keyboards need it), except for
+  // - = + which are used for zooming ("-" sits on the 6 key on AZERTY).
   if (/^Digit\d$/.test(e.code) && !["-", "=", "+"].includes(e.key)) key = e.code.slice(5);
   else if (/^Numpad\d$/.test(e.code)) key = e.code.slice(6);
   else if (e.key === " ") key = "Space";
@@ -81,7 +82,7 @@ export function comboFromEvent(e: KeyboardEvent): string | null {
   const mods: string[] = [];
   if (e.ctrlKey) mods.push("Ctrl");
   if (e.altKey) mods.push("Alt");
-  // Pour les symboles (« ? », « + »…), Maj est déjà « contenu » dans le caractère.
+  // For symbols ("?", "+"…), Shift is already part of the character.
   if (e.shiftKey && !(key.length === 1 && !/[A-Z0-9]/.test(key))) mods.push("Shift");
   if (e.metaKey) mods.push("Meta");
   return [...mods, key].join("+");
@@ -98,22 +99,28 @@ export function setKeybindings(defaults: Record<string, string>, user: Record<st
   bindings = map;
 }
 
-/** Raccourci principal d'une commande, formaté pour l'affichage. */
+/** Main shortcut of a command, formatted for display. */
 export function shortcutFor(id: string): string {
   for (const [combo, cid] of bindings) if (cid === id) return formatCombo(combo);
   return "";
 }
 
+/** "Label (Ctrl+X)", or just "Label" when the command has no shortcut. */
+export function titleWithKey(label: string, id: string): string {
+  const key = shortcutFor(id);
+  return key ? `${label} (${key})` : label;
+}
+
 export function formatCombo(combo: string): string {
-  if (platform !== "macos") return combo.replace("ArrowUp", "↑").replace("ArrowDown", "↓").replace("Enter", "Entrée").replace("Shift", "Maj");
+  if (platform !== "macos") return combo.replace("ArrowUp", "↑").replace("ArrowDown", "↓");
   const sym: Record<string, string> = { Ctrl: "⌃", Alt: "⌥", Shift: "⇧", Meta: "⌘", Enter: "↩", ArrowUp: "↑", ArrowDown: "↓" };
   return combo.split("+").map((p) => sym[p] ?? p).join("");
 }
 
-/** Gestionnaire global (phase de capture) : renvoie true si l'évènement a été consommé. */
+/** Global handler (capture phase): returns true when the event was consumed. */
 export function handleKeydown(e: KeyboardEvent): boolean {
   if (e.isComposing || e.getModifierState?.("AltGraph")) return false;
-  // Une boîte de dialogue ouverte garde la main sur le clavier.
+  // An open dialog keeps the keyboard to itself.
   if (document.querySelector(".kn-modal-backdrop")) return false;
   const combo = comboFromEvent(e);
   if (!combo) return false;
