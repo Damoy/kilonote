@@ -211,12 +211,12 @@ export class Sidebar {
   }
 
   // ---------------------------------------------------------------------------
-  // Explorateur
+  // File explorer
 
   private renderFilesHeader() {
     const app = this.app;
     this.filesHeader.replaceChildren(
-      h("span", { class: "sb-title", title: app.workspace ?? "" }, app.workspace ? basename(app.workspace) : "Explorateur"),
+      h("span", { class: "sb-title", title: app.workspace ?? "" }, app.workspace ? basename(app.workspace) : "Explorer"),
       h("span", { class: "kn-spacer" }),
     );
     if (app.workspace) {
