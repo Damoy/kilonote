@@ -20,9 +20,9 @@ Shortcuts:
   (todo → ongoing → done). Works on several selected lines.
 - **Click a status**: menu to pick a status or archive the task.
 - **Ctrl+Shift+Enter**: archives the task into the project's archive file.
-  For \`mc.txt\`, the line moves to \`mc_done.txt\` (created when needed), with the date:
+  For \`work.txt\`, the line moves to \`work_done.txt\` (created when needed), with the date:
   \`- call colleague X - done [2026-11-02]\`
-- **Ctrl+Shift+D**: switches between \`mc.txt\` and \`mc_done.txt\`.
+- **Ctrl+Shift+D**: switches between \`work.txt\` and \`work_done.txt\`.
 - Command palette → "Task: Archive all completed tasks".
 
 The **Tasks** view (Ctrl+Shift+A) lists the tasks of every note in the open folder,

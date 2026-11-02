@@ -66,7 +66,7 @@ describe("cycleLine", () => {
   });
 
   it("leaves headings alone", () => {
-    expect(cycle("# Project MC")).toBeNull();
+    expect(cycle("# Work")).toBeNull();
   });
 
   it("forces a given status", () => {
@@ -102,7 +102,7 @@ describe("archivedLine", () => {
 
 describe("findTasks / dates", () => {
   it("lists the tasks of a text", () => {
-    const found = findTasks("# MC\r\n- a - todo\r\nnote\r\n- b - ongoing\n", cfg);
+    const found = findTasks("# Work\r\n- a - todo\r\nnote\r\n- b - ongoing\n", cfg);
     expect(found.map((f) => [f.line, f.task.key])).toEqual([[2, "todo"], [4, "ongoing"]]);
   });
 

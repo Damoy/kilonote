@@ -343,7 +343,7 @@ fn resolve_paths(args: impl IntoIterator<Item = String>, cwd: &Path) -> Vec<Stri
         .collect()
 }
 
-/// Paths passed on the command line (`kilonote notes/` or `kilonote mc.txt`).
+/// Paths passed on the command line (`kilonote notes/` or `kilonote work.txt`).
 #[tauri::command]
 fn startup_paths() -> Vec<String> {
     let cwd = std::env::current_dir().unwrap_or_default();

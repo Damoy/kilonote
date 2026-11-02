@@ -25,7 +25,7 @@ Its mascot is **Kilo**, a pixel art floppy disk (the kilobyte, in person) with a
 line on its label. It is drawn pixel by pixel in
 [`scripts/generate-icons.py`](scripts/generate-icons.py), which generates every icon.
 
-![KiloNote, Midnight theme: tasks view and the "Project MC" tab group](docs/screenshot-dark.png)
+![KiloNote, Midnight theme: tasks view and the "Work" tab group](docs/screenshot-dark.png)
 
 <details>
 <summary>More screenshots: Paper theme, welcome screen</summary>
@@ -77,17 +77,17 @@ On macOS, use ⌘ instead of Ctrl.
 ## Daily task tracking
 
 ```text
-mc.txt                                       mc_done.txt
-──────                                       ───────────
-# Project MC                                 - set up CI - done [2026-01-15]
+work.txt                                     work_done.txt
+────────                                     ─────────────
+# Work                                       - set up CI - done [2026-01-15]
 - call colleague X - todo       Ctrl+Shift+  - migrate the database - ok [2026-03-02]
 - review the spec - ongoing     Enter ────►  - call colleague X - done [2026-11-02]
 ```
 
 1. Write the task, then **Ctrl+Enter**: ` - todo` is appended (on an empty line, a blank task is prepared).
 2. When you start working on it: **Ctrl+Enter** → `ongoing`.
-3. When it is done: **Ctrl+Shift+Enter** → the line moves to `mc_done.txt`, stamped with today's date.
-   **Ctrl+Shift+D** switches between `mc.txt` and `mc_done.txt`.
+3. When it is done: **Ctrl+Shift+Enter** → the line moves to `work_done.txt`, stamped with today's date.
+   **Ctrl+Shift+D** switches between `work.txt` and `work_done.txt`.
 4. At the end of the year: command palette → **Report: Generate activity report**.
 
 The statuses `todo`, `ongoing`, `blocked`, `wait`, `done` and `ok` are recognized out of the box,
@@ -204,7 +204,7 @@ system dependencies of [Tauri](https://tauri.app/start/prerequisites/) for your 
 | `npm run app:dev` | runs the app in development mode |
 | `npm run app:build` | native build for the current system, in `src-tauri/target/release/bundle/` |
 | `npm run build:windows` | Windows installer + portable exe (+ `SHA256SUMS.txt`) in `dist-windows/`, **from Linux or WSL** |
-| `npm run install:windows` | same, then installs or updates KiloNote on Windows (from WSL) |
+| `npm run install:windows` | same, then installs or updates KiloNote on Windows (from WSL): an open KiloNote keeps running, and the new build starts the next time you open it |
 | `scripts\build-windows.ps1 [-Install]` | same, directly on Windows (PowerShell) |
 | `npm run dev` | the interface alone in a browser, with demo notes |
 | `npm test` | unit tests |

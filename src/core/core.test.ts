@@ -7,21 +7,21 @@ import { findTheme } from "./themes";
 
 describe("paths", () => {
   it("handles Unix and Windows paths", () => {
-    expect(basename("/a/b/mc.txt")).toBe("mc.txt");
-    expect(basename("C:\\notes\\mc.txt")).toBe("mc.txt");
-    expect(dirname("C:\\notes\\mc.txt")).toBe("C:\\notes");
-    expect(join("C:\\notes", "mc.txt")).toBe("C:\\notes\\mc.txt");
-    expect(join("/notes/", "mc.txt")).toBe("/notes/mc.txt");
-    expect(relative("C:\\notes", "C:\\Notes\\pro\\mc.txt")).toBe("pro\\mc.txt");
+    expect(basename("/a/b/work.txt")).toBe("work.txt");
+    expect(basename("C:\\notes\\work.txt")).toBe("work.txt");
+    expect(dirname("C:\\notes\\work.txt")).toBe("C:\\notes");
+    expect(join("C:\\notes", "work.txt")).toBe("C:\\notes\\work.txt");
+    expect(join("/notes/", "work.txt")).toBe("/notes/work.txt");
+    expect(relative("C:\\notes", "C:\\Notes\\pro\\work.txt")).toBe("pro\\work.txt");
   });
 
   it("computes the archive file", () => {
-    expect(doneFileFor("/n/mc.txt", "_done")).toBe("/n/mc_done.txt");
+    expect(doneFileFor("/n/work.txt", "_done")).toBe("/n/work_done.txt");
     expect(doneFileFor("C:\\n\\Project.MD", "_done")).toBe("C:\\n\\Project_done.MD");
     expect(doneFileFor("/n/no-extension", "_done")).toBe("/n/no-extension_done");
-    expect(isDoneFile("/n/mc_done.txt", "_done")).toBe(true);
-    expect(isDoneFile("/n/mc.txt", "_done")).toBe(false);
-    expect(projectName("/n/mc_done.txt", "_done")).toBe("mc");
+    expect(isDoneFile("/n/work_done.txt", "_done")).toBe(true);
+    expect(isDoneFile("/n/work.txt", "_done")).toBe(false);
+    expect(projectName("/n/work_done.txt", "_done")).toBe("work");
   });
 
   it("does not mix up /Notes and /Notes2", () => {
@@ -68,10 +68,10 @@ describe("themes", () => {
 
 describe("fuzzy search", () => {
   it("matches subsequences and favors the file name", () => {
-    expect(fuzzyMatch("mcd", "projects/mc_done.txt")).not.toBeNull();
-    expect(fuzzyMatch("xyz", "mc.txt")).toBeNull();
-    const a = fuzzyMatch("mc", "clients/mc.txt")!.score;
-    const b = fuzzyMatch("mc", "my-clients/notes.txt")!.score;
+    expect(fuzzyMatch("wkd", "projects/work_done.txt")).not.toBeNull();
+    expect(fuzzyMatch("xyz", "work.txt")).toBeNull();
+    const a = fuzzyMatch("wo", "clients/work.txt")!.score;
+    const b = fuzzyMatch("wo", "worlds/notes.txt")!.score;
     expect(a).toBeGreaterThan(b);
     expect(fuzzyMatch("ete", "Été.txt")).not.toBeNull();
   });

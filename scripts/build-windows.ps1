@@ -16,7 +16,8 @@
   From WSL or Linux, use scripts/build-windows.sh instead (nothing to install on Windows).
 
 .PARAMETER Install
-  Installs or updates KiloNote after building it.
+  Installs or updates KiloNote after building it (see scripts/install-windows.ps1:
+  an open KiloNote is not interrupted, the update applies at its next launch).
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts\build-windows.ps1 -Install
@@ -62,9 +63,11 @@ Say "Files ready in dist-windows\:"
 Get-ChildItem $out | ForEach-Object { "    {0,8:N1} MB  {1}" -f ($_.Length / 1MB), $_.Name }
 
 if ($Install) {
-  Say "Installing…"
-  Get-Process KiloNote, kilonote -ErrorAction SilentlyContinue | ForEach-Object { $_.CloseMainWindow() | Out-Null }
-  Start-Sleep -Milliseconds 800
-  Start-Process -Wait -FilePath $setup.FullName -ArgumentList "/S"
-  Say "KiloNote is installed. Start menu > KiloNote, then right-click its taskbar icon > Pin to taskbar."
+  Say "Updating KiloNote…"
+  $result = & (Join-Path $PSScriptRoot "install-windows.ps1") -Setup $setup.FullName -Exe (Join-Path $out "KiloNote.exe") -Version $version | Select-Object -Last 1
+  switch ($result) {
+    "installed" { Say "KiloNote $version is installed. Start menu > KiloNote, then right-click its taskbar icon > Pin to taskbar." }
+    "updated-next-launch" { Say "KiloNote is open: the update applies the next time you open it." }
+    default { Say "KiloNote is up to date." }
+  }
 }

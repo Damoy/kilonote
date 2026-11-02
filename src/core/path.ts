@@ -31,14 +31,14 @@ export function join(dir: string, ...names: string[]): string {
   return out;
 }
 
-/** Lowercase extension, without the dot (`mc.TXT` → `txt`). */
+/** Lowercase extension, without the dot (`work.TXT` → `txt`). */
 export function extname(p: string): string {
   const b = basename(p);
   const i = b.lastIndexOf(".");
   return i > 0 ? b.slice(i + 1).toLowerCase() : "";
 }
 
-/** Name without extension (`mc_done.txt` → `mc_done`). */
+/** Name without extension (`work_done.txt` → `work_done`). */
 export function stem(p: string): string {
   const b = basename(p);
   const i = b.lastIndexOf(".");
@@ -63,7 +63,7 @@ export function isInside(child: string, parent: string): boolean {
   return isWindowsPath(child) ? c.toLowerCase().startsWith(p.toLowerCase()) : c.startsWith(p);
 }
 
-/** `projets/mc.txt` → `projets/mc_done.txt` */
+/** `projects/work.txt` → `projects/work_done.txt` */
 export function doneFileFor(p: string, suffix: string): string {
   const ext = extname(p) ? p.slice(p.lastIndexOf(".")) : "";
   return join(dirname(p), stem(p) + suffix + ext);

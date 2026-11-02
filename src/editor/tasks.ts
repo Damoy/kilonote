@@ -1,7 +1,7 @@
 // Tasks: a line that ends with " - <status>".
 //   - call colleague X - todo
 //   - call colleague X - ongoing
-//   - call colleague X - done [2026-11-02]      ← in mc_done.txt
+//   - call colleague X - done [2026-11-02]      ← in work_done.txt
 // This module is deliberately pure (no DOM) so that it is easy to test.
 
 export interface TaskConfig {

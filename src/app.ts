@@ -732,7 +732,7 @@ export class App {
     const color = this.settings.tab_colors.find((c) => !used.has(c) && c !== "grey") ?? "blue";
     const r = await prompt({
       title: "New tab group",
-      placeholder: "Group name (e.g. Project MC)",
+      placeholder: "Group name (e.g. Work)",
       okLabel: "Create",
       colors: { options: this.settings.tab_colors, selected: color },
     });
@@ -998,7 +998,7 @@ export class App {
     }
   }
 
-  /** Switches between mc.txt and mc_done.txt. */
+  /** Switches between work.txt and work_done.txt. */
   async toggleDoneFile() {
     const doc = this.active;
     if (!doc?.path) return;

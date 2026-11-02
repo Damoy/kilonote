@@ -87,7 +87,7 @@ export const SETTINGS_TEMPLATE = `// KiloNote settings
   "task_cycle": ["todo", "ongoing", "done"],
   // Statuses that mean "completed"
   "task_done_statuses": ["done", "ok"],
-  // Archiving (Ctrl+Shift+Enter): mc.txt → mc_done.txt
+  // Archiving (Ctrl+Shift+Enter): work.txt → work_done.txt
   "archive_suffix": "_done",
   // Status written to the archive file (unless the task is already completed)
   "archive_status": "done",

@@ -145,8 +145,8 @@ const DEMO_ROOT = "/Notes";
 
 function demoSeed(): Record<string, string> {
   return {
-    "/Notes/mc.txt": [
-      "# Project MC",
+    "/Notes/work.txt": [
+      "# Work",
       "",
       "- call colleague X about the schedule - ongoing",
       "- review the API v2 spec - todo",
@@ -155,9 +155,9 @@ function demoSeed(): Record<string, string> {
       "",
       "Meeting notes 2026-10-28 with @julie:",
       "- approve the budget before the end of November",
-      "- see https://wiki.example.com/mc for the docs",
+      "- see https://wiki.example.com/work for the docs",
     ].join("\n"),
-    "/Notes/mc_done.txt": [
+    "/Notes/work_done.txt": [
       "- set up CI - done [2026-01-15]",
       "- migrate the database to Postgres 17 - done [2026-03-02]",
       "- train the support team - ok [2026-06-20]",

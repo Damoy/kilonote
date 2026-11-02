@@ -2,7 +2,9 @@
 # Builds KiloNote for Windows from Linux or WSL (cross-compilation).
 #
 #   scripts/build-windows.sh            → installer + portable exe in dist-windows/
-#   scripts/build-windows.sh --install  → same, then installs/updates KiloNote on Windows (WSL)
+#   scripts/build-windows.sh --install  → same, then installs or updates KiloNote on Windows (WSL);
+#                                         an open KiloNote is not interrupted: the update applies
+#                                         the next time it is opened (see scripts/install-windows.ps1)
 #
 # Output:
 #   dist-windows/KiloNote_<version>_x64-setup.exe   installer (no administrator rights needed)
@@ -69,18 +71,24 @@ ls -lh "$OUT" | tail -n +2 | awk '{print "    " $5 "\t" $9}'
 
 if [ "$INSTALL" = 1 ]; then
   command -v powershell.exe >/dev/null 2>&1 || die "--install requires WSL (powershell.exe not found)"
-  say "Installing on Windows…"
+  say "Updating KiloNote on Windows…"
   WIN_TEMP=$(powershell.exe -NoProfile -Command '[IO.Path]::GetTempPath()' | tr -d '\r')
-  WIN_TEMP_WSL=$(wslpath -u "$WIN_TEMP")
-  cp "$OUT/$(basename "$SETUP")" "$WIN_TEMP_WSL/kilonote-setup.exe"
-  # Close a running instance, then install silently (user folder, no admin rights).
-  powershell.exe -NoProfile -Command "
-    Get-Process KiloNote, kilonote -ErrorAction SilentlyContinue | ForEach-Object { \$_.CloseMainWindow() | Out-Null };
-    Start-Sleep -Milliseconds 800;
-    Start-Process -Wait -FilePath '${WIN_TEMP}kilonote-setup.exe' -ArgumentList '/S';
-    Remove-Item '${WIN_TEMP}kilonote-setup.exe' -ErrorAction SilentlyContinue
-  " | tr -d '\r'
-  INSTALLED=$(powershell.exe -NoProfile -Command '(Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\KiloNote" -ErrorAction SilentlyContinue).InstallLocation' | tr -d '\r"')
-  say "KiloNote is installed${INSTALLED:+ in $INSTALLED}."
-  say "Start menu → KiloNote, then right-click its taskbar icon → \"Pin to taskbar\"."
+  STAGE="${WIN_TEMP}kilonote-install"
+  STAGE_WSL=$(wslpath -u "$STAGE")
+  rm -rf "$STAGE_WSL" && mkdir -p "$STAGE_WSL"
+  cp "$SETUP" "$STAGE_WSL/kilonote-setup.exe"
+  cp "$OUT/KiloNote.exe" "$STAGE_WSL/kilonote.exe"
+  cp "$ROOT/scripts/install-windows.ps1" "$STAGE_WSL/"
+  RESULT=$(powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$STAGE\\install-windows.ps1" \
+    -Setup "$STAGE\\kilonote-setup.exe" -Exe "$STAGE\\kilonote.exe" -Version "$VERSION" | tr -d '\r' | tail -1)
+  rm -rf "$STAGE_WSL"
+  case "$RESULT" in
+    installed)
+      say "KiloNote $VERSION is installed. Start menu → KiloNote, then right-click its taskbar icon → \"Pin to taskbar\"." ;;
+    updated-next-launch)
+      say "KiloNote is open: the update applies the next time you open it (close it, then reopen it from the taskbar)." ;;
+    updated)
+      say "KiloNote is up to date: open it from the taskbar." ;;
+    *) die "Windows install failed: $RESULT" ;;
+  esac
 fi
