@@ -2,6 +2,7 @@
 # Publie une nouvelle version de KiloNote sur GitHub.
 #
 #   scripts/release.sh patch|minor|major|X.Y.Z [--local] [--dry-run]
+#   scripts/release.sh 0.1.0      première publication de la version actuelle
 #
 #   patch   0.1.0 → 0.1.1      (corrections)
 #   minor   0.1.0 → 0.2.0      (nouveautés)
@@ -73,7 +74,8 @@ if [ "$DRY" = 1 ]; then
 fi
 
 # --- 2. Numéros de version --------------------------------------------------
-node -e '
+# (première publication de la version actuelle : rien à changer, on pose juste le tag)
+[ "$NEXT" != "$CURRENT" ] && node -e '
   const fs = require("fs");
   const v = process.argv[1];
   for (const f of ["package.json", "src-tauri/tauri.conf.json"]) {
@@ -97,8 +99,10 @@ npm test --silent
 npm run build --silent >/dev/null
 
 # --- 4. Commit, tag, push ---------------------------------------------------
-git add package.json package-lock.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
-git commit -q -m "Version $NEXT"
+if [ "$NEXT" != "$CURRENT" ]; then
+  git add package.json package-lock.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
+  git commit -q -m "Version $NEXT"
+fi
 git tag -a "$TAG" -m "KiloNote $NEXT"
 
 if [ "$LOCAL" = 1 ]; then
