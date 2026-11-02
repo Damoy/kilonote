@@ -1,0 +1,63 @@
+# Construit les installeurs Windows, macOS et Linux et les attache à une
+# release GitHub (brouillon). Déclenchement : pousser un tag « v0.1.0 »,
+# ou lancer le workflow à la main depuis l'onglet Actions.
+name: Publier
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            args: ""
+          - platform: macos-latest
+            args: "--target universal-apple-darwin"
+          - platform: ubuntu-22.04
+            args: ""
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dépendances système (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: "KiloNote v__VERSION__"
+          releaseBody: |
+            Téléchargez l'installeur de votre système :
+            - **Windows** : `KiloNote_x.y.z_x64-setup.exe` (installation sans droits administrateur)
+            - **macOS** : `KiloNote_x.y.z_universal.dmg`
+            - **Linux** : `.AppImage` (portable), `.deb` ou `.rpm`
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

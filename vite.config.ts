@@ -1,0 +1,21 @@
+import { defineConfig } from "vite";
+
+// Configuration pensée pour Tauri : port fixe, pas d'écran d'erreur masqué.
+const host = process.env.TAURI_DEV_HOST;
+
+export default defineConfig({
+  clearScreen: false,
+  server: {
+    port: 1420,
+    strictPort: true,
+    host: host || false,
+    watch: { ignored: ["**/src-tauri/**"] },
+  },
+  envPrefix: ["VITE_", "TAURI_ENV_"],
+  build: {
+    target: "es2022",
+    minify: !process.env.TAURI_ENV_DEBUG,
+    sourcemap: !!process.env.TAURI_ENV_DEBUG,
+    chunkSizeWarningLimit: 1200,
+  },
+});

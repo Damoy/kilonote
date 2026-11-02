@@ -1,0 +1,37 @@
+{
+  "name": "kilonote",
+  "private": true,
+  "version": "0.1.0",
+  "description": "KiloNote — prise de notes légère, élégante et taillée pour suivre ses tâches.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "tauri": "tauri",
+    "app:dev": "tauri dev",
+    "app:build": "tauri build",
+    "icons": "tauri icon src-tauri/icons/app-icon.svg"
+  },
+  "dependencies": {
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/search": "^6.7.2",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@lezer/common": "^1.5.5",
+    "@lezer/highlight": "^1.2.5",
+    "@lezer/markdown": "^1.8.1",
+    "@tauri-apps/api": "^2.12.4",
+    "@tauri-apps/plugin-dialog": "^2.8.4",
+    "@tauri-apps/plugin-opener": "^2.7.2"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.1.0"
+  }
+}

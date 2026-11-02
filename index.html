@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#16171c" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>KiloNote</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #1b1c22; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <aside id="sidebar"></aside>
+      <div id="sb-resizer" title="Glisser pour redimensionner (double-clic : taille par défaut)"></div>
+      <main id="main">
+        <div id="tabbar" role="tablist"></div>
+        <div id="editor-host"></div>
+        <div id="welcome" hidden></div>
+      </main>
+      <footer id="statusbar"></footer>
+    </div>
+    <div id="overlay-root"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
