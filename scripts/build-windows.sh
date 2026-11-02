@@ -7,6 +7,7 @@
 # Résultat :
 #   dist-windows/KiloNote_<version>_x64-setup.exe   installeur (sans droits administrateur)
 #   dist-windows/KiloNote.exe                       version portable (un seul fichier)
+#   dist-windows/SHA256SUMS.txt                     empreintes SHA-256
 #
 # La première fois, la chaîne de compilation est préparée automatiquement
 # (scripts/setup-windows-cross.sh). Sur une machine Windows, utilisez plutôt
@@ -62,6 +63,8 @@ rm -rf "$OUT"
 mkdir -p "$OUT"
 cp "$SETUP" "$OUT/"
 if [ -n "$EXE" ]; then cp "$EXE" "$OUT/KiloNote.exe"; fi
+# Empreintes pour vérifier les fichiers (Get-FileHash sous Windows).
+(cd "$OUT" && sha256sum -- *.exe > SHA256SUMS.txt)
 say "Fichiers prêts dans dist-windows/ :"
 ls -lh "$OUT" | tail -n +2 | awk '{print "    " $5 "\t" $9}'
 

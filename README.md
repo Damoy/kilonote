@@ -27,6 +27,14 @@ ligne de terminal sur son étiquette. Elle est dessinée pixel par pixel dans
 
 ---
 
+## Démarrage rapide
+
+1. Installez KiloNote : `KiloNote_x.y.z_x64-setup.exe` (Windows, sans droits administrateur).
+2. **Ctrl+Maj+O** : ouvrez le dossier qui contient vos notes.
+3. Écrivez une ligne puis **Ctrl+Entrée** : c'est une tâche (`todo` → `ongoing` → `done`).
+4. **Ctrl+Maj+Entrée** : la tâche terminée part, datée, dans `<projet>_done.txt`.
+5. **Ctrl+Maj+P** : toutes les commandes. **Ctrl+,** : tous les réglages.
+
 ## Fonctionnalités
 
 **Éditeur**
@@ -92,11 +100,20 @@ Les installeurs (`.dmg`, `.AppImage`, `.deb`, `.rpm`) sont produits par GitHub A
 publiés dans les *Releases* du dépôt. Sur macOS, la première fois : clic droit sur KiloNote →
 *Ouvrir* (application non signée).
 
+### Au travail
+
+KiloNote est un simple éditeur de fichiers locaux : **aucun accès réseau, aucune télémétrie,
+aucun droit administrateur**. L'exécutable n'est toutefois pas signé, et installer un logiciel
+hors catalogue peut relever de la charte informatique de votre entreprise : demandez l'accord
+de votre service informatique en lui transmettant la [fiche sécurité](docs/SECURITE.md).
+Chaque version est livrée avec ses empreintes SHA-256 (`SHA256SUMS.txt`), ce qui permet
+d'autoriser précisément ce fichier (AppLocker, EDR…).
+
 ## Construire
 
 | Commande | Effet |
 |---|---|
-| `npm run build:windows` | installeur + exe portable Windows dans `dist-windows/`, **depuis Linux ou WSL** |
+| `npm run build:windows` | installeur + exe portable Windows (+ `SHA256SUMS.txt`) dans `dist-windows/`, **depuis Linux ou WSL** |
 | `npm run install:windows` | idem, puis installe/met à jour KiloNote sous Windows (depuis WSL) |
 | `scripts\build-windows.ps1 [-Install]` | même chose, directement sous Windows (PowerShell) |
 | `npm run app:build` | build natif pour le système courant |

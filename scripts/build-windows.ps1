@@ -54,6 +54,9 @@ Remove-Item $out -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory $out | Out-Null
 Copy-Item $setup.FullName $out
 if ($exe) { Copy-Item $exe (Join-Path $out "KiloNote.exe") }
+# Empreintes SHA-256 (même format que sha256sum).
+Get-ChildItem $out -Filter *.exe | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name } |
+  Set-Content (Join-Path $out "SHA256SUMS.txt") -Encoding ascii
 Say "Fichiers prêts dans dist-windows\ :"
 Get-ChildItem $out | ForEach-Object { "    {0,8:N1} Mo  {1}" -f ($_.Length / 1MB), $_.Name }
 
