@@ -31,6 +31,7 @@ export interface Settings {
   archive_date: boolean;
   auto_archive: boolean;
   tab_colors: string[];
+  mascot: string;
   keybindings: Record<string, string>;
 }
 
@@ -39,8 +40,13 @@ export const SETTINGS_TEMPLATE = `// KiloNote settings
 // Change a value and save (Ctrl+S): everything applies immediately.
 // Comments and trailing commas are allowed.
 {
-  // Theme: "auto" (follows the system), "midnight", "paper", "forest", "ocean", "sand", "retro"
+  // Theme: "auto" (follows the system), or one of
+  //   dark:  "midnight", "forest", "ocean", "retro", "dusk", "slate", "abyss", "neon", "ember"
+  //   light: "paper", "sand", "mint", "sakura", "latte", "frost"
   "theme": "midnight",
+  // Kilo's color on the welcome screen: "theme" (follows the accent color) or one of
+  // "classic", "mint", "ocean", "ember", "sakura", "retro", "slate", "ink"
+  "mascot": "theme",
   // Custom accent color (e.g. "#ff8a65"), or null to use the theme's
   "accent": null,
   // Override any theme color. Available keys:

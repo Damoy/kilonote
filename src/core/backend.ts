@@ -23,6 +23,8 @@ export type Platform = "windows" | "macos" | "linux";
 export interface Backend {
   readonly kind: "tauri" | "web";
   readonly platform: Platform;
+  /** "main" for the first window, "kn-…" for the others. */
+  readonly windowLabel: string;
   readText(path: string): Promise<FileText>;
   writeText(path: string, text: string, bom?: boolean): Promise<Meta>;
   appendLines(path: string, lines: string[]): Promise<Meta>;
@@ -35,12 +37,20 @@ export interface Backend {
   rename(from: string, to: string): Promise<void>;
   trash(path: string): Promise<void>;
   configDir(): Promise<string>;
-  startupPaths(): Promise<string[]>;
+  /** Paths this window must open (command line for the main window). */
+  windowPaths(): Promise<string[]>;
+  /** Opens another window, optionally restoring a saved one by its label. */
+  openWindow(paths: string[], label?: string): Promise<void>;
+  windowCount(): Promise<number>;
+  /** Removes the saved session of a window (config folder only). */
+  deleteSession(label: string): Promise<void>;
+  /** Tells the other windows that the settings file changed. */
+  broadcastSettingsChanged(): void;
+  onSettingsChanged(handler: () => void): void;
   pickFolder(): Promise<string | null>;
   pickFiles(): Promise<string[]>;
   pickSavePath(defaultPath?: string): Promise<string | null>;
   openUrl(url: string): Promise<void>;
-  openPath(path: string): Promise<void>;
   reveal(path: string): Promise<void>;
   setTitle(title: string): void;
   setDark(dark: boolean): void;
@@ -69,7 +79,7 @@ export async function createTauriBackend(): Promise<Backend> {
   const { invoke } = await import("@tauri-apps/api/core");
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
   const { getCurrentWebview } = await import("@tauri-apps/api/webview");
-  const { listen } = await import("@tauri-apps/api/event");
+  const { emit, listen } = await import("@tauri-apps/api/event");
   const dialog = await import("@tauri-apps/plugin-dialog");
   const opener = await import("@tauri-apps/plugin-opener");
   const win = getCurrentWindow();
@@ -93,7 +103,17 @@ export async function createTauriBackend(): Promise<Backend> {
       cfgDir ??= await invoke<string>("config_dir");
       return cfgDir;
     },
-    startupPaths: () => invoke<string[]>("startup_paths"),
+    windowLabel: win.label,
+    windowPaths: () => invoke<string[]>("window_paths"),
+    openWindow: async (paths, label) => void (await invoke<string>("open_window", { paths, label: label ?? null })),
+    windowCount: () => invoke<number>("window_count"),
+    deleteSession: (label) => invoke("delete_session", { label }),
+    broadcastSettingsChanged: () => void emit("kilonote://settings-changed", { from: win.label }),
+    onSettingsChanged(handler) {
+      void listen<{ from: string }>("kilonote://settings-changed", (ev) => {
+        if (ev.payload.from !== win.label) handler();
+      });
+    },
     async pickFolder() {
       const r = await dialog.open({ directory: true, multiple: false, title: "Open folder" });
       return typeof r === "string" ? r : null;
@@ -106,7 +126,6 @@ export async function createTauriBackend(): Promise<Backend> {
       return (await dialog.save({ defaultPath, title: "Save as" })) ?? null;
     },
     openUrl: (url) => opener.openUrl(url),
-    openPath: (path) => opener.openPath(path),
     reveal: (path) => opener.revealItemInDir(path),
     setTitle: (title) => void win.setTitle(title).catch(() => {}),
     setDark: (dark) => void win.setTheme(dark ? "dark" : "light").catch(() => {}),
@@ -182,6 +201,9 @@ interface DemoFile {
 }
 
 export function createWebBackend(): Backend {
+  // Each browser window of the demo plays a KiloNote window (?window=kn-…).
+  const windowLabel = new URLSearchParams(location.search).get("window") ?? "main";
+  const channel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("kilonote") : null;
   const files = new Map<string, DemoFile>();
   const dirs = new Set<string>([DEMO_ROOT, "/.config"]);
   try {
@@ -191,6 +213,16 @@ export function createWebBackend(): Backend {
   } catch {
     for (const [p, text] of Object.entries(demoSeed())) files.set(p, { text, mtime: Date.now() });
   }
+  // Another demo window changed the files: reload them.
+  const syncFromStorage = () => {
+    const raw = localStorage.getItem(DEMO_KEY);
+    if (!raw) return;
+    files.clear();
+    for (const [p, text] of Object.entries(JSON.parse(raw) as Record<string, string>)) files.set(p, { text, mtime: Date.now() });
+  };
+  window.addEventListener("storage", (e) => {
+    if (e.key === DEMO_KEY) syncFromStorage();
+  });
   const ensureDirs = (p: string) => {
     for (let d = dirname(p); d && d !== "/"; d = dirname(d)) dirs.add(d);
   };
@@ -283,7 +315,32 @@ export function createWebBackend(): Backend {
       persist();
     },
     configDir: async () => "/.config",
-    startupPaths: async () => [DEMO_ROOT],
+    windowLabel,
+    async windowPaths() {
+      if (windowLabel === "main") return [DEMO_ROOT];
+      const key = `kilonote-window-${windowLabel}`;
+      const paths = JSON.parse(localStorage.getItem(key) ?? "[]") as string[];
+      localStorage.removeItem(key);
+      return paths;
+    },
+    async openWindow(paths, label) {
+      const next = label ?? `kn-${Date.now().toString(36)}`;
+      localStorage.setItem(`kilonote-window-${next}`, JSON.stringify(paths));
+      window.open(`${location.pathname}?window=${encodeURIComponent(next)}`, "_blank");
+    },
+    windowCount: async () => 1,
+    async deleteSession(label) {
+      files.delete(label === "main" ? "/.config/session.json" : `/.config/session-${label}.json`);
+      persist();
+    },
+    broadcastSettingsChanged: () => channel?.postMessage({ type: "settings", from: windowLabel }),
+    onSettingsChanged(handler) {
+      channel?.addEventListener("message", (e: MessageEvent) => {
+        if (e.data?.type !== "settings" || e.data.from === windowLabel) return;
+        syncFromStorage(); // the message can arrive before the storage event
+        handler();
+      });
+    },
     async pickFolder() {
       return DEMO_ROOT;
     },
@@ -295,7 +352,6 @@ export function createWebBackend(): Backend {
       return name || null;
     },
     openUrl: async (url) => void window.open(url, "_blank", "noopener"),
-    openPath: async () => {},
     reveal: async () => {},
     setTitle: (t) => void (document.title = t),
     setDark: () => {},

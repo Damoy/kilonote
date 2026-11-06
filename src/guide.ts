@@ -42,6 +42,13 @@ to paste into a yearly review. Ongoing tasks are listed too.
 - Ctrl+1…9: go to tab number N. Ctrl+Tab: next tab.
 - Ctrl+Shift+T: reopen the last closed tab.
 
+## Windows
+
+- **Ctrl+Shift+N**: new window. Each window has its own tabs and folder.
+- Right-click a tab → "Move to new window"; right-click a folder → "Open folder in new window".
+- Every window comes back the next time you open KiloNote.
+- The sidebar and the folder close from the buttons at the top of the sidebar (or Ctrl+B).
+
 ## Navigation
 
 - **Ctrl+P**: go to any file of the folder (fuzzy search).
@@ -58,7 +65,8 @@ to paste into a yearly review. Ongoing tasks are listed too.
 statuses and their colors, archive suffix, shortcuts… Save it: everything applies
 right away.
 
-- Themes: Midnight, Paper, Forest, Ocean, Sand, Retro (or automatic).
+- 15 themes (Midnight, Paper, Forest, Ocean, Sand, Retro, Dusk, Slate, Abyss, Neon, Ember,
+  Mint, Sakura, Latte, Frost), or automatic. Kilo, the mascot, takes the theme's color.
 - Command palette → "Theme: Accent color…" to change the main color.
 - Ctrl+= / Ctrl+-: text size. Shift+F11: zen mode. Ctrl+B: sidebar.
 

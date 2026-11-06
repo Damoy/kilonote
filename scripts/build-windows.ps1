@@ -3,7 +3,7 @@
   Builds KiloNote directly on Windows.
 
 .DESCRIPTION
-  Produces in dist-windows\:
+  Produces in dist-windows\ (copied to %USERPROFILE%\dev-builds\kilonote\ too):
     KiloNote_<version>_x64-setup.exe   installer (no administrator rights needed)
     KiloNote.exe                       portable version
     SHA256SUMS.txt                     SHA-256 checksums
@@ -16,11 +16,12 @@
   From WSL or Linux, use scripts/build-windows.sh instead (nothing to install on Windows).
 
 .PARAMETER Install
-  Installs or updates KiloNote after building it (see scripts/install-windows.ps1:
-  an open KiloNote is not interrupted, the update applies at its next launch).
+  Updates the installed KiloNote after building it, with plain file copies: an open
+  KiloNote keeps running and the new build starts the next time it is opened.
+  Nothing is launched; a first install is done by running the installer yourself.
 
 .EXAMPLE
-  powershell -ExecutionPolicy Bypass -File scripts\build-windows.ps1 -Install
+  .\scripts\build-windows.ps1 -Install
 #>
 param([switch]$Install)
 
@@ -62,12 +63,22 @@ Get-ChildItem $out -Filter *.exe | ForEach-Object { "{0}  {1}" -f (Get-FileHash 
 Say "Files ready in dist-windows\:"
 Get-ChildItem $out | ForEach-Object { "    {0,8:N1} MB  {1}" -f ($_.Length / 1MB), $_.Name }
 
+$builds = Join-Path $env:USERPROFILE "dev-builds\kilonote"
+New-Item -ItemType Directory $builds -Force | Out-Null
+Copy-Item (Join-Path $out "*") $builds -Force
+Say "Copied to $builds"
+
 if ($Install) {
-  Say "Updating KiloNote…"
-  $result = & (Join-Path $PSScriptRoot "install-windows.ps1") -Setup $setup.FullName -Exe (Join-Path $out "KiloNote.exe") -Version $version | Select-Object -Last 1
-  switch ($result) {
-    "installed" { Say "KiloNote $version is installed. Start menu > KiloNote, then right-click its taskbar icon > Pin to taskbar." }
-    "updated-next-launch" { Say "KiloNote is open: the update applies the next time you open it." }
-    default { Say "KiloNote is up to date." }
+  $appDir = Join-Path $env:LOCALAPPDATA "KiloNote"
+  $target = Join-Path $appDir "kilonote.exe"
+  if (-not (Test-Path $target)) {
+    Say "KiloNote is not installed yet. Run the installer yourself: $(Join-Path $builds $setup.Name)"
+    return
   }
+  # Executables left by previous updates (one still in use stays until next time).
+  Get-ChildItem $appDir -Filter "kilonote.*.old" | Remove-Item -ErrorAction SilentlyContinue
+  # A running exe can be renamed, not overwritten: rename, then copy.
+  Rename-Item $target ("kilonote.{0:yyyyMMdd-HHmmss}.old" -f (Get-Date))
+  Copy-Item (Join-Path $out "KiloNote.exe") $target
+  Say "KiloNote is updated: the new build starts the next time you open it."
 }

@@ -2,14 +2,19 @@
 # Builds KiloNote for Windows from Linux or WSL (cross-compilation).
 #
 #   scripts/build-windows.sh            → installer + portable exe in dist-windows/
-#   scripts/build-windows.sh --install  → same, then installs or updates KiloNote on Windows (WSL);
-#                                         an open KiloNote is not interrupted: the update applies
-#                                         the next time it is opened (see scripts/install-windows.ps1)
+#                                         (and in %USERPROFILE%\dev-builds\kilonote\ on WSL)
+#   scripts/build-windows.sh --install  → same, then updates the installed KiloNote (WSL)
 #
 # Output:
 #   dist-windows/KiloNote_<version>_x64-setup.exe   installer (no administrator rights needed)
 #   dist-windows/KiloNote.exe                       portable version (a single file)
 #   dist-windows/SHA256SUMS.txt                     SHA-256 checksums
+#
+# --install only copies files from WSL: it never starts a Windows process, never
+# runs the installer and never launches KiloNote. If KiloNote is installed, its exe
+# is swapped in place (an open window keeps running; the new build starts the next
+# time KiloNote is opened). A first install is done by running the installer yourself.
+# Set KILONOTE_WINDOWS_HOME=/mnt/c/Users/<you> if your Windows profile is not detected.
 #
 # The first run sets up the toolchain automatically (scripts/setup-windows-cross.sh).
 # On a Windows machine, use scripts/build-windows.ps1 instead.
@@ -24,7 +29,7 @@ INSTALL=0
 for arg in "$@"; do
   case "$arg" in
     --install) INSTALL=1 ;;
-    -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -69,26 +74,43 @@ if [ -n "$EXE" ]; then cp "$EXE" "$OUT/KiloNote.exe"; fi
 say "Files ready in dist-windows/:"
 ls -lh "$OUT" | tail -n +2 | awk '{print "    " $5 "\t" $9}'
 
+# --- Windows side (WSL): plain file copies, no Windows process ----------------
+# The Windows profile: the one where KiloNote is installed, otherwise the only real one.
+windows_home() {
+  if [ -n "${KILONOTE_WINDOWS_HOME:-}" ]; then echo "$KILONOTE_WINDOWS_HOME"; return 0; fi
+  local exe profiles=()
+  for exe in /mnt/c/Users/*/AppData/Local/KiloNote/kilonote.exe; do
+    if [ -f "$exe" ]; then echo "${exe%/AppData/Local/KiloNote/kilonote.exe}"; return 0; fi
+  done
+  for exe in /mnt/c/Users/*/; do
+    case "$(basename "$exe")" in Public|Default|"Default User"|"All Users") ;; *) profiles+=("${exe%/}") ;; esac
+  done
+  if [ "${#profiles[@]}" = 1 ]; then echo "${profiles[0]}"; return 0; fi
+  return 1
+}
+
+WIN_HOME=""
+if [ -d /mnt/c/Users ]; then WIN_HOME=$(windows_home || true); fi
+if [ -n "$WIN_HOME" ]; then
+  BUILDS="$WIN_HOME/dev-builds/kilonote"
+  mkdir -p "$BUILDS"
+  cp "$OUT"/* "$BUILDS/"
+  say "Copied to $(wslpath -w "$BUILDS")"
+fi
+
 if [ "$INSTALL" = 1 ]; then
-  command -v powershell.exe >/dev/null 2>&1 || die "--install requires WSL (powershell.exe not found)"
-  say "Updating KiloNote on Windows…"
-  WIN_TEMP=$(powershell.exe -NoProfile -Command '[IO.Path]::GetTempPath()' | tr -d '\r')
-  STAGE="${WIN_TEMP}kilonote-install"
-  STAGE_WSL=$(wslpath -u "$STAGE")
-  rm -rf "$STAGE_WSL" && mkdir -p "$STAGE_WSL"
-  cp "$SETUP" "$STAGE_WSL/kilonote-setup.exe"
-  cp "$OUT/KiloNote.exe" "$STAGE_WSL/kilonote.exe"
-  cp "$ROOT/scripts/install-windows.ps1" "$STAGE_WSL/"
-  RESULT=$(powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$STAGE\\install-windows.ps1" \
-    -Setup "$STAGE\\kilonote-setup.exe" -Exe "$STAGE\\kilonote.exe" -Version "$VERSION" | tr -d '\r' | tail -1)
-  rm -rf "$STAGE_WSL"
-  case "$RESULT" in
-    installed)
-      say "KiloNote $VERSION is installed. Start menu → KiloNote, then right-click its taskbar icon → \"Pin to taskbar\"." ;;
-    updated-next-launch)
-      say "KiloNote is open: the update applies the next time you open it (close it, then reopen it from the taskbar)." ;;
-    updated)
-      say "KiloNote is up to date: open it from the taskbar." ;;
-    *) die "Windows install failed: $RESULT" ;;
-  esac
+  [ -n "$WIN_HOME" ] || die "Windows profile not found: set KILONOTE_WINDOWS_HOME=/mnt/c/Users/<you>"
+  APP_DIR="$WIN_HOME/AppData/Local/KiloNote"
+  if [ ! -f "$APP_DIR/kilonote.exe" ]; then
+    say "KiloNote is not installed yet. Run the installer yourself:"
+    say "  $(wslpath -w "$BUILDS/$(basename "$SETUP")")"
+    exit 0
+  fi
+  # Executables left by previous updates (one still in use stays until next time).
+  for old in "$APP_DIR"/kilonote.*.old; do [ -e "$old" ] && rm -f "$old" 2>/dev/null || true; done
+  # A running exe can be renamed on Windows, not overwritten: rename, then copy.
+  mv "$APP_DIR/kilonote.exe" "$APP_DIR/kilonote.$(date +%Y%m%d-%H%M%S).old" ||
+    die "Could not update $(wslpath -w "$APP_DIR"): close KiloNote and run this again"
+  cp "$OUT/KiloNote.exe" "$APP_DIR/kilonote.exe"
+  say "KiloNote is updated: the new build starts the next time you open it."
 fi

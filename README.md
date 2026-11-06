@@ -23,7 +23,8 @@ other tool can read.
 
 Its mascot is **Kilo**, a pixel art floppy disk (the kilobyte, in person) with a terminal
 line on its label. It is drawn pixel by pixel in
-[`scripts/generate-icons.py`](scripts/generate-icons.py), which generates every icon.
+[`scripts/generate-icons.py`](scripts/generate-icons.py), which generates every icon and the
+[logo pack](#logo-pack). In the app, Kilo takes the color of your theme.
 
 ![KiloNote, Midnight theme: tasks view and the "Work" tab group](docs/screenshot-dark.png)
 
@@ -64,12 +65,17 @@ On macOS, use ⌘ instead of Ctrl.
 - **Activity report**: a summary of the year by project and by month, ready for your yearly review
 
 **Organization**
+- **Several windows** (Ctrl+Shift+N), each with its own tabs and folder; move a tab to a new
+  window; every window comes back at the next launch
 - Colored tabs and **tab groups** with a name and a color, collapsible; drag and drop
+- Sidebar and folder can be closed from their own buttons (or Ctrl+B)
 - File explorer, fuzzy file search (Ctrl+P), search in all files (Ctrl+Shift+F)
 - Command palette (Ctrl+Shift+P), go to a heading or task (Ctrl+R), go to a line (Ctrl+G)
 
 **Customization**
-- 6 themes (Midnight, Paper, Forest, Ocean, Sand, Retro), or automatic based on the system
+- 15 themes: Midnight, Forest, Ocean, Retro, Dusk, Slate, Abyss, Neon, Ember (dark);
+  Paper, Sand, Mint, Sakura, Latte, Frost (light); or automatic based on the system
+- Kilo, the mascot, takes the theme's accent color, or one of the [logo pack](#logo-pack) colors
 - Accent color, any theme color, font, size, line height
 - Task statuses and their colors, the status cycle, the archive suffix, keyboard shortcuts: all in a commented `settings.json`
 - Zen mode (Shift+F11), full screen (F11)
@@ -106,6 +112,11 @@ Run `KiloNote_<version>_x64-setup.exe`. It installs **without administrator righ
 right-click its taskbar icon → **Pin to taskbar**. The `KiloNote.exe` produced by the build
 scripts is also a portable version (nothing to install).
 
+The installer also adds KiloNote to Explorer's **Open with** menu for `.txt`, `.md`,
+`.markdown`, `.text`, `.note`, `.todo` and `.log` files, without changing your default
+apps: right-click a file → *Open with* → *KiloNote*, and tick *Always* if you want
+double-clicks to open it in KiloNote. The portable exe does not register anything.
+
 The app is not code-signed yet, so SmartScreen may warn you the first time:
 *More info* → *Run anyway*.
 
@@ -126,12 +137,16 @@ Applications. The app is not signed: the first time, right-click KiloNote → *O
 The AppImage needs FUSE 2: `sudo apt install libfuse2` (Ubuntu 22.04) or `libfuse2t64`
 (Ubuntu 24.04+). Without it, run it with `--appimage-extract-and-run`.
 
+The `.deb` and `.rpm` packages register KiloNote for text and Markdown files, so it shows up
+in your file manager's *Open with* menu.
+
 To build it yourself on Linux, see [Build from source](#build-from-source).
 
 ### Using KiloNote at work
 
 KiloNote is a plain local file editor: **no network access, no telemetry, no administrator
-rights**. The executable is not signed, though, and installing software that is not in your
+rights, and it never runs other programs** (a non-text file can only be revealed in the file
+manager). The executable is not signed, though, and installing software that is not in your
 company's catalog may fall under its IT policy: ask your IT team first and give them the
 [security sheet](docs/SECURITY.md). The published SHA-256 checksums let them allow this exact
 file (AppLocker, EDR…).
@@ -153,6 +168,7 @@ On macOS, Ctrl becomes ⌘.
 | Find / replace | Ctrl+F / Ctrl+H |
 | Search in folder | Ctrl+Shift+F |
 | New note / open file / open folder | Ctrl+N / Ctrl+O / Ctrl+Shift+O |
+| New window | Ctrl+Shift+N |
 | Save / save as | Ctrl+S / Ctrl+Shift+S |
 | Close / reopen a tab | Ctrl+W / Ctrl+Shift+T |
 | Next tab / tab #N | Ctrl+Tab / Ctrl+1…9 |
@@ -204,11 +220,11 @@ system dependencies of [Tauri](https://tauri.app/start/prerequisites/) for your 
 | `npm run app:dev` | runs the app in development mode |
 | `npm run app:build` | native build for the current system, in `src-tauri/target/release/bundle/` |
 | `npm run build:windows` | Windows installer + portable exe (+ `SHA256SUMS.txt`) in `dist-windows/`, **from Linux or WSL** |
-| `npm run install:windows` | same, then installs or updates KiloNote on Windows (from WSL): an open KiloNote keeps running, and the new build starts the next time you open it |
+| `npm run install:windows` | same, then updates the installed KiloNote (from WSL, see below) |
 | `scripts\build-windows.ps1 [-Install]` | same, directly on Windows (PowerShell) |
 | `npm run dev` | the interface alone in a browser, with demo notes |
 | `npm test` | unit tests |
-| `npm run icons` | regenerates every icon from the pixel art in `scripts/generate-icons.py` |
+| `npm run icons` | regenerates every icon and the logo pack from the pixel art in `scripts/generate-icons.py` |
 
 ### Linux
 
@@ -238,12 +254,30 @@ sudo apt install ./src-tauri/target/release/bundle/deb/KiloNote_*_amd64.deb   # 
   commands are in the script's help: `Get-Help scripts\build-windows.ps1`), then
   `scripts\build-windows.ps1`.
 
+Builds are also copied to `%USERPROFILE%\dev-builds\kilonote\`. The update step
+(`install:windows`, `-Install`) only copies files: it never starts a Windows process, never
+runs the installer and never launches KiloNote. When KiloNote is installed, its exe is swapped
+in place (an open window keeps running, and the new build starts the next time you open the
+app, e.g. from its pinned taskbar icon). For a first install, or to register *Open with*, run
+the installer from `dev-builds` yourself. From WSL, set `KILONOTE_WINDOWS_HOME=/mnt/c/Users/<you>`
+if your Windows profile is not detected.
+
 ### macOS
 
 `xcode-select --install`, then `npm ci && npm run app:build`.
 
 You can pass a folder or a file as an argument: `kilonote ~/notes` or `KiloNote.exe C:\notes`.
 If KiloNote is already open, the existing window comes to the front and opens it.
+
+## Logo pack
+
+[`docs/logo-pack/`](docs/logo-pack) holds Kilo in eight colors (classic, mint, ocean, ember,
+sakura, retro, slate, ink), each as an icon and a mascot in SVG, PNG and ICO, plus the
+pixel art "KiloNote" logotype for light and dark backgrounds.
+
+![Kilo in the eight colors of the logo pack](docs/logo-pack/preview.png)
+
+To build the app with another icon: `KILONOTE_ICON=mint npm run icons`, then build as usual.
 
 ## Release a new version
 

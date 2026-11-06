@@ -50,12 +50,17 @@
         "installMode": "currentUser",
         "languages": [
           "English"
-        ]
+        ],
+        "installerHooks": "windows/installer-hooks.nsh"
       }
     },
     "linux": {
       "deb": {
-        "section": "editors"
+        "section": "editors",
+        "desktopTemplate": "linux/kilonote.desktop"
+      },
+      "rpm": {
+        "desktopTemplate": "linux/kilonote.desktop"
       }
     },
     "license": "MIT",

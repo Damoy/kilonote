@@ -1,9 +1,10 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissions of the KiloNote main window",
+  "description": "Permissions of the KiloNote windows",
   "windows": [
-    "main"
+    "main",
+    "kn-*"
   ],
   "permissions": [
     "core:default",
@@ -17,14 +18,6 @@
     "core:window:allow-is-fullscreen",
     "dialog:default",
     "opener:default",
-    "window-state:default",
-    {
-      "identifier": "opener:allow-open-path",
-      "allow": [
-        {
-          "path": "**"
-        }
-      ]
-    }
+    "window-state:default"
   ]
 }

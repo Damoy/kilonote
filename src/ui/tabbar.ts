@@ -21,7 +21,9 @@ export class TabBar {
       h("button", { class: "kn-icon-btn", title: titleWithKey("New note", "file.new"), onclick: () => app.newDoc() }, icon("plus")),
       h("button", { class: "kn-icon-btn", title: titleWithKey("Command palette", "palette.commands"), onclick: () => app.openCommandPalette() }, icon("more")),
     );
-    el.append(this.scroller, actions);
+    // Shown only while the sidebar is hidden (see .no-sidebar in the CSS).
+    const showSidebar = h("button", { class: "kn-icon-btn kn-show-sidebar", title: titleWithKey("Show sidebar", "view.sidebar"), onclick: () => app.sidebar.toggle() }, icon("panelOpen"));
+    el.append(showSidebar, this.scroller, actions);
     this.scroller.addEventListener("wheel", (e) => {
       if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
         this.scroller.scrollLeft += e.deltaY;
@@ -206,6 +208,7 @@ export class TabBar {
       { label: "Close", icon: "x", shortcut: shortcutFor("tab.close"), action: () => app.closeDoc(doc) },
       { label: "Close others", action: () => app.closeMany(app.docs.filter((d) => d !== doc)) },
       { label: "Close tabs to the right", disabled: idx === app.docs.length - 1, action: () => app.closeMany(app.docs.slice(idx + 1)) },
+      { label: "Move to new window", icon: "newWindow", disabled: !doc.path, action: () => app.moveToNewWindow(doc) },
       { separator: true },
       { header: "Color" },
       { colors: app.settings.tab_colors, selected: doc.color, allowNone: true, onPick: (c) => this.setColor(doc, c) },

@@ -10,12 +10,15 @@ This script turns them into every icon file, with no dependency:
   src-tauri/icons/*.png        crisp PNGs ("nearest neighbor" upscaling)
   src-tauri/icons/icon.ico     multi-size Windows ICO: 16, 24, 32, 48, 64, 128, 256
   docs/kilo-1024.png           large version (source for `tauri icon`, macOS)
+  docs/logo-pack/              color variants (SVG, PNG, ICO), logotype, preview sheet
 
 Usage: python3 scripts/generate-icons.py
+       KILONOTE_ICON=mint python3 scripts/generate-icons.py   (app icon from another variant)
 """
 
 from __future__ import annotations
 
+import os
 import struct
 import zlib
 from pathlib import Path
@@ -161,12 +164,12 @@ def parse(art: str) -> list[str]:
     return rows
 
 
-def to_rgba(rows: list[str]) -> list[list[tuple[int, int, int, int]]]:
+def to_rgba(rows: list[str], palette: dict = PALETTE) -> list[list[tuple[int, int, int, int]]]:
     out = []
     for r in rows:
         line = []
         for ch in r:
-            c = PALETTE[ch]
+            c = palette[ch]
             line.append((0, 0, 0, 0) if c is None else (*c, 255))
         out.append(line)
     return out
@@ -219,11 +222,15 @@ def ico_bytes(images: list[tuple[int, bytes]]) -> bytes:
     return header + entries + data
 
 
-def svg(rows: list[str], label: str, eyes_class: str | None = None) -> str:
+# Body colors get a class so that the app can recolor Kilo with the theme accent.
+THEMABLE = {"P": "kb", "p": "kbs", "L": "kbh"}
+
+
+def svg(rows: list[str], label: str, palette: dict = PALETTE, eyes_class: str | None = None, themable: bool = False) -> str:
     """One <rect> per horizontal run of same-colored pixels, crisp rendering.
 
     With `eyes_class`, the eye pixels ("E") are grouped so that CSS can
-    animate them (blinking).
+    animate them (blinking). With `themable`, body colors carry a class.
     """
     w = len(rows[0])
     by_color: dict[str, list[str]] = {}
@@ -235,14 +242,17 @@ def svg(rows: list[str], label: str, eyes_class: str | None = None) -> str:
             run = 1
             while x + run < w and r[x + run] == ch:
                 run += 1
-            if PALETTE[ch] is not None:
+            if palette[ch] is not None:
                 rect = f'<rect x="{x}" y="{y}" width="{run}" height="1"'
                 if eyes_class and ch == "E":
-                    eyes.append(f'{rect} fill="{hexa(ch)}"/>')
+                    eyes.append(f'{rect} fill="{hexa(ch, palette)}"/>')
                 else:
                     by_color.setdefault(ch, []).append(rect + "/>")
             x += run
-    parts = [f'<g fill="{hexa(ch)}">{"".join(rects)}</g>' for ch, rects in by_color.items()]
+    parts = []
+    for ch, rects in by_color.items():
+        cls = f' class="{THEMABLE[ch]}"' if themable and ch in THEMABLE else ""
+        parts.append(f'<g{cls} fill="{hexa(ch, palette)}">{"".join(rects)}</g>')
     if eyes:
         parts.append(f'<g class="{eyes_class}">{"".join(eyes)}</g>')
     h = len(rows)
@@ -252,15 +262,106 @@ def svg(rows: list[str], label: str, eyes_class: str | None = None) -> str:
     )
 
 
-def hexa(ch: str) -> str:
-    r, g, b = PALETTE[ch]  # type: ignore[misc]
+def hexa(ch: str, palette: dict = PALETTE) -> str:
+    r, g, b = palette[ch]  # type: ignore[misc]
     return f"#{r:02X}{g:02X}{b:02X}"
+
+
+# --- Logo pack -----------------------------------------------------------------
+
+def rgb(h: str) -> tuple[int, int, int]:
+    return int(h[1:3], 16), int(h[3:5], 16), int(h[5:7], 16)
+
+
+# Color variants of Kilo: body, body shade, body highlight.
+VARIANTS = {
+    "classic": ("#7B6CF6", "#5A4AD6", "#A79CFF"),
+    "mint": ("#2BB383", "#1E8A64", "#6FD8AE"),
+    "ocean": ("#3D8BFD", "#2A64C4", "#86B6FF"),
+    "ember": ("#FF7A3D", "#D6552A", "#FFA67A"),
+    "sakura": ("#F06292", "#C94775", "#F799B8"),
+    "retro": ("#FFB000", "#C98600", "#FFD066"),
+    "slate": ("#6B7A8F", "#4E5A6B", "#9AA6B6"),
+    "ink": ("#3A3A46", "#26262F", "#5C5C6B"),
+}
+
+
+def variant_palette(name: str) -> dict:
+    body, shade, light = VARIANTS[name]
+    return {**PALETTE, "P": rgb(body), "p": rgb(shade), "L": rgb(light)}
+
+
+# 5×7 pixel font for the "KiloNote" logotype (only the letters it needs).
+FONT = {
+    "K": ["X...X", "X..X.", "X.X..", "XX...", "X.X..", "X..X.", "X...X"],
+    "i": [".X.", "...", "XX.", ".X.", ".X.", ".X.", "XXX"],
+    "l": ["XX.", ".X.", ".X.", ".X.", ".X.", ".X.", "XXX"],
+    "o": [".....", ".....", ".XXX.", "X...X", "X...X", "X...X", ".XXX."],
+    "N": ["X...X", "XX..X", "X.X.X", "X..XX", "X...X", "X...X", "X...X"],
+    "t": [".X..", ".X..", "XXXX", ".X..", ".X..", ".X..", "..XX"],
+    "e": [".....", ".....", ".XXX.", "X...X", "XXXXX", "X....", ".XXX."],
+}
+
+
+def wordmark(first: str, second: str) -> tuple[list[str], dict]:
+    """"Kilo" in `first`, "Note" in `second` (palette chars A and B), 1 px apart."""
+    rows = [""] * 7
+    for i, letter in enumerate("KiloNote"):
+        ch = "A" if i < 4 else "B"
+        glyph = FONT[letter]
+        for y in range(7):
+            rows[y] += glyph[y].replace("X", ch) + ("." if i < 7 else "")
+    return rows, {".": None, "A": rgb(first), "B": rgb(second)}
+
+
+def compose(images: list[list[list[tuple[int, int, int, int]]]], cols: int, gap: int, bg: tuple) -> list:
+    """Grid of same-sized pixel images on a solid background (for the preview sheet)."""
+    h, w = len(images[0]), len(images[0][0])
+    rows_n = (len(images) + cols - 1) // cols
+    W, H = cols * w + (cols + 1) * gap, rows_n * h + (rows_n + 1) * gap
+    canvas = [[bg for _ in range(W)] for _ in range(H)]
+    for i, img in enumerate(images):
+        ox = gap + (i % cols) * (w + gap)
+        oy = gap + (i // cols) * (h + gap)
+        for y in range(h):
+            for x in range(w):
+                p = img[y][x]
+                if p[3]:
+                    canvas[oy + y][ox + x] = p
+    return canvas
+
+
+def logo_pack(icon32: list[str], icon16: list[str], mascot: list[str]) -> None:
+    pack = ROOT / "docs" / "logo-pack"
+    previews = []
+    for name in VARIANTS:
+        pal = variant_palette(name)
+        out = pack / name
+        out.mkdir(parents=True, exist_ok=True)
+        px32, px16 = to_rgba(icon32, pal), to_rgba(icon16, pal)
+        (out / "kilo-icon.svg").write_text(svg(icon32, f"KiloNote ({name})", pal))
+        (out / "kilo-mascot.svg").write_text(svg(mascot, f"Kilo ({name})", pal))
+        (out / "kilo-icon-512.png").write_bytes(png_bytes(scale_nearest(px32, 16)))
+        (out / "kilo-mascot-320.png").write_bytes(png_bytes(scale_nearest(to_rgba(mascot, pal), 8)))
+        sizes = {16: px16, 32: px32, 48: scale_nearest(px16, 3), 64: scale_nearest(px32, 2), 256: scale_nearest(px32, 8)}
+        (out / "kilo.ico").write_bytes(ico_bytes(sorted((s, png_bytes(p)) for s, p in sizes.items())))
+        previews.append(scale_nearest(to_rgba(mascot, pal), 4))
+    for suffix, first, second in (("dark", "#1B1834", "#7B6CF6"), ("light", "#FFFFFF", "#A79CFF")):
+        rows, pal = wordmark(first, second)
+        (pack / f"kilonote-wordmark-{suffix}.svg").write_text(svg(rows, "KiloNote", pal))
+        (pack / f"kilonote-wordmark-{suffix}.png").write_bytes(png_bytes(scale_nearest(to_rgba(rows, pal), 12)))
+    (pack / "preview.png").write_bytes(png_bytes(compose(previews, cols=4, gap=24, bg=(0x1B, 0x1C, 0x22, 255))))
 
 
 def main() -> None:
     icon32, icon16, mascot = parse(ICON_32), parse(ICON_16), parse(MASCOT_40)
     assert len(icon32) == 32 and len(icon16) == 16 and len(mascot) == 40
-    px32, px16 = to_rgba(icon32), to_rgba(icon16)
+    # KILONOTE_ICON=<variant> builds the app with another logo of the pack.
+    variant = os.environ.get("KILONOTE_ICON", "classic")
+    if variant not in VARIANTS:
+        raise SystemExit(f"unknown variant {variant!r}: {', '.join(VARIANTS)}")
+    pal = variant_palette(variant)
+    px32, px16 = to_rgba(icon32, pal), to_rgba(icon16, pal)
 
     icons = ROOT / "src-tauri" / "icons"
     icons.mkdir(parents=True, exist_ok=True)
@@ -285,10 +386,12 @@ def main() -> None:
     (icons / "icon.png").write_bytes(png_bytes(scale_nearest(px32, 16)))
     (ROOT / "docs" / "kilo-1024.png").write_bytes(png_bytes(scale_nearest(px32, 32)))
 
-    (icons / "app-icon.svg").write_text(svg(icon32, "KiloNote"))
-    (ROOT / "public" / "favicon.svg").write_text(svg(icon32, "KiloNote"))
-    (ROOT / "src" / "assets" / "kilo.svg").write_text(svg(mascot, "Kilo, the KiloNote mascot", eyes_class="kilo-eyes"))
-    print("Icons generated:", ", ".join(f"{s}px" for s in sizes))
+    (icons / "app-icon.svg").write_text(svg(icon32, "KiloNote", pal))
+    (ROOT / "public" / "favicon.svg").write_text(svg(icon32, "KiloNote", pal))
+    # The in-app mascot stays classic: the app recolors it (theme accent or chosen variant).
+    (ROOT / "src" / "assets" / "kilo.svg").write_text(svg(mascot, "Kilo, the KiloNote mascot", eyes_class="kilo-eyes", themable=True))
+    logo_pack(icon32, icon16, mascot)
+    print(f"Icons generated ({variant}):", ", ".join(f"{s}px" for s in sizes), "+ docs/logo-pack/")
 
 
 if __name__ == "__main__":

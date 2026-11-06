@@ -10,7 +10,7 @@ import {
   basename, dirname, doneFileFor, extname, isDoneFile, isInside, isProbablyBinary, join, projectName, relative, samePath, stem,
 } from "./core/path";
 import { mergeSettings, setSettingInText, SETTINGS_TEMPLATE, type Settings } from "./core/settings";
-import { applyTheme, findTheme, PALETTE_LABELS, THEMES } from "./core/themes";
+import { applyMascot, applyTheme, findTheme, MASCOT_VARIANTS, PALETTE_LABELS, THEMES } from "./core/themes";
 import { fuzzyFilter } from "./core/fuzzy";
 import { editorHooks } from "./editor/decorations";
 import { createEditorState, langForPath, reconfigureLanguage, settingsCompartment, settingsExtensions, type LangId } from "./editor/setup";
@@ -83,6 +83,10 @@ interface Session {
 
 type AppEvent = "docs" | "active" | "workspace" | "settings" | "saved" | "selection";
 
+/** Each window keeps its own session: session.json for the main one, session-<label>.json otherwise. */
+const sessionFileName = (label: string) => (label === "main" ? "session.json" : `session-${label}.json`);
+const SESSION_FILE_RE = /^session-(kn-[a-zA-Z0-9-]+)\.json$/;
+
 export class App {
   settings!: Settings;
   taskCfg!: TaskConfig;
@@ -131,7 +135,7 @@ export class App {
     document.documentElement.dataset.platform = this.backend.platform;
     this.configDir = await this.backend.configDir();
     this.settingsPath = join(this.configDir, "settings.json");
-    this.sessionPath = join(this.configDir, "session.json");
+    this.sessionPath = join(this.configDir, sessionFileName(this.backend.windowLabel));
     this.settings = mergeSettings(await this.readSettingsFile());
     this.taskCfg = this.makeTaskCfg();
     // Shortcuts first: the widgets below show them in their tooltips.
@@ -163,11 +167,16 @@ export class App {
     this.backend.onOpenRequest((paths) => void this.openPaths(paths));
     this.backend.onCloseRequested(() => this.beforeClose());
 
+    this.backend.onSettingsChanged(() => void this.reloadSettingsFromDisk());
+
     await this.restoreSession();
-    const startup = await this.backend.startupPaths().catch(() => []);
-    if (startup.length && this.backend.kind === "tauri") await this.openPaths(startup);
-    else if (startup.length && !this.workspace) await this.openFolder(startup[0]);
+    const startup = await this.backend.windowPaths().catch(() => [] as string[]);
+    if (this.backend.kind === "web" && this.backend.windowLabel === "main") {
+      // Browser demo: the main window opens the demo folder.
+      if (startup.length && !this.workspace) await this.openFolder(startup[0]);
+    } else if (startup.length) await this.openPaths(startup);
     this.renderAll();
+    if (this.backend.windowLabel === "main") void this.restoreOtherWindows();
   }
 
   private blankState() {
@@ -212,6 +221,7 @@ export class App {
     const s = this.settings;
     const theme = findTheme(s.theme, this.systemDark.matches);
     applyTheme(theme, s.accent, s.colors);
+    applyMascot(s.mascot);
     this.backend.setDark(theme.dark);
     const root = document.documentElement.style;
     root.setProperty("--kn-font", s.font_family);
@@ -249,7 +259,10 @@ export class App {
       this.quietSettings = true;
       await this.save(open).finally(() => (this.quietSettings = false));
     } else {
-      await this.backend.writeText(this.settingsPath, next).catch((e) => toast(`Settings not saved: ${e}`, { kind: "error" }));
+      await this.backend.writeText(this.settingsPath, next).then(
+        () => this.backend.broadcastSettingsChanged(),
+        (e) => toast(`Settings not saved: ${e}`, { kind: "error" }),
+      );
     }
   }
 
@@ -271,7 +284,16 @@ export class App {
     }
     this.settings = mergeSettings(parsed);
     this.applySettings();
+    this.backend.broadcastSettingsChanged();
     if (!auto && !this.quietSettings) toast("Settings applied", { kind: "success", timeout: 1600 });
+  }
+
+  /** Another window changed the settings file. */
+  private async reloadSettingsFromDisk() {
+    const user = await this.readSettingsFile();
+    if (!user) return;
+    this.settings = mergeSettings(user);
+    this.applySettings();
   }
 
   // -------------------------------------------------------------------------
@@ -361,8 +383,13 @@ export class App {
     const activate = opts.activate ?? true;
     let doc = this.findDoc(path);
     if (!doc) {
+      // KiloNote never hands a file to the operating system to open or run it:
+      // executables (and any other non-text file) can only be shown in the file manager.
       if (isProbablyBinary(path)) {
-        await this.backend.openPath(path).catch((e) => toast(`Cannot open: ${e}`, { kind: "error" }));
+        toast(`"${basename(path)}" is not a text file. KiloNote only opens text files and never runs programs.`, {
+          kind: "error",
+          action: { label: "Reveal in file manager", run: () => this.backend.reveal(path) },
+        });
         return null;
       }
       try {
@@ -1263,6 +1290,23 @@ export class App {
     });
   }
 
+  selectMascot() {
+    const original = this.settings.mascot;
+    const items = [{ id: "theme", label: "Theme accent", color: "accent" }, ...Object.entries(MASCOT_VARIANTS).map(([id, [body]]) => ({ id, label: id[0].toUpperCase() + id.slice(1), color: body }))];
+    openPicker({
+      placeholder: "Kilo's color (welcome screen)",
+      initial: Math.max(0, items.findIndex((i) => i.id === original)),
+      provide: (q) => ({
+        items: fuzzyFilter(q, items, (i) => i.label).map(({ item, result }) => ({
+          label: item.label, color: item.color, positions: result.positions, value: item.id, hint: item.id === original ? "current" : undefined,
+        })),
+      }),
+      highlight: (it) => it && applyMascot(it.value as string),
+      cancel: () => applyMascot(original),
+      pick: (it) => this.updateSetting("mascot", it.value),
+    });
+  }
+
   // -------------------------------------------------------------------------
   // Files (explorer)
 
@@ -1390,12 +1434,35 @@ export class App {
   }
   private saveSessionSoon = debounce(() => this.saveSessionNow(), 1000);
 
-  private async restoreSession() {
-    let s: Session | null = null;
+  private async readSession(path: string): Promise<Session | null> {
     try {
-      s = JSON.parse((await this.backend.readText(this.sessionPath)).text) as Session;
+      return JSON.parse((await this.backend.readText(path)).text) as Session;
     } catch {
-      s = null;
+      return null;
+    }
+  }
+
+  /** Labels of the other windows that have a saved session. */
+  private async otherSessionLabels(): Promise<string[]> {
+    const entries = await this.backend.listDir(this.configDir, true).catch(() => []);
+    return entries.map((e) => SESSION_FILE_RE.exec(e.name)?.[1]).filter((l): l is string => !!l);
+  }
+
+  /** Reopens the other windows of the last session (desktop app only). */
+  private async restoreOtherWindows() {
+    if (this.backend.kind !== "tauri") return;
+    for (const label of await this.otherSessionLabels()) await this.backend.openWindow([], label).catch(() => {});
+  }
+
+  private async restoreSession() {
+    let s = await this.readSession(this.sessionPath);
+    // The main window was closed while others stayed open: take over one of their sessions.
+    if (!s && this.backend.windowLabel === "main") {
+      const other = (await this.otherSessionLabels())[0];
+      if (other) {
+        s = await this.readSession(join(this.configDir, sessionFileName(other)));
+        if (s) await this.backend.deleteSession(other).catch(() => {});
+      }
     }
     if (s && s.version === 1) {
       this.recent = s.recent ?? [];
@@ -1439,13 +1506,16 @@ export class App {
 
   private async beforeClose(): Promise<boolean> {
     this.sessionReady = true;
-    if (!this.settings.hot_exit) {
+    // Other windows stay open: this window's session is dropped, so unsaved
+    // drafts would be lost (the last window keeps them when hot_exit is on).
+    const others = (await this.backend.windowCount().catch(() => 1)) > 1;
+    if (others || !this.settings.hot_exit) {
       const unsaved = this.docs.filter((d) => d.dirty && (!d.path || !this.settings.autosave || d.missing || d.conflict));
       if (unsaved.length) {
         const r = await confirm({
-          title: "Quit without saving?",
-          message: `Unsaved changes: ${unsaved.map((d) => this.docName(d)).join(", ")}.`,
-          okLabel: "Quit",
+          title: others ? "Close this window?" : "Quit without saving?",
+          message: `Unsaved changes will be lost: ${unsaved.map((d) => this.docName(d)).join(", ")}.`,
+          okLabel: others ? "Close window" : "Quit",
           danger: true,
         });
         if (r !== "ok") return false;
@@ -1457,8 +1527,25 @@ export class App {
       if (d.dirty && d.path && !d.missing && !d.conflict && this.settings.autosave) pending.push(this.save(d, { auto: true }));
     }
     await Promise.all(pending);
+    if (others) {
+      this.sessionReady = false;
+      this.saveSessionSoon.cancel();
+      await this.backend.deleteSession(this.backend.windowLabel).catch(() => {});
+      return true;
+    }
     await this.backend.writeText(this.sessionPath, JSON.stringify(this.sessionData())).catch(() => {});
     return true;
+  }
+
+  /** Moves a saved note to a new window. */
+  async moveToNewWindow(doc: Doc) {
+    if (!doc.path) {
+      toast("Save this note first to move it to another window.", { action: { label: "Save", run: () => void this.saveAs(doc) } });
+      return;
+    }
+    if (doc.dirty && !(await this.save(doc))) return;
+    await this.backend.openWindow([doc.path]);
+    await this.closeDoc(doc, { force: true });
   }
 
   // -------------------------------------------------------------------------
@@ -1499,6 +1586,7 @@ export class App {
   defaultKeybindings(): Record<string, string> {
     const keys: Record<string, string> = {
       "Mod+N": "file.new",
+      "Mod+Shift+N": "window.new",
       "Mod+O": "file.open",
       "Mod+Shift+O": "folder.open",
       "Mod+S": "file.save",
@@ -1550,6 +1638,8 @@ export class App {
   private registerAllCommands() {
     const cmds: Command[] = [
       { id: "file.new", title: "File: New note", run: () => this.newDoc() },
+      { id: "window.new", title: "Window: New window", run: () => this.backend.openWindow([]) },
+      { id: "window.moveTab", title: "Window: Move tab to new window", run: () => this.active && this.moveToNewWindow(this.active) },
       { id: "file.open", title: "File: Open…", run: async () => { for (const p of await this.backend.pickFiles()) await this.openFile(p); } },
       { id: "folder.open", title: "Folder: Open…", run: () => this.openFolder() },
       { id: "folder.close", title: "Folder: Close", run: () => this.closeFolder() },
@@ -1589,6 +1679,7 @@ export class App {
       { id: "view.lineNumbers", title: "View: Toggle line numbers", run: () => this.updateSetting("line_numbers", !this.settings.line_numbers) },
       { id: "theme.select", title: "Theme: Select…", run: () => this.selectTheme() },
       { id: "theme.accent", title: "Theme: Accent color…", run: () => this.selectAccent() },
+      { id: "theme.mascot", title: "Theme: Kilo's color…", run: () => this.selectMascot() },
       { id: "settings.open", title: "Preferences: Settings", run: () => this.openSettings() },
       { id: "task.cycle", title: "Task: Next status", run: () => this.cycleTasks() },
       { id: "task.archive", title: "Task: Archive line to _done", run: () => this.archiveSelection() },

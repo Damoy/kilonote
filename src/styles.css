@@ -144,6 +144,9 @@ body.zen .cm-gutters { display: none !important; }
 }
 .kn-tabs::-webkit-scrollbar { display: none; }
 .kn-tabbar-actions { display: flex; align-items: center; gap: 2px; padding: 0 6px; border-left: 1px solid var(--kn-border); }
+.kn-show-sidebar { display: none; flex: none; align-self: center; margin: 0 4px 0 8px; }
+#app.no-sidebar .kn-show-sidebar { display: inline-flex; }
+.sb-hide { margin-left: 2px; }
 
 .kn-tab {
   --accent-line: transparent;
@@ -391,6 +394,10 @@ button.st-item:hover { background: var(--kn-hover); color: var(--kn-fg); }
 .kilo svg { width: 100%; height: 100%; overflow: visible; }
 /* 40×40 drawn pixels: 160 px = 4 screen pixels per pixel, crisp rendering. */
 .wl-kilo { width: 160px; height: 160px; animation: kilo-hop 3.2s steps(1) infinite; filter: drop-shadow(0 8px 0 rgba(0, 0, 0, 0.16)); }
+/* Kilo takes the theme's accent (or the variant chosen in the settings). */
+.kilo .kb { fill: var(--kilo-body, #7b6cf6); }
+.kilo .kbs { fill: var(--kilo-shade, #5a4ad6); }
+.kilo .kbh { fill: var(--kilo-light, #a79cff); }
 .kilo-eyes { transform-box: fill-box; transform-origin: center; animation: kilo-blink 5.5s infinite; }
 /* Little "8-bit" hop: moves in whole-pixel steps, no smooth gliding. */
 @keyframes kilo-hop { 0%, 70%, 100% { transform: translateY(0); } 75%, 85% { transform: translateY(-4px); } 80% { transform: translateY(-8px); } }

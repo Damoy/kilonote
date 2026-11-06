@@ -4,11 +4,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use serde::Serialize;
+use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, UNIX_EPOCH};
-use tauri::{AppHandle, Emitter, Manager};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow, WindowEvent};
 use tauri_plugin_window_state::StateFlags;
 
 const BOM: &[u8] = &[0xEF, 0xBB, 0xBF];
@@ -343,26 +346,145 @@ fn resolve_paths(args: impl IntoIterator<Item = String>, cwd: &Path) -> Vec<Stri
         .collect()
 }
 
-/// Paths passed on the command line (`kilonote notes/` or `kilonote work.txt`).
+/// Multi-window bookkeeping.
+#[derive(Default)]
+struct Windows {
+    /// Paths each new window must open, by window label.
+    pending: Mutex<HashMap<String, Vec<String>>>,
+    /// The command-line paths are handed to the main window only once.
+    argv_taken: AtomicBool,
+    /// Label of the window that had the focus last (receives files opened from outside).
+    last_focused: Mutex<String>,
+}
+
+/// Window labels are "main" or "kn-…" (letters, digits, dashes): they name session files.
+fn valid_label(label: &str) -> bool {
+    label == "main"
+        || (label.starts_with("kn-")
+            && label.len() <= 40
+            && label[3..]
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-'))
+}
+
+/// Paths this window must open: the command line for the main window (once),
+/// otherwise the paths given when the window was created.
 #[tauri::command]
-fn startup_paths() -> Vec<String> {
-    let cwd = std::env::current_dir().unwrap_or_default();
-    resolve_paths(std::env::args().skip(1), &cwd)
+fn window_paths(window: WebviewWindow, state: State<Windows>) -> Vec<String> {
+    let label = window.label();
+    if label == "main" && !state.argv_taken.swap(true, Ordering::SeqCst) {
+        let cwd = std::env::current_dir().unwrap_or_default();
+        return resolve_paths(std::env::args().skip(1), &cwd);
+    }
+    state
+        .pending
+        .lock()
+        .unwrap()
+        .remove(label)
+        .unwrap_or_default()
+}
+
+/// Opens a new window (a fresh label, or a given one to restore a saved window).
+#[tauri::command]
+fn open_window(
+    app: AppHandle,
+    state: State<Windows>,
+    paths: Vec<String>,
+    label: Option<String>,
+) -> Result<String, String> {
+    let label = match label {
+        Some(l) if valid_label(&l) && l != "main" => l,
+        Some(l) => return Err(format!("invalid window label: {l}")),
+        None => {
+            let millis = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0);
+            format!("kn-{millis:x}")
+        }
+    };
+    if app.get_webview_window(&label).is_some() {
+        return Err(format!("window {label} already exists"));
+    }
+    state.pending.lock().unwrap().insert(label.clone(), paths);
+    let mut config = app
+        .config()
+        .app
+        .windows
+        .first()
+        .cloned()
+        .ok_or("no window configuration")?;
+    config.label = label.clone();
+    // Cascade from the window that has the focus.
+    let focused = state.last_focused.lock().unwrap().clone();
+    if let Some(origin) = app.get_webview_window(&focused) {
+        if let (Ok(pos), Ok(scale)) = (origin.outer_position(), origin.scale_factor()) {
+            config.center = false;
+            config.x = Some(pos.x as f64 / scale + 36.0);
+            config.y = Some(pos.y as f64 / scale + 36.0);
+        }
+    }
+    let window = tauri::WebviewWindowBuilder::from_config(&app, &config)
+        .map_err(err)?
+        .build()
+        .map_err(err)?;
+    show_soon(window);
+    Ok(label)
+}
+
+#[tauri::command]
+fn window_count(app: AppHandle) -> usize {
+    app.webview_windows().len()
+}
+
+/// Forgets the saved session of a window that was closed (config folder only).
+#[tauri::command]
+fn delete_session(app: AppHandle, label: String) -> Result<(), String> {
+    if !valid_label(&label) {
+        return Err(format!("invalid window label: {label}"));
+    }
+    let name = if label == "main" {
+        "session.json".to_string()
+    } else {
+        format!("session-{label}.json")
+    };
+    let path = app.path().app_config_dir().map_err(err)?.join(name);
+    match fs::remove_file(path) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(err(e)),
+        _ => Ok(()),
+    }
+}
+
+/// The frontend shows a window once it is ready (no white flash).
+/// Safety net: show it anyway after a short delay.
+fn show_soon(window: WebviewWindow) {
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(2500));
+        if !window.is_visible().unwrap_or(true) {
+            let _ = window.show();
+        }
+    });
 }
 
 fn main() {
     tauri::Builder::default()
-        // A single KiloNote window: launching the app again (pinned shortcut,
-        // "Open with"…) brings the existing window back and opens the files there.
+        // A single KiloNote process: launching the app again (pinned shortcut,
+        // "Open with"…) brings the last used window back and opens the files there.
         .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
-            if let Some(window) = app.get_webview_window("main") {
+            let state = app.state::<Windows>();
+            let last = state.last_focused.lock().unwrap().clone();
+            let target = app
+                .get_webview_window(&last)
+                .or_else(|| app.get_webview_window("main"))
+                .or_else(|| app.webview_windows().into_values().next());
+            if let Some(window) = target {
                 let _ = window.unminimize();
                 let _ = window.show();
                 let _ = window.set_focus();
-            }
-            let paths = resolve_paths(argv.into_iter().skip(1), Path::new(&cwd));
-            if !paths.is_empty() {
-                let _ = app.emit("kilonote://open-paths", paths);
+                let paths = resolve_paths(argv.into_iter().skip(1), Path::new(&cwd));
+                if !paths.is_empty() {
+                    let _ = app.emit_to(window.label(), "kilonote://open-paths", paths);
+                }
             }
         }))
         .plugin(
@@ -372,18 +494,19 @@ fn main() {
         )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .manage(Windows::default())
         .setup(|app| {
-            // The frontend shows the window once ready (no white flash).
-            // Safety net: show it anyway after a short delay.
+            *app.state::<Windows>().last_focused.lock().unwrap() = "main".into();
             if let Some(window) = app.get_webview_window("main") {
-                std::thread::spawn(move || {
-                    std::thread::sleep(Duration::from_millis(2500));
-                    if !window.is_visible().unwrap_or(true) {
-                        let _ = window.show();
-                    }
-                });
+                show_soon(window);
             }
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let WindowEvent::Focused(true) = event {
+                let state = window.state::<Windows>();
+                *state.last_focused.lock().unwrap() = window.label().to_string();
+            }
         })
         .invoke_handler(tauri::generate_handler![
             read_text,
@@ -398,7 +521,10 @@ fn main() {
             rename_path,
             trash_path,
             config_dir,
-            startup_paths
+            window_paths,
+            open_window,
+            window_count,
+            delete_session
         ])
         .run(tauri::generate_context!())
         .expect("failed to start KiloNote");

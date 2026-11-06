@@ -41,7 +41,8 @@ export class Sidebar {
       tasks: mk("tasks", "tasks", titleWithKey("Folder tasks", "view.tasks"), this.taskBadge),
       search: mk("search", "search", titleWithKey("Search in files", "view.search")),
     };
-    const switcher = h("div", { class: "sb-switch" }, this.switchBtns.files, this.switchBtns.tasks, this.switchBtns.search);
+    const hideBtn = h("button", { class: "kn-icon-btn sb-hide", title: titleWithKey("Hide sidebar", "view.sidebar"), onclick: () => this.toggle() }, icon("panelClose"));
+    const switcher = h("div", { class: "sb-switch" }, this.switchBtns.files, this.switchBtns.tasks, this.switchBtns.search, h("span", { class: "kn-spacer" }), hideBtn);
 
     const filesPanel = h("div", { class: "sb-panel" }, this.filesHeader, this.treeEl);
     this.treeEl.addEventListener("contextmenu", (e) => {
@@ -226,6 +227,7 @@ export class Sidebar {
         h("button", { class: "kn-icon-btn", title: "New folder", onclick: () => app.createFolderIn(ws) }, icon("newFolder")),
         h("button", { class: "kn-icon-btn", title: "Refresh", onclick: () => this.refreshTree() }, icon("refresh")),
         h("button", { class: "kn-icon-btn", title: "Collapse all", onclick: () => { this.expanded.clear(); void this.renderTree(); } }, icon("collapse")),
+        h("button", { class: "kn-icon-btn", title: "Close folder", onclick: () => app.closeFolder() }, icon("x")),
       );
     }
   }
@@ -320,6 +322,7 @@ export class Sidebar {
     showMenu(
       [
         { label: "Open", icon: "file", action: () => app.openFile(path) },
+        { label: "Open in new window", icon: "newWindow", action: () => app.backend.openWindow([path]) },
         { separator: true },
         { label: "Rename…", action: () => app.renamePath(path) },
         { label: "Copy path", action: () => app.copyText(path) },
@@ -337,6 +340,7 @@ export class Sidebar {
     const items: MenuItem[] = [
       { label: "New note here…", icon: "newFile", action: () => { this.expanded.add(path); return app.createFileIn(path); } },
       { label: "New folder…", icon: "newFolder", action: () => app.createFolderIn(path) },
+      { label: "Open folder in new window", icon: "newWindow", action: () => app.backend.openWindow([path]) },
       { separator: true },
       { label: "Copy path", action: () => app.copyText(path) },
       { label: "Reveal in file manager", icon: "folderOpen", action: () => app.backend.reveal(path) },
