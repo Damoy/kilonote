@@ -1,23 +1,15 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
 PackageIdentifier: Damoy.KiloNote
-PackageVersion: 0.1.1
+PackageVersion: 0.2.0
 InstallerType: nullsoft
 Scope: user
 InstallModes:
   - interactive
   - silent
 UpgradeBehavior: install
-FileExtensions:
-  - txt
-  - text
-  - md
-  - markdown
-  - note
-  - todo
-  - log
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/Damoy/kilonote/releases/download/v0.1.1/KiloNote_0.1.1_x64-setup.exe
-    InstallerSha256: 14B202331350C05564A2F443CEE29181950295189F3BDF7E18C9F898537EB71D
+    InstallerUrl: https://github.com/Damoy/kilonote/releases/download/v0.2.0/KiloNote_0.2.0_x64-setup.exe
+    InstallerSha256: DB224C70092ABDB82F249859034637033BE29B0A43DA65F3C440D918C65E7A30
 ManifestType: installer
 ManifestVersion: 1.6.0
