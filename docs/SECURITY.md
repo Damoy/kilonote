@@ -114,8 +114,8 @@ it proves the file was built by this repository's release workflow, from the tag
 source, on GitHub's servers.
 
 ```powershell
-Get-FileHash .\KiloNote_0.2.0_x64-portable.exe -Algorithm SHA256
-gh attestation verify .\KiloNote_0.2.0_x64-portable.exe -R Damoy/kilonote
+Get-FileHash .\KiloNote_<version>_x64-portable.exe -Algorithm SHA256
+gh attestation verify .\KiloNote_<version>_x64-portable.exe -R Damoy/kilonote
 ```
 
 The hash must match the one listed in `SHA256SUMS.txt`; it can also be used to allow the
@@ -200,8 +200,16 @@ npx tauri build --no-bundle
   `cargo audit`.
 - The only npm package with an install script is `fsevents` (macOS only); builds use
   `--ignore-scripts`.
-- Diagrams use Mermaid (MIT) and its dependencies (its layout engines included); none of
-  this code is loaded until a diagram is shown.
+- Diagrams use Mermaid (MIT) and its dependencies; none of this code is loaded until a
+  diagram is shown. Mermaid's optional ELK layout engine (`elkjs`, licensed EPL-2.0 or
+  GPL-3.0) is left out of the build: diagrams use the dagre layout (MIT), and a diagram
+  that asks for `layout: elk` gets a message (`src/vendor/elk-stub.ts`).
+- Licenses of the code shipped in the app: MIT, ISC, Apache-2.0, BSD-3-Clause, Unlicense,
+  MPL-2.0 or Apache-2.0 (DOMPurify), and OFL-1.1 for the bundled JetBrains Mono font.
+  Nothing under the GPL, AGPL or LGPL.
+- The built interface contains no `eval` and no `new Function` (it runs under a policy
+  that forbids them), and no network call: the only `fetch` is the preloading of the
+  app's own files.
 - Releases are built by GitHub Actions on GitHub-hosted runners. Every action is pinned
   to a commit (not a movable tag), workflows run with a read-only token unless a job
   needs to publish, and the release job signs the build provenance of every file.

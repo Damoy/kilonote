@@ -103,3 +103,19 @@ describe("diagrams and previews build no markup from the content", () => {
     expect(read("src/ui/preview.ts")).toMatch(/const insert = escapeHtmlText\(text\)/);
   });
 });
+
+describe("licenses and bundle", () => {
+  it("Mermaid's GPL/EPL layout engine (elkjs) is replaced at build time, and the dagre layout is used", () => {
+    expect(read("vite.config.ts")).toMatch(/find: \/\^elkjs\\\/lib\\\/elk\\\.bundled\\\.js\$\//);
+    expect(read("src/editor/diagrams.ts")).toMatch(/layout: "dagre"/);
+    expect(read("src/vendor/elk-stub.ts")).not.toMatch(/import/);
+  });
+
+  it("no production dependency is under a GPL-family license, except elkjs (left out of the build)", () => {
+    const lock = JSON.parse(read("package-lock.json")) as { packages: Record<string, { license?: string; dev?: boolean }> };
+    const gpl = Object.entries(lock.packages)
+      .filter(([k, v]) => k && !v.dev && /GPL/i.test(v.license ?? ""))
+      .map(([k]) => k.replace(/^.*node_modules\//, ""));
+    expect(gpl).toEqual(["elkjs"]);
+  });
+});

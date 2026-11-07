@@ -25,6 +25,8 @@ async function render(code: string, dark: boolean): Promise<string> {
       startOnLoad: false,
       securityLevel: "strict",
       theme,
+      // The dagre layout (MIT): the ELK engine is not part of KiloNote (src/vendor/elk-stub.ts).
+      layout: "dagre",
       // Plain SVG text (no HTML inside the drawing): it shows the same as an image.
       htmlLabels: false,
       flowchart: { htmlLabels: false },
