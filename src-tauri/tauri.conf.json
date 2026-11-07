@@ -52,6 +52,9 @@
           "English"
         ],
         "installerHooks": "windows/installer-hooks.nsh"
+      },
+      "webviewInstallMode": {
+        "type": "skip"
       }
     },
     "linux": {
@@ -64,6 +67,7 @@
       }
     },
     "license": "MIT",
-    "homepage": "https://github.com/Damoy/kilonote"
+    "homepage": "https://github.com/Damoy/kilonote",
+    "publisher": "Damoy"
   }
 }

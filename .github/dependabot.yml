@@ -1,0 +1,10 @@
+# Keeps the GitHub Actions pinned by commit up to date (one grouped update a month).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]

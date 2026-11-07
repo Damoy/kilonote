@@ -25,6 +25,11 @@ export interface Entry {
 }
 export type Platform = "windows" | "macos" | "linux";
 
+/** Links KiloNote hands to the system: web pages and e-mail addresses only. */
+export function isSafeUrl(url: string): boolean {
+  return /^(?:https?:\/\/[^\s]+|mailto:[^\s]+)$/i.test(url);
+}
+
 export interface Backend {
   readonly kind: "tauri" | "web";
   readonly platform: Platform;
@@ -141,7 +146,12 @@ export async function createTauriBackend(): Promise<Backend> {
     async pickSavePath(defaultPath) {
       return (await dialog.save({ defaultPath, title: "Save as" })) ?? null;
     },
-    openUrl: (url) => opener.openUrl(url),
+    // Only web and mail links, in the default browser or mail app (the window
+    // permission allows nothing else either).
+    openUrl: async (url) => {
+      if (!isSafeUrl(url)) throw new Error(`Refused to open "${url}": only http(s) and mailto links are opened.`);
+      await opener.openUrl(url);
+    },
     reveal: (path) => opener.revealItemInDir(path),
     setTitle: (title) => void win.setTitle(title).catch(() => {}),
     setDark: (dark) => void win.setTheme(dark ? "dark" : "light").catch(() => {}),
@@ -376,7 +386,9 @@ export function createWebBackend(): Backend {
       const name = window.prompt("Save as (path in the demo)", defaultPath ?? join(DEMO_ROOT, "note.txt"));
       return name || null;
     },
-    openUrl: async (url) => void window.open(url, "_blank", "noopener"),
+    openUrl: async (url) => {
+      if (isSafeUrl(url)) window.open(url, "_blank", "noopener");
+    },
     reveal: async () => {},
     setTitle: (t) => void (document.title = t),
     setDark: () => {},

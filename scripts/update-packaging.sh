@@ -74,14 +74,6 @@ InstallModes:
   - interactive
   - silent
 UpgradeBehavior: install
-FileExtensions:
-  - txt
-  - text
-  - md
-  - markdown
-  - note
-  - todo
-  - log
 Installers:
   - Architecture: x64
     InstallerUrl: $BASE/$SETUP

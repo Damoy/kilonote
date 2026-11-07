@@ -162,11 +162,18 @@ try {
     expect(existsSync(marker), false, "a program ran");
   });
 
-  await test("the window has no permission to open or run files", async () => {
+  await test("the window has no permission to open or run files, nor to open other addresses than web and mail links", async () => {
     const r = await run(`
       try { await window.__TAURI_INTERNALS__.invoke("plugin:opener|open_path", { path: args[0] }); return "allowed"; }
       catch (e) { return "denied: " + e; }`, join(notes, "evil.sh"));
     if (!String(r).startsWith("denied")) throw new Error(`open_path was ${r}`);
+    // Links: web pages and e-mail addresses only, never a file or another protocol.
+    for (const url of ["file:///etc/hostname", "tel:123", "x-unknown-scheme:test"]) {
+      const u = await run(`
+        try { await window.__TAURI_INTERNALS__.invoke("plugin:opener|open_url", { url: args[0] }); return "allowed"; }
+        catch (e) { return "denied: " + e; }`, url);
+      if (!String(u).startsWith("denied")) throw new Error(`open_url(${url}) was ${u}`);
+    }
     await sleep(1000);
     expect(existsSync(marker), false, "a program ran");
   });

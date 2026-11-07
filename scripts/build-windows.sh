@@ -51,7 +51,7 @@ if [ "$need_setup" = 1 ]; then
 fi
 
 command -v node >/dev/null 2>&1 || die "Node.js is required (https://nodejs.org)"
-[ -d node_modules ] || { say "Installing npm dependencies"; npm ci; }
+[ -d node_modules ] || { say "Installing npm dependencies"; npm ci --ignore-scripts; }
 
 VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
 say "Building KiloNote $VERSION for Windows (x64)…"

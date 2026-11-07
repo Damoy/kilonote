@@ -58,7 +58,8 @@ open it as a folder and follow its `README.md`.
   up at the right of the tabs): live **Markdown preview**; **HTML and SVG preview**, in a
   sandbox (no script runs, nothing is loaded from the network); and for **JSON and YAML** an
   editable **tree view** (hover a node to see it in the text, double-click a value or a key to
-  change it, the tree follows the cursor)
+  change it, the tree follows the cursor); drag the separator to resize the pane, or show it
+  alone
 - **Syntax coloring** for about 40 languages and config formats (Python, JavaScript, TypeScript,
   C#, Java, C/C++, Go, Rust, SQL, PowerShell, Batch, Shell, YAML, TOML, INI, XML, HTML, CSS…),
   loaded only when such a file is opened; the status bar changes the document type
@@ -153,10 +154,11 @@ scoop install https://raw.githubusercontent.com/Damoy/kilonote/main/packaging/sc
 [winget](https://learn.microsoft.com/windows/package-manager/) are in
 [`packaging/winget`](packaging/winget) (per-user installer, silent install supported).
 
-The installer also adds KiloNote to Explorer's **Open with** menu for `.txt`, `.md`,
-`.markdown`, `.text`, `.note`, `.todo` and `.log` files, without changing your default
-apps: right-click a file → *Open with* → *KiloNote*, and tick *Always* if you want
-double-clicks to open it in KiloNote. The portable exe does not register anything.
+To open text files with KiloNote from Explorer: right-click a file → *Open with* →
+*Choose another app* → *Choose an app on your PC* → `kilonote.exe` (in
+`%LOCALAPPDATA%\KiloNote`, or wherever you put the portable exe), and tick *Always* if you
+want double-clicks to open it in KiloNote. Windows records that choice itself: neither the
+installer nor the app writes file associations.
 
 The app is not code-signed yet, so SmartScreen may warn you the first time:
 *More info* → *Run anyway*.
@@ -190,8 +192,16 @@ KiloNote is a plain local file editor: **no network access, no telemetry, no adm
 rights, and it never runs other programs** (a non-text file can only be revealed in the file
 manager). The executable is not signed, though, and installing software that is not in your
 company's catalog may fall under its IT policy: ask your IT team first and give them the
-[security sheet](docs/SECURITY.md). The published SHA-256 checksums let them allow this exact
-file (AppLocker, EDR…).
+[security sheet](docs/SECURITY.md), which lists everything the program and the installer do.
+
+On a managed PC, prefer:
+- the **portable exe** (a single file, no installer, nothing written to the registry), or
+- **building it yourself** from the sources in a Command Prompt, with no script and no
+  download of an executable: `npm ci --ignore-scripts` then `npx tauri build --no-bundle`
+  ([details](docs/SECURITY.md#building-from-source-on-a-managed-pc)).
+
+The published SHA-256 checksums let your IT team allow the exact file, and every release
+file carries a signed build provenance: `gh attestation verify <file> -R Damoy/kilonote`.
 
 ## Keyboard shortcuts
 
@@ -291,7 +301,7 @@ sudo dnf group install c-development
 # Arch
 sudo pacman -S --needed webkit2gtk-4.1 base-devel curl wget file openssl libappindicator-gtk3 librsvg xdotool
 
-npm ci
+npm ci --ignore-scripts
 npm run app:build
 sudo apt install ./src-tauri/target/release/bundle/deb/KiloNote_*_amd64.deb   # or the .rpm / .AppImage next to it
 ```
@@ -304,19 +314,21 @@ sudo apt install ./src-tauri/target/release/bundle/deb/KiloNote_*_amd64.deb   # 
   libraries), LLVM and NSIS, extracted into `~/.local/share/kilonote-toolchain`.
 - **On Windows**: Node.js, Rust and the Visual Studio C++ Build Tools (the `winget`
   commands are in the script's help: `Get-Help scripts\build-windows.ps1`), then
-  `scripts\build-windows.ps1`.
+  `scripts\build-windows.ps1` (`-Portable` builds the exe only, without the installer).
+- **On a managed PC**: no script, two commands in a Command Prompt, see
+  [Building from source on a managed PC](docs/SECURITY.md#building-from-source-on-a-managed-pc).
 
 Builds are also copied to `%USERPROFILE%\dev-builds\kilonote\`. The update step
 (`install:windows`, `-Install`) only copies files: it never starts a Windows process, never
 runs the installer and never launches KiloNote. When KiloNote is installed, its exe is swapped
 in place (an open window keeps running, and the new build starts the next time you open the
-app, e.g. from its pinned taskbar icon). For a first install, or to register *Open with*, run
-the installer from `dev-builds` yourself. From WSL, set `KILONOTE_WINDOWS_HOME=/mnt/c/Users/<you>`
+app, e.g. from its pinned taskbar icon). For a first install, run the installer from
+`dev-builds` yourself. From WSL, set `KILONOTE_WINDOWS_HOME=/mnt/c/Users/<you>`
 if your Windows profile is not detected.
 
 ### macOS
 
-`xcode-select --install`, then `npm ci && npm run app:build`.
+`xcode-select --install`, then `npm ci --ignore-scripts && npm run app:build`.
 
 You can pass a folder or a file as an argument: `kilonote ~/notes` or `KiloNote.exe C:\notes`.
 If KiloNote is already open, the existing window comes to the front and opens it.

@@ -15,6 +15,10 @@
 
   From WSL or Linux, use scripts/build-windows.sh instead (nothing to install on Windows).
 
+.PARAMETER Portable
+  Builds only KiloNote.exe (the portable version), without the installer: nothing
+  else is downloaded or run during the build (no installer tooling).
+
 .PARAMETER Install
   Updates the installed KiloNote after building it, with plain file copies: an open
   KiloNote keeps running and the new build starts the next time it is opened.
@@ -23,7 +27,7 @@
 .EXAMPLE
   .\scripts\build-windows.ps1 -Install
 #>
-param([switch]$Install)
+param([switch]$Install, [switch]$Portable)
 
 $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..")
@@ -41,21 +45,22 @@ if (-not (Test-Path $vswhere) -or -not (& $vswhere -latest -products * -requires
   throw "Visual Studio C++ build tools not found. See: Get-Help scripts\build-windows.ps1"
 }
 
-if (-not (Test-Path node_modules)) { Say "Installing npm dependencies"; npm ci }
+# --ignore-scripts: no package runs code while it is installed (none needs to).
+if (-not (Test-Path node_modules)) { Say "Installing npm dependencies"; npm ci --ignore-scripts }
 
 $version = (Get-Content src-tauri\tauri.conf.json -Raw | ConvertFrom-Json).version
 Say "Building KiloNote $version for Windows…"
-npx tauri build --bundles nsis
+if ($Portable) { npx tauri build --no-bundle } else { npx tauri build --bundles nsis }
 if ($LASTEXITCODE -ne 0) { throw "The build failed." }
 
 $release = Join-Path $Root "src-tauri\target\release"
-$setup = Get-ChildItem "$release\bundle\nsis\*-setup.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$setup = if ($Portable) { $null } else { Get-ChildItem "$release\bundle\nsis\*-setup.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1 }
 $exe = @("$release\KiloNote.exe", "$release\kilonote.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
 
 $out = Join-Path $Root "dist-windows"
 Remove-Item $out -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory $out | Out-Null
-Copy-Item $setup.FullName $out
+if ($setup) { Copy-Item $setup.FullName $out }
 if ($exe) { Copy-Item $exe (Join-Path $out "KiloNote.exe") }
 # SHA-256 checksums (same format as sha256sum).
 Get-ChildItem $out -Filter *.exe | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name } |
@@ -72,7 +77,7 @@ if ($Install) {
   $appDir = Join-Path $env:LOCALAPPDATA "KiloNote"
   $target = Join-Path $appDir "kilonote.exe"
   if (-not (Test-Path $target)) {
-    Say "KiloNote is not installed yet. Run the installer yourself: $(Join-Path $builds $setup.Name)"
+    Say "KiloNote is not installed yet: run the installer yourself, or use the portable KiloNote.exe in $builds"
     return
   }
   # Executables left by previous updates (one still in use stays until next time).

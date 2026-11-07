@@ -17,7 +17,21 @@
     "core:window:allow-set-fullscreen",
     "core:window:allow-is-fullscreen",
     "dialog:default",
-    "opener:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://*"
+        },
+        {
+          "url": "http://*"
+        },
+        {
+          "url": "mailto:*"
+        }
+      ]
+    },
+    "opener:allow-reveal-item-in-dir",
     "window-state:default"
   ]
 }

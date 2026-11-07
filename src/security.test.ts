@@ -56,3 +56,39 @@ describe("previews never run the content", () => {
     }
   });
 });
+
+describe("hardening of the Windows build and of the release", () => {
+  it("links: only web pages and e-mail addresses, at both ends", async () => {
+    const caps = read("src-tauri/capabilities/default.json");
+    expect(caps).not.toContain("opener:default");
+    const opener = (JSON.parse(caps) as { permissions: unknown[] }).permissions.find(
+      (p) => typeof p === "object" && (p as { identifier: string }).identifier === "opener:allow-open-url",
+    ) as { allow: { url: string }[] };
+    expect(opener.allow.map((a) => a.url).sort()).toEqual(["http://*", "https://*", "mailto:*"]);
+    const { isSafeUrl } = await import("./core/backend");
+    for (const ok of ["https://example.com/a?b=1", "http://x.y", "mailto:a@b.c"]) expect(isSafeUrl(ok), ok).toBe(true);
+    for (const bad of ["file:///C:/Windows/System32/calc.exe", "C:\\\\x.exe", "ms-settings:", "search-ms:query=x", "ms-msdt:/id", "javascript:alert(1)", "tel:123", "https://a b", "\\\\\\\\server\\\\share"])
+      expect(isSafeUrl(bad), bad).toBe(false);
+  });
+
+  it("the installer downloads nothing and writes no file association", () => {
+    const conf = JSON.parse(read("src-tauri/tauri.conf.json")) as { bundle: { windows: { webviewInstallMode: { type: string } } }; app: { withGlobalTauri: boolean; security: { csp: string } } };
+    expect(conf.bundle.windows.webviewInstallMode.type).toBe("skip");
+    expect(conf.app.withGlobalTauri).toBe(false);
+    expect(conf.app.security.csp).not.toMatch(/https?:\/\/(?!ipc\.localhost)|\*/);
+    const hooks = read("src-tauri/windows/installer-hooks.nsh").split("\n").filter((l) => !l.trim().startsWith(";")).join("\n");
+    expect(hooks).not.toMatch(/WriteReg|System::|Exec|NSISdl|inetc|nsExec/i);
+  });
+
+  it("no developer tools in the distributed build", () => {
+    expect(read("src-tauri/Cargo.toml")).not.toMatch(/devtools/);
+  });
+
+  it("every GitHub Action is pinned to a commit", () => {
+    for (const f of [".github/workflows/ci.yml", ".github/workflows/release.yml"]) {
+      for (const line of read(f).split("\n").filter((l) => /^\s*-?\s*uses:/.test(l))) {
+        expect(line, `${f}: ${line.trim()}`).toMatch(/@[0-9a-f]{40}(\s|$)/);
+      }
+    }
+  });
+});
