@@ -45,7 +45,9 @@ line on its label. It is drawn pixel by pixel in
 4. **Ctrl+Shift+Enter**: the completed task moves, dated, to `<project>_done.txt`.
 5. **Ctrl+Shift+P**: every command. **Ctrl+,**: every setting.
 
-On macOS, use ⌘ instead of Ctrl.
+On macOS, use ⌘ instead of Ctrl. The [`examples/`](examples) folder has a file for each
+view (Markdown, HTML and SVG previews, JSON and YAML trees, formatting, syntax coloring):
+open it as a folder and follow its `README.md`.
 
 ## Features
 

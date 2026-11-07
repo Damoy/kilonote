@@ -1,0 +1,31 @@
+# Two YAML documents in one file: the tree view shows both.
+defaults: &defaults
+  restart: always
+  memory: 512M
+
+services:
+  api:
+    <<: *defaults
+    image: acme/api:2.4
+    ports:
+      - "8080:8080"
+    environment:
+      LOG_LEVEL: info
+      FEATURE_FLAGS: search,export
+  worker:
+    <<: *defaults
+    image: acme/worker:2.4
+    command: |
+      python -m worker
+        --queue default
+        --concurrency 4
+---
+# Second document
+monitoring:
+  enabled: true
+  interval: 30s
+  alerts:
+    - name: high-latency
+      threshold: 500
+    - name: errors
+      threshold: 0.05

@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><layout name="dashboard"><!-- Press Shift+Alt+F --><row height="120"><widget type="chart" source="sales"/><widget type="table" source="orders"><column>id</column><column>customer</column></widget></row><row><widget type="text">Updated every <b>5</b> minutes</widget></row></layout>

@@ -1,0 +1,1 @@
+{"orders":[{"id":1042,"customer":{"name":"Acme Corp","country":"FR"},"items":[{"sku":"KB-01","qty":2,"price":49.9},{"sku":"MS-07","qty":1,"price":19.5}],"paid":true},{"id":1043,"customer":{"name":"Globex","country":"DE"},"items":[{"sku":"MN-24","qty":1,"price":189}],"paid":false,"note":"Deliver after 2 pm"}],"total":2}

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 24 24" shape-rendering="crispEdges">
+  <!-- A floppy disk, pixel style -->
+  <rect x="3" y="3" width="18" height="18" fill="#5a4ad6"/>
+  <rect x="4" y="4" width="16" height="16" fill="#7b6cf6"/>
+  <rect x="7" y="4" width="10" height="6" fill="#e8e6ff"/>
+  <rect x="13" y="5" width="2" height="4" fill="#5a4ad6"/>
+  <rect x="6" y="12" width="12" height="7" fill="#f6f5ff"/>
+  <rect x="8" y="14" width="2" height="2" fill="#2b2540"/>
+  <rect x="14" y="14" width="2" height="2" fill="#2b2540"/>
+  <rect x="10" y="17" width="4" height="1" fill="#2b2540"/>
+</svg>

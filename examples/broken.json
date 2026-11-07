@@ -1,0 +1,6 @@
+{
+  "title": "This file has a mistake",
+  "items": [1, 2, 3],
+  "missing": "a comma at the end of this line"
+  "next": true
+}

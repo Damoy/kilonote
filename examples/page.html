@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Acme status page</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; color: #1f2430; background: #f6f7fb; }
+    header { background: linear-gradient(135deg, #7b6cf6, #4fb3ff); color: white; padding: 28px 36px; }
+    header h1 { margin: 0 0 6px; font-size: 26px; }
+    main { padding: 24px 36px; max-width: 820px; }
+    .card { background: white; border-radius: 12px; padding: 18px 22px; margin: 16px 0; box-shadow: 0 2px 10px rgba(30, 40, 90, 0.08); }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e6e8f0; }
+    .ok { color: #1a9a5a; font-weight: 600; }
+    .warn { color: #d9822b; font-weight: 600; }
+    #script-check { padding: 10px 14px; border-radius: 8px; background: #e8f7ee; color: #1a7a48; }
+  </style>
+  <script>
+    // This script never runs in KiloNote's preview: the text below stays the same.
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("script-check").textContent = "A script ran: this should never happen.";
+    });
+  </script>
+</head>
+<body>
+  <header>
+    <h1>Acme status page</h1>
+    <div>Edit this file: the preview follows as you type.</div>
+  </header>
+  <main>
+    <p id="script-check">Scripts are blocked: the page cannot run code.</p>
+
+    <section class="card">
+      <h2>Services</h2>
+      <table>
+        <tr><th>Service</th><th>Region</th><th>Status</th></tr>
+        <tr><td>API</td><td>eu-west</td><td class="ok">Operational</td></tr>
+        <tr><td>Worker</td><td>eu-west</td><td class="warn">Degraded</td></tr>
+        <tr><td>Web</td><td>us-east</td><td class="ok">Operational</td></tr>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>Images</h2>
+      <p>An image embedded in the page (data URI) is shown:</p>
+      <img alt="Embedded chart" width="220" height="80" src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='80'%3E%3Crect width='220' height='80' rx='10' fill='%23eef0fb'/%3E%3Crect x='20' y='42' width='26' height='24' fill='%237b6cf6'/%3E%3Crect x='60' y='26' width='26' height='40' fill='%237b6cf6'/%3E%3Crect x='100' y='14' width='26' height='52' fill='%234fb3ff'/%3E%3Crect x='140' y='34' width='26' height='32' fill='%237b6cf6'/%3E%3Crect x='180' y='22' width='26' height='44' fill='%234fb3ff'/%3E%3C/svg%3E">
+      <p>An image from the internet is not loaded (KiloNote stays offline):</p>
+      <img alt="Remote image, not loaded" src="https://example.com/logo.png">
+    </section>
+
+    <section class="card">
+      <h2>Interactive bits</h2>
+      <details>
+        <summary>Click to unfold</summary>
+        <p>HTML elements that need no script still work.</p>
+      </details>
+      <p><a href="https://example.com">A link</a> opens in your browser.</p>
+      <form action="https://example.com/subscribe">
+        <input placeholder="Forms are never sent"> <button>Send</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

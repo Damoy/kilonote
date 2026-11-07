@@ -1,0 +1,22 @@
+// Application settings (JSON with comments: KiloNote keeps them when you edit
+// a value from the tree view or format the file).
+{
+  "name": "acme-dashboard",
+  "version": "2.4.1",
+  "debug": false,
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080, // double-click 8080 in the tree view to change it
+    "tls": { "enabled": true, "certificate": "certs/server.pem" }
+  },
+  "database": {
+    "url": "postgres://db.internal:5432/acme",
+    "pool": { "min": 2, "max": 20 },
+    "timeoutSeconds": 30
+  },
+  "features": ["search", "export", "dark-mode"],
+  "teams": [
+    { "id": 1, "name": "Platform", "members": ["alice", "bob"] },
+    { "id": 2, "name": "Data", "members": ["carol"], "lead": null }
+  ]
+}
