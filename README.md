@@ -116,6 +116,8 @@ open it as a folder and follow its `README.md`.
   statuses and their colors, archive options, shortcuts
 - Everything is also in a commented `settings.json` (any theme color, custom shortcuts…)
 - Zen mode (Shift+F11), full screen (F11)
+- Readable in every theme: text and colors meet the WCAG contrast ratios (checked by the
+  tests), and keyboard focus is always shown
 
 ## Daily task tracking
 
@@ -369,22 +371,28 @@ online, the workflow also updates the Scoop and winget manifests in `packaging/`
 
 ```
 src/
-  core/         backend (Tauri or browser demo), paths, settings, themes, commands
-  editor/       CodeMirror: tasks (pure logic), note highlighting, languages, formatters, setup,
-                Markdown preview rendering
-  ui/           tabs and tab groups, sidebar, palette, menus, status bar, settings screen, preview,
+  main.ts       entry point
+  app/          controller (documents, saving, events) and its feature modules: commands,
+                pickers, tasks, history, editing, files, session, windows; the guide
+  core/         backend (Tauri or browser demo), paths, settings, themes, command registry
+  editor/       CodeMirror: setup, note highlighting, languages (loaded on demand)
+  text/         pure text logic, no DOM: tasks, activity report, formatters, SQL and tree parsers
+  ui/           tabs and tab groups, sidebar, palette, menus, status bar, settings screen,
                 icon packs, shortcuts cheat sheet
-  app.ts        controller: documents, saving, session, commands
-  report.ts     activity report
+  ui/views/     the side pane: Markdown preview, HTML preview, tree view, diagrams, SQL view
+                (each loaded the first time it is shown)
+  security/     tests that lock the security rules (CSP, sandbox, no innerHTML, permissions)
+  vendor/       small stand-ins for optional dependencies that are left out
 src-tauri/      native Rust backend: atomic reads/writes, archives, trash, single instance
 scripts/        Windows builds (WSL or PowerShell), releases, packaging manifests, pixel art icons
 packaging/      Scoop and winget manifests
+examples/       sample files for the side views
 e2e/            end-to-end tests of the real app (WebDriver)
 docs/           security sheet, screenshots
 ```
 
-Technical choices: [Tauri 2](https://tauri.app) (native window, an installer of about 2 MB
-instead of ~100 MB for Electron), [CodeMirror 6](https://codemirror.net) for the editor, and
+Technical choices: [Tauri 2](https://tauri.app) (native window, a Windows installer of
+about 3 MB instead of ~100 MB for Electron), [CodeMirror 6](https://codemirror.net) for the editor, and
 no UI framework.
 
 ## Credits
