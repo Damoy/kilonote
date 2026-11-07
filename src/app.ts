@@ -2100,7 +2100,7 @@ export class App {
       { id: "task.archive", title: "Task: Archive line to _done", run: () => this.archiveSelection() },
       { id: "task.archiveDone", title: "Task: Archive all completed tasks", run: () => this.archiveAllDone() },
       { id: "report.generate", title: "Report: Generate activity report…", run: () => this.generateReport() },
-      { id: "report.tag", title: "Report: Activity report for a #tag…", run: () => this.generateTagReport() },
+      { id: "report.tag", title: "Report: Generate activity report for a #tag…", run: () => this.generateTagReport() },
       { id: "task.due", title: "Task: Set due date…", run: () => this.setDueDate() },
       { id: "help.guide", title: "Help: KiloNote guide", run: () => this.newDoc({ text: GUIDE, title: "KiloNote guide.md", lang: "markdown" }) },
       { id: "help.about", title: "Help: About", run: () => this.showAbout() },

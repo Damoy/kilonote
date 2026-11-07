@@ -107,7 +107,7 @@ work.txt                                     work_done.txt
    **Ctrl+Shift+D** switches between `work.txt` and `work_done.txt`.
 4. Give it a deadline if needed: **Ctrl+Shift+U** → `@2026-11-14`; it turns red once overdue.
 5. At the end of the week or the year: command palette → **Report: Generate activity report**
-   (or **Report for a #tag** to sum up one client or topic).
+   (or **Report: Generate activity report for a #tag** to sum up one client or topic).
 
 The statuses `todo`, `ongoing`, `blocked`, `wait`, `done` and `ok` are recognized out of the box,
 in any case. Your existing files work as they are.

@@ -39,7 +39,7 @@ task to change its status or archive it. The badge counts overdue tasks.
 Command palette → "Report: Generate activity report…", then a period (this or last
 week, month or year, the last 12 months, all time). KiloNote reads every \`*_done\`
 file of the folder and writes a summary by project and by month, ready to paste into
-a review. Ongoing tasks are listed too. "Report: Activity report for a #tag…" limits
+a review. Ongoing tasks are listed too. "Report: Generate activity report for a #tag…" limits
 it to the tasks of one tag (a client, a topic…).
 
 ## Tabs and tab groups
