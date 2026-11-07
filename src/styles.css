@@ -563,9 +563,28 @@ button.st-item:hover { background: var(--kn-hover); color: var(--kn-fg); }
 /* ------------------------------------------------------------------ Markdown preview */
 
 #preview {
-  flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;
-  border-left: 1px solid var(--kn-border); background: var(--kn-bg);
+  flex: 0 0 var(--pv-size, 50%); min-width: 0; display: flex; flex-direction: column; overflow: hidden;
+  position: relative; background: var(--kn-bg);
 }
+/* The separator between the editor and the pane: drag it to resize. */
+.pv-resizer { flex: none; width: 5px; margin: 0 -2px; z-index: 2; cursor: col-resize; position: relative; }
+.pv-resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 2px; width: 1px; background: var(--kn-border); transition: background 100ms, width 100ms; }
+.pv-resizer:hover::after, body.resizing .pv-resizer::after { background: var(--kn-accent); width: 2px; left: 1.5px; }
+.pv-resizer[hidden] { display: none; }
+/* While resizing, the page frame must not swallow the pointer. */
+body.resizing .pv-frame { pointer-events: none; }
+/* The pane alone. */
+#editor-area.preview-only #editor-host, #editor-area.preview-only .pv-resizer { display: none; }
+#editor-area.preview-only #preview { flex: 1; }
+.pv-only-btn {
+  position: absolute; top: 7px; right: 10px; z-index: 3; width: 26px; height: 26px; border-radius: 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--kn-bg-alt) 85%, transparent); color: var(--kn-fg-muted);
+  border: 1px solid var(--kn-border); opacity: 0.55; transition: opacity 100ms, color 100ms;
+}
+.pv-only-btn:hover, .pv-only-btn:focus-visible { opacity: 1; color: var(--kn-fg); }
+.pv-only-btn .kn-icon { width: 14px; height: 14px; }
+#preview[data-kind="tree"] .tv-tools { padding-right: 42px; }
 #preview[hidden], #preview > [hidden] { display: none; }
 .pv-md { flex: 1; min-height: 0; overflow: auto; outline: none; padding: 22px 34px 60px; user-select: text; -webkit-user-select: text; }
 /* A page is shown as a browser would: on white. */

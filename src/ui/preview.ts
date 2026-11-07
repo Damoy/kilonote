@@ -8,7 +8,7 @@ import type { App, Doc } from "../app";
 import { extname } from "../core/path";
 import { renderMarkdown } from "../editor/markdown-render";
 import { todayISO } from "../editor/tasks";
-import { debounce, h } from "./dom";
+import { debounce, h, icon } from "./dom";
 import { HtmlFrame } from "./html-preview";
 import { TreeView } from "./tree-view";
 
@@ -34,6 +34,12 @@ export const SIDE_LABELS: Record<SideKind, { label: string; icon: string; title:
 export class Preview {
   /** The views the user turned on (for this window). */
   open = new Set<SideKind>();
+  /** Share of the width given to the pane (the separator moves it). */
+  size = 0.5;
+  /** The pane takes the whole width (the editor is hidden). */
+  only = false;
+  private resizer = h("div", { class: "pv-resizer", role: "separator", "aria-orientation": "vertical", title: "Drag to resize · double-click: half and half" });
+  private onlyBtn = h("button", { class: "pv-only-btn" });
   private pane: HTMLElement;
   private md = h("div", { class: "pv-md", tabindex: "-1" });
   private frame: HtmlFrame;
@@ -54,7 +60,10 @@ export class Preview {
     this.frame = new HtmlFrame((url) => void app.backend.openUrl(url));
     this.tree = new TreeView(app);
     // Created once and never moved: a moved frame would reload.
-    pane.replaceChildren(this.md, this.frame.el, this.tree.el);
+    pane.replaceChildren(this.md, this.frame.el, this.tree.el, this.onlyBtn);
+    pane.before(this.resizer);
+    this.onlyBtn.addEventListener("click", () => this.setOnly(!this.only));
+    this.setupResizer();
     // Links: only http(s) and mailto, opened in the browser.
     this.md.addEventListener("click", (e) => {
       const a = (e.target as HTMLElement).closest<HTMLElement>("a[data-url]");
@@ -74,6 +83,41 @@ export class Preview {
     app.on("docs", () => this.update());
     // The preview follows the editor's scrolling.
     this.md.addEventListener("scroll", () => this.follow(this.md, app.view.scrollDOM));
+  }
+
+  private setupResizer() {
+    const r = this.resizer;
+    r.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      r.setPointerCapture(e.pointerId);
+      document.body.classList.add("resizing");
+      const area = document.getElementById("editor-area")!.getBoundingClientRect();
+      const move = (ev: PointerEvent) => this.setSize((area.right - ev.clientX) / area.width, false);
+      const up = () => {
+        r.removeEventListener("pointermove", move);
+        r.removeEventListener("pointerup", up);
+        document.body.classList.remove("resizing");
+        this.app.emit("workspace"); // kept with the session
+      };
+      r.addEventListener("pointermove", move);
+      r.addEventListener("pointerup", up);
+    });
+    r.addEventListener("dblclick", () => this.setSize(0.5));
+  }
+
+  /** Share of the width for the pane, between 15 % and 85 %. */
+  setSize(size: number, save = true) {
+    this.size = Math.min(0.85, Math.max(0.15, Number.isFinite(size) ? size : 0.5));
+    document.getElementById("editor-area")?.style.setProperty("--pv-size", `${(this.size * 100).toFixed(1)}%`);
+    if (save) this.app.emit("workspace");
+  }
+
+  /** The pane alone (the editor hidden), or side by side again. */
+  setOnly(only: boolean) {
+    this.only = only;
+    this.update(true);
+    this.app.emit("workspace");
+    if (!only) this.app.focusEditor();
   }
 
   /** Called once the editor exists. */
@@ -118,7 +162,17 @@ export class Preview {
     const show = this.visible;
     const kind = this.kind;
     this.pane.hidden = !show;
-    document.getElementById("editor-area")?.classList.toggle("with-preview", show);
+    this.resizer.hidden = !show;
+    const area = document.getElementById("editor-area");
+    area?.classList.toggle("with-preview", show);
+    area?.classList.toggle("preview-only", show && this.only);
+    area?.style.setProperty("--pv-size", `${(this.size * 100).toFixed(1)}%`);
+    const label = this.only ? "Show the editor again" : "Preview only (hide the editor)";
+    if (this.onlyBtn.title !== label) {
+      this.onlyBtn.title = label;
+      this.onlyBtn.setAttribute("aria-label", label);
+      this.onlyBtn.replaceChildren(icon(this.only ? "minimize" : "maximize"));
+    }
     if (!show || !kind) {
       this.rendered = null;
       this.renderedKind = null;

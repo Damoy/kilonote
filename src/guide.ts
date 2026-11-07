@@ -70,7 +70,8 @@ it to the tasks of one tag (a client, a topic…).
 - **Ctrl+Shift+V** (or the *Preview* / *Tree* button at the right of the tabs): a second
   view next to the editor. Markdown, HTML and SVG files get a preview (pages run no
   script and load nothing from the network); JSON and YAML files get a tree: hover a
-  node to see it in the text, double-click a value or a key to change it.
+  node to see it in the text, double-click a value or a key to change it. Drag the
+  separator to make the pane wider; its corner button shows it alone.
 - **Ctrl+F** / **Ctrl+H**: find / replace in the note.
 - **Ctrl+D**: select the next occurrence (multiple cursors), **Alt+click**: add a cursor.
 - **Alt+↑ / Alt+↓**: move the line. **Ctrl+Shift+K**: delete the line.

@@ -93,6 +93,9 @@ interface Session {
   zen?: boolean;
   /** The side views turned on (older sessions: true for the Markdown preview). */
   preview?: SideKind[] | boolean;
+  /** Width share of the preview pane, and whether it hides the editor. */
+  previewSize?: number;
+  previewOnly?: boolean;
 }
 
 type AppEvent = "docs" | "active" | "workspace" | "settings" | "saved" | "selection";
@@ -1939,6 +1942,8 @@ export class App {
       sidebar: this.sidebar.sessionState(),
       zen: this.zen,
       preview: [...this.preview.open],
+      previewSize: this.preview.size,
+      previewOnly: this.preview.only,
     };
   }
 
@@ -2022,6 +2027,8 @@ export class App {
       if (s.zen) this.setZen(true);
       const views: unknown[] = Array.isArray(s.preview) ? s.preview : s.preview ? ["markdown"] : [];
       this.preview.open = new Set(views.filter((v): v is SideKind => v === "markdown" || v === "html" || v === "tree"));
+      if (typeof s.previewSize === "number") this.preview.size = Math.min(0.85, Math.max(0.15, s.previewSize));
+      this.preview.only = s.previewOnly === true;
       this.activate(target ?? this.docs[0] ?? null);
       for (const d of conflicts) this.flagConflict(d);
     }
@@ -2232,6 +2239,8 @@ export class App {
       { id: "view.zoomReset", title: "View: Reset text size", run: () => this.zoom(null) },
       { id: "view.wrap", title: "View: Toggle word wrap", run: () => this.updateSetting("word_wrap", !this.settings.word_wrap) },
       { id: "view.preview", title: "View: Toggle preview or tree view (Markdown, HTML, SVG, JSON, YAML)", run: () => this.preview.toggle() },
+      { id: "view.previewOnly", title: "View: Preview only (hide the editor) / side by side", run: () => this.preview.visible ? this.preview.setOnly(!this.preview.only) : this.preview.toggle() },
+      { id: "view.previewSize", title: "View: Preview and editor half and half", run: () => this.preview.setSize(0.5) },
       { id: "view.language", title: "View: Document type (syntax coloring)…", run: () => this.selectLanguage() },
       { id: "view.lineNumbers", title: "View: Toggle line numbers", run: () => this.updateSetting("line_numbers", !this.settings.line_numbers) },
       { id: "theme.select", title: "Theme: Select…", run: () => this.selectTheme() },
