@@ -7,7 +7,7 @@ import { basename, dirname, extname, isDoneFile, projectName, relative, samePath
 import { resolveColor } from "../core/themes";
 import { dueState, findTags, findTasks, isDoneStatus, isOngoingStatus, todayISO, type FoundTask } from "../editor/tasks";
 import { debounce, h, icon } from "./dom";
-import { showMenu, toast, type MenuItem } from "./overlay";
+import { confirm, showMenu, toast, type MenuItem } from "./overlay";
 
 export type Panel = "files" | "tasks" | "search";
 
@@ -37,6 +37,10 @@ export class Sidebar {
   private lastTags = new Map<string, number>();
   private searchInput = h("input", { class: "kn-input sb-search-input", type: "text", placeholder: "Search in folder…", spellcheck: "false" });
   private searchResults = h("div", { class: "sb-list" });
+  private replaceInput = h("input", { class: "kn-input sb-search-input", type: "text", placeholder: "Replace with…", spellcheck: "false" });
+  private replaceRow = h("div", { class: "sb-search-box sb-replace-box" });
+  /** Files with matches in the last search. */
+  private hitFiles: { path: string; count: number }[] = [];
   private searchCase = false;
   private searchRegex = false;
   private treeRender = 0;
@@ -100,11 +104,32 @@ export class Sidebar {
       reBtn.classList.toggle("active", this.searchRegex);
       void this.runSearch();
     });
+    const replaceToggle = h("button", { class: "kn-icon-btn", title: "Replace in files" }, icon("replace"));
+    replaceToggle.addEventListener("click", () => {
+      this.replaceRow.hidden = !this.replaceRow.hidden;
+      replaceToggle.classList.toggle("active", !this.replaceRow.hidden);
+      if (!this.replaceRow.hidden) this.replaceInput.focus();
+      if (this.searchInput.value) void this.runSearch(); // shows the per-file buttons
+    });
+    this.replaceRow.hidden = true;
+    this.replaceRow.append(
+      this.replaceInput,
+      h("button", { class: "kn-btn sb-replace-all", title: "Replace every match of the folder", onclick: () => this.replaceAll() }, "All"),
+    );
+    this.replaceInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        // Without this, the same key press would also click the dialog's focused button.
+        e.preventDefault();
+        void this.replaceAll();
+      }
+      if (e.key === "Escape") app.focusEditor();
+    });
     const searchPanel = h(
       "div",
       { class: "sb-panel" },
-      h("div", { class: "sb-header" }, h("span", { class: "sb-title" }, "Search")),
+      h("div", { class: "sb-header" }, h("span", { class: "sb-title" }, "Search"), h("span", { class: "kn-spacer" }), replaceToggle),
       h("div", { class: "sb-search-box" }, this.searchInput, caseBtn, reBtn),
+      this.replaceRow,
       this.searchResults,
     );
     const searchSoon = debounce(() => void this.runSearch(), 220);
@@ -517,6 +542,39 @@ export class Sidebar {
   // ---------------------------------------------------------------------------
   // Search in files
 
+  /** The search expression, or null when invalid. */
+  private searchRegExp(): RegExp | null {
+    const q = this.searchInput.value;
+    try {
+      return new RegExp(this.searchRegex ? q : q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), this.searchCase ? "g" : "gi");
+    } catch {
+      return null;
+    }
+  }
+
+  /** Replaces the matches of the last search, in every file or in one. */
+  private async replaceAll(only?: string) {
+    const re = this.searchRegExp();
+    if (!this.searchInput.value || !re) return;
+    if (re.test("")) {
+      toast("This expression also matches empty text: make it more specific before replacing.", { kind: "error" });
+      return;
+    }
+    const files = only ? this.hitFiles.filter((f) => f.path === only) : this.hitFiles;
+    if (!files.length) return;
+    const total = files.reduce((n, f) => n + f.count, 0);
+    const replacement = this.replaceInput.value;
+    const r = await confirm({
+      title: `Replace in ${files.length} file${files.length > 1 ? "s" : ""}?`,
+      message: `"${this.searchInput.value}" → "${replacement}" (${total}+ match${total > 1 ? "es" : ""}). A copy of each closed file goes to the local history, and the notification offers to undo.`,
+      okLabel: "Replace",
+      danger: true,
+    });
+    if (r !== "ok") return;
+    await this.app.replaceInFiles(files.map((f) => f.path), re, replacement, !this.searchRegex);
+    await this.runSearch();
+  }
+
   private searchToken = 0;
   async runSearch() {
     const app = this.app;
@@ -540,6 +598,7 @@ export class Sidebar {
     const files = app.workspaceFiles.filter((p) => app.isNoteFile(p)).slice(0, 5000);
     const texts = await app.readFiles(files);
     if (token !== this.searchToken) return;
+    this.hitFiles = [];
     const frag = document.createDocumentFragment();
     let total = 0;
     let fileCount = 0;
@@ -572,9 +631,13 @@ export class Sidebar {
       }
       if (hits.length) {
         fileCount++;
-        const rel = relative(app.workspace, dirname(files[i]));
+        const path = files[i];
+        this.hitFiles.push({ path, count: hits.length });
+        const rel = relative(app.workspace, dirname(path));
         frag.append(
-          h("div", { class: "sb-group-title", title: files[i] }, icon("file", "sb-file-icon"), h("span", { class: "sb-name" }, basename(files[i])), rel ? h("span", { class: "sb-dim" }, rel) : null, h("span", { class: "kn-spacer" }), h("span", { class: "sb-count" }, String(hits.length))),
+          h("div", { class: "sb-group-title", title: path }, icon("file", "sb-file-icon"), h("span", { class: "sb-name" }, basename(path)), rel ? h("span", { class: "sb-dim" }, rel) : null, h("span", { class: "kn-spacer" }),
+            this.replaceRow.hidden ? null : h("button", { class: "kn-icon-btn sb-replace-file", title: "Replace in this file", onclick: (e: Event) => { e.stopPropagation(); void this.replaceAll(path); } }, icon("replace")),
+            h("span", { class: "sb-count" }, String(hits.length))),
           ...hits,
         );
       }

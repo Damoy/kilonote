@@ -308,6 +308,10 @@ body.zen .cm-gutters { display: none !important; }
 .sb-task-actions .kn-icon { width: 14px; height: 14px; }
 
 .sb-search-box { flex: none; display: flex; gap: 4px; padding: 0 10px 8px; }
+.sb-replace-all { flex: none; height: 30px; padding: 0 10px; }
+.sb-replace-file { width: 22px; height: 22px; display: none; }
+.sb-group-title:hover .sb-replace-file { display: inline-flex; }
+.kn-icon-btn.active { color: var(--kn-accent); background: var(--kn-accent-soft); }
 .sb-search-input { height: 30px; }
 .sb-toggle {
   flex: none; width: 30px; height: 30px; border-radius: 7px; border: 1px solid var(--kn-border);

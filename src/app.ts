@@ -813,6 +813,78 @@ export class App {
     }
   }
 
+  /**
+   * "Replace in files": every match of `re` (line by line) in these files. Open
+   * notes are changed in their tab and saved; the others are rewritten in their
+   * own encoding after a copy goes to the local history. Undo puts every file back.
+   */
+  async replaceInFiles(paths: string[], re: RegExp, replacement: string, literal: boolean): Promise<{ files: number; count: number }> {
+    const flags = re.flags.includes("g") ? re.flags : re.flags + "g";
+    const global = new RegExp(re.source, flags);
+    const done: { path: string; original: string; encoding: string; mtime: number; open: boolean }[] = [];
+    let count = 0;
+    for (const path of paths) {
+      const doc = this.findDoc(path);
+      let original: string;
+      let encoding = "UTF-8";
+      if (doc) original = (doc === this.active ? this.view.state : doc.state).doc.toString();
+      else {
+        try {
+          const ft = await this.backend.readText(path);
+          original = ft.text;
+          encoding = ft.encoding;
+        } catch {
+          continue;
+        }
+      }
+      let n = 0;
+      const eol = original.includes("\r\n") ? "\r\n" : "\n";
+      const next = original
+        .split(/\r\n|\r|\n/)
+        .map((line) => {
+          for (const m of line.matchAll(global)) if (m[0].length) n++;
+          return literal ? line.replace(global, () => replacement) : line.replace(global, replacement);
+        })
+        .join(eol);
+      if (!n || next === original) continue;
+      if (doc) {
+        this.replaceDocContent(doc, next);
+        if (doc.path && !(await this.save(doc))) continue;
+        done.push({ path, original, encoding: doc.encoding, mtime: doc.mtime, open: true });
+      } else {
+        await this.backend.writeText(join(this.historyDir(), historyName(path, "replace")), original).catch(() => {});
+        try {
+          const written = await this.backend.writeText(path, next, encoding);
+          done.push({ path, original, encoding: written.encoding, mtime: written.mtime, open: false });
+        } catch (e) {
+          toast(`Could not write ${basename(path)}: ${e}`, { kind: "error" });
+          continue;
+        }
+      }
+      count += n;
+    }
+    void this.backend.pruneHistory(HISTORY_KEEP).catch(() => {});
+    if (done.length) {
+      const undo = async () => {
+        for (const f of done) {
+          const doc = this.findDoc(f.path);
+          if (doc) {
+            this.replaceDocContent(doc, f.original);
+            await this.save(doc);
+          } else if ((await this.backend.stat(f.path))?.mtime === f.mtime) {
+            await this.backend.writeText(f.path, f.original, f.encoding).catch(() => {});
+          }
+        }
+        this.emit("saved");
+      };
+      toast(`${count} replacement${count > 1 ? "s" : ""} in ${done.length} file${done.length > 1 ? "s" : ""}.`, {
+        kind: "success", timeout: 12000, action: { label: "Undo", run: undo },
+      });
+      this.emit("saved");
+    }
+    return { files: done.length, count };
+  }
+
   async showLocalHistory() {
     const doc = this.active;
     if (!doc?.path) {

@@ -256,6 +256,36 @@ describe("local history", () => {
   });
 });
 
+describe("replace in files", () => {
+  it("rewrites open and closed files in their encoding, keeps copies, and can be undone", async () => {
+    const { app, disk } = await start({
+      "/notes/a.txt": "call Bob\r\nBob again\r\n",
+      "/notes/b.txt": "caf\u00e9 with bob\n",
+      "/notes/c.txt": "nothing here\n",
+    });
+    const a = (await app.openFile("/notes/a.txt"))!;
+    const r = await app.replaceInFiles(["/notes/a.txt", "/notes/b.txt", "/notes/c.txt"], /(b)ob/gi, "$1ill", false);
+    expect(r).toEqual({ files: 2, count: 3 });
+    expect(disk.text("/notes/a.txt")).toBe("call Bill\r\nBill again\r\n");
+    expect(a.dirty).toBe(false);
+    expect(disk.text("/notes/b.txt")).toBe("caf\u00e9 with bill\n");
+    expect(disk.encodings.get("/notes/b.txt")).toBe("Windows-1252");
+    const copies = [...disk.files.keys()].filter((p) => p.includes("/history/") && p.includes("_replace_"));
+    expect(copies.map((p) => disk.text(p))).toEqual(["caf\u00e9 with bob\n"]);
+    // Undo, from the notification.
+    [...document.querySelectorAll<HTMLButtonElement>(".kn-toast-action")].find((b) => b.textContent === "Undo")!.click();
+    await tick(10);
+    expect(disk.text("/notes/a.txt")).toBe("call Bob\r\nBob again\r\n");
+    expect(disk.text("/notes/b.txt")).toBe("caf\u00e9 with bob\n");
+  });
+
+  it("a literal replacement never expands $ patterns", async () => {
+    const { app, disk } = await start({ "/notes/p.txt": "price: 10\n" });
+    await app.replaceInFiles(["/notes/p.txt"], /10/g, "$&0 $1", true);
+    expect(disk.text("/notes/p.txt")).toBe("price: $&0 $1\n");
+  });
+});
+
 describe("folders", () => {
   it("a recent folder that no longer exists is not opened, and leaves the list", async () => {
     const { app } = await start({});
