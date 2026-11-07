@@ -130,6 +130,17 @@ describe("formatKindFor", () => {
     expect(formatKindFor("text", "<a/>")).toBe("xml");
     expect(formatKindFor("text", "a | b\n--- | ---\n1 | 2")).toBe("tables");
     expect(formatKindFor("text", "just a note")).toBe(null);
+    expect(formatKindFor("text", "[ ] buy milk\n[x] call Bob")).toBe(null);
+    expect(formatKindFor("text", "<b>bold</b> is a tag")).toBe(null);
     expect(formatKindFor("python", "{}")).toBe(null);
+  });
+});
+
+describe("limits", () => {
+  it("refuses documents nested too deeply instead of running out of stack", () => {
+    const deep = "[".repeat(100000) + "]".repeat(100000);
+    expect(() => formatJson(deep)).toThrow(FormatError);
+    expect(() => formatJson(deep)).toThrow(/more than 500 levels/);
+    expect(() => formatXml("<a>".repeat(5000) + "</a>".repeat(5000))).toThrow(/more than 500 levels/);
   });
 });

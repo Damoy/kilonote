@@ -78,3 +78,25 @@ describe("YAML tree", () => {
     expect(t.error).not.toBeNull();
   });
 });
+
+describe("robustness", () => {
+  it("never throws: deep or broken documents become an error", async () => {
+    for (const [src, fmt] of [["[".repeat(100000) + "]".repeat(100000), "json"], ["[".repeat(100000), "yaml"], ["{\"a\": ", "json"], ["a: [1,", "yaml"]] as const) {
+      const t = await parseTree(src, fmt);
+      expect(t.error, `${fmt} ${src.slice(0, 10)}`).not.toBeNull();
+    }
+  });
+
+  it("YAML aliases are shown, never expanded", async () => {
+    const bomb = "a: &a [x, x, x, x, x, x, x, x, x]\nb: &b [*a, *a, *a, *a, *a, *a, *a, *a, *a]\nc: [*b, *b, *b, *b, *b, *b, *b, *b, *b]\n";
+    const t = await parseTree(bomb, "yaml");
+    expect(find(t.roots[0], "c", 0).type).toBe("alias");
+    expect(find(t.roots[0], "c", 0).text).toBe("*b");
+  });
+
+  it("YAML strings with flow characters are quoted (safe inside [ ] and { })", async () => {
+    const t = await parseTree("tags: [a, b]\n", "yaml");
+    expect(valueSource(find(t.roots[0], "tags", 0), "x, y", "yaml")).toBe('"x, y"');
+    expect(valueSource(find(t.roots[0], "tags", 0), "[x]", "yaml")).toBe('"[x]"');
+  });
+});

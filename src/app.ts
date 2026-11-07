@@ -463,7 +463,10 @@ export class App {
       const indent = this.settings.indent_with_tabs ? "\t" : " ".repeat(this.settings.tab_size);
       out = mode === "minify" ? minifyJson(text) : formatText(kind, text, indent);
     } catch (e) {
-      if (!(e instanceof FormatError)) throw e;
+      if (!(e instanceof FormatError)) {
+        toast(`Could not format: ${(e as Error).message}`, { kind: "error" });
+        return;
+      }
       const pos = from + Math.min(e.pos, text.length);
       const goto = () => {
         if (doc !== this.active) this.activate(doc);

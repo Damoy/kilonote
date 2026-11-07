@@ -3,7 +3,7 @@
 // (comments, layout, quotes) stays exactly as written.
 // YAML uses the "yaml" package, loaded the first time a YAML tree is shown.
 
-import { FormatError, jsonTokens, type JTok, where } from "./format";
+import { FormatError, jsonTokens, MAX_DEPTH, tooDeep, type JTok, where } from "./format";
 
 export type NodeType = "object" | "array" | "string" | "number" | "boolean" | "null" | "alias" | "other";
 export type TreeFormat = "json" | "yaml";
@@ -61,9 +61,11 @@ export function parseJsonTree(text: string): TreeNode {
     if (!t) throw new FormatError("Unexpected end of the document: a bracket is not closed.", text.length);
     return t;
   };
+  let depth = 0;
   const value = (key: string | number | null): TreeNode => {
     const t = next();
     if (t.t === "{" || t.t === "[") {
+      if (++depth > MAX_DEPTH) throw tooDeep(text, t.pos);
       const close = t.t === "{" ? "}" : "]";
       const node: TreeNode = { key, type: t.t === "{" ? "object" : "array", from: t.pos, to: t.pos + 1, children: [], editable: false, keyEditable: false };
       for (;;) {
@@ -72,6 +74,7 @@ export function parseJsonTree(text: string): TreeNode {
         if (p.t === close) {
           k++;
           node.to = p.pos + 1;
+          depth--;
           return node;
         }
         if (p.t === "]" || p.t === "}") throw new FormatError(`Unexpected "${p.v}" at ${where(text, p.pos)}: "${t.v}" is closed with "${close}".`, p.pos);
@@ -127,7 +130,16 @@ export async function parseYamlTree(text: string): Promise<ParsedTree> {
   let error: ParsedTree["error"] = null;
   const STYLE: Record<string, string> = { PLAIN: "plain", QUOTE_DOUBLE: '"', QUOTE_SINGLE: "'", BLOCK_LITERAL: "block", BLOCK_FOLDED: "block" };
 
+  let depth = 0;
   const convert = (n: unknown, key: string | number | null): TreeNode => {
+    if (++depth > MAX_DEPTH) throw tooDeep(text, (n as { range?: number[] }).range?.[0] ?? 0);
+    try {
+      return convertNode(n, key);
+    } finally {
+      depth--;
+    }
+  };
+  const convertNode = (n: unknown, key: string | number | null): TreeNode => {
     const range = (n as { range?: [number, number, number] }).range ?? [0, 0, 0];
     const base = { key, from: range[0], to: range[1], editable: false, keyEditable: false };
     if (Y.isMap(n)) {
@@ -168,20 +180,26 @@ export async function parseYamlTree(text: string): Promise<ParsedTree> {
       error = { message: e.message.split("\n")[0], pos: e.pos[0] };
     }
     if (d.contents == null) return;
-    const node = convert(d.contents, list.length > 1 ? `Document ${i + 1}` : null);
-    node.isDocument = list.length > 1;
-    roots.push(node);
+    try {
+      const node = convert(d.contents, list.length > 1 ? `Document ${i + 1}` : null);
+      node.isDocument = list.length > 1;
+      roots.push(node);
+    } catch (e) {
+      if (!(e instanceof FormatError)) throw e;
+      error ??= { message: e.message, pos: e.pos };
+    }
   });
   return { format: "yaml", roots, error };
 }
 
+/** Never throws: a problem becomes the tree's error. */
 export async function parseTree(text: string, format: TreeFormat): Promise<ParsedTree> {
-  if (format === "yaml") return parseYamlTree(text);
   try {
+    if (format === "yaml") return await parseYamlTree(text);
     return { format, roots: [parseJsonTree(text)], error: null };
   } catch (e) {
-    if (e instanceof FormatError) return { format, roots: [], error: { message: e.message, pos: e.pos } };
-    throw e;
+    const err = e instanceof FormatError ? e : new FormatError(`The ${format === "json" ? "JSON" : "YAML"} could not be read: ${(e as Error).message}`, 0);
+    return { format, roots: [], error: { message: err.message, pos: err.pos } };
   }
 }
 
@@ -191,7 +209,7 @@ export async function parseTree(text: string, format: TreeFormat): Promise<Parse
 /** YAML text that can stay unquoted (and stays a string). */
 function plainYamlString(s: string): boolean {
   if (!s || s !== s.trim() || /\n/.test(s)) return false;
-  if (/^[-?:,[\]{}#&*!|>'"%@`]/.test(s) || /: |\s#|:$/.test(s)) return false;
+  if (/^[-?:,[\]{}#&*!|>'"%@`]/.test(s) || /: |\s#|:$|[,[\]{}]/.test(s)) return false;
   // "12", "true", "null"… would no longer be strings.
   try {
     return typeof yamlLib?.parse(s) === "string";

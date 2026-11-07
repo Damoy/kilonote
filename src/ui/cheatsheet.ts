@@ -112,7 +112,9 @@ export function showCheatSheet(app: App, opts: { startup?: boolean } = {}) {
     app.focusEditor();
   };
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape" || (e.key === "Enter" && document.activeElement !== hide)) {
+    // Enter closes, unless it is meant for a focused button or the checkbox.
+    const onControl = document.activeElement instanceof HTMLButtonElement || document.activeElement === hide;
+    if (e.key === "Escape" || (e.key === "Enter" && !onControl)) {
       e.preventDefault();
       e.stopPropagation();
       close();

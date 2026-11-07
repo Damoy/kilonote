@@ -142,7 +142,7 @@ export class Preview {
       } else if (kind === "html") {
         void this.frame.show(text, active.path && extname(active.path) === "svg" ? "svg" : "html");
       } else {
-        void this.tree.render(active, doc.toString(), active.lang === "yaml" ? "yaml" : "json").then(() =>
+        void this.tree.render(active, doc, active.lang === "yaml" ? "yaml" : "json").then(() =>
           this.tree.followCursor(this.app.view.state.selection.main.head));
         return;
       }

@@ -24,6 +24,15 @@ describe("HTML preview", () => {
     expect(doc.querySelectorAll("img[src]").length).toBe(0); // remote and data:text/html images
   });
 
+  it("sees through obfuscated URLs and keeps the keyboard in the editor", () => {
+    const doc = sanitizeHtml('<a id="a" href="java\nscript:alert(1)">x</a><a id="b" href=" &#14;javascript:alert(1)">y</a><input id="c" autofocus><video id="d" autoplay></video><svg><image id="e" href="https://example.com/x.png"/><use id="f" xlink:href="//example.com/s.svg#i"/></svg>');
+    for (const id of ["a", "b"]) expect(doc.getElementById(id)?.hasAttribute("href"), id).toBe(false);
+    expect(doc.getElementById("c")?.hasAttribute("autofocus")).toBe(false);
+    expect(doc.getElementById("d")?.hasAttribute("autoplay")).toBe(false);
+    expect(doc.getElementById("e")?.hasAttribute("href")).toBe(false);
+    expect(doc.getElementById("f")?.getAttributeNames().some((n) => n.includes("href"))).toBe(false);
+  });
+
   it("keeps embedded images and drops remote ones", () => {
     const doc = sanitizeHtml('<img id="a" src="data:image/png;base64,AAAA"><img id="b" src="https://example.com/x.png"><img id="c" src="//cdn.example/x.png"><video id="d" poster="http://x/p.png"></video>');
     expect(doc.getElementById("a")?.getAttribute("src")).toContain("data:image/png");

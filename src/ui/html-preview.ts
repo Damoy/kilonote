@@ -23,8 +23,13 @@ export function sanitizeHtml(src: string): Document {
   for (const el of doc.querySelectorAll("*")) {
     for (const attr of [...el.attributes]) {
       const name = attr.name.toLowerCase();
-      if (name.startsWith("on") || name === "srcdoc" || name === "http-equiv") el.removeAttribute(attr.name);
-      else if (URL_ATTRS.has(name) && /^\s*(?:javascript|vbscript|data:text\/html|data:application)/i.test(attr.value)) el.removeAttribute(attr.name);
+      // Browsers ignore tabs, line breaks and control characters in URLs ("java\nscript:").
+      const url = attr.value.replace(/[\u0000-\u0020]/g, "");
+      // autofocus would take the keyboard from the editor at every update.
+      if (name.startsWith("on") || name === "srcdoc" || name === "http-equiv" || name === "autofocus" || name === "autoplay") el.removeAttribute(attr.name);
+      else if (URL_ATTRS.has(name) && /^(?:javascript|vbscript|data:text\/html|data:application)/i.test(url)) el.removeAttribute(attr.name);
+      // SVG <image>, <use>, <feImage>: nothing from outside.
+      else if ((name === "href" || name === "xlink:href") && !["a", "area"].includes(el.localName) && /^(?:[a-z][\w+.-]*:|\/\/)/i.test(url) && !/^data:image\//i.test(url)) el.removeAttribute(attr.name);
     }
   }
   for (const form of doc.querySelectorAll("form")) form.removeAttribute("action");

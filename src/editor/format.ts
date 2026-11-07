@@ -8,6 +8,13 @@ export class FormatError extends Error {
   }
 }
 
+/** Deeper documents are refused (instead of running out of stack). */
+export const MAX_DEPTH = 500;
+
+export function tooDeep(text: string, pos: number): FormatError {
+  return new FormatError(`Nested more than ${MAX_DEPTH} levels deep at ${where(text, pos)}: too deep to format or show as a tree.`, pos);
+}
+
 /** "line 3, column 7" for an offset of `text`. */
 export function where(text: string, pos: number): string {
   const before = text.slice(0, pos);
@@ -156,6 +163,7 @@ export function formatJson(text: string, indent = "  "): string {
   };
 
   const container = (open: JTok, depth: number): JTok => {
+    if (depth >= MAX_DEPTH) throw tooDeep(text, open.pos);
     const close = open.t === "{" ? "}" : "]";
     out += open.v;
     if (open.t === "[") {
@@ -347,6 +355,7 @@ export function formatXml(text: string, indent = "  ", html = false): string {
       i = rest ? end + rest[0].length : end;
       continue;
     }
+    if (stack.length > MAX_DEPTH) throw tooDeep(text, i);
     stack.push(el);
   }
   if (!html && stack.length > 1) {
@@ -410,7 +419,7 @@ export function formatCss(text: string, indent = "  "): string {
   let seg = "";
   let parens = 0;
   const pad = () => indent.repeat(depth);
-  const flush = (kind: "{" | "}" | ";" | "end") => {
+  const flush = (kind: "{" | "}" | ";" | "end", at = text.length) => {
     let s = seg.replace(/\s+/g, " ").trim();
     seg = "";
     if (kind === "{") {
@@ -426,7 +435,7 @@ export function formatCss(text: string, indent = "  "): string {
       out.push(`${pad()}${s}${kind === "end" && depth === 0 ? "" : ";"}`);
     }
     if (kind === "}") {
-      if (depth === 0) throw new FormatError(`Unexpected "}"`, 0);
+      if (depth === 0) throw new FormatError(`Unexpected "}" at ${where(text, at)}`, at);
       depth--;
       out.push(`${pad()}}`);
     }
@@ -460,7 +469,7 @@ export function formatCss(text: string, indent = "  "): string {
     } else if (c === ")") {
       parens = Math.max(0, parens - 1);
       seg += c;
-    } else if (parens === 0 && (c === "{" || c === "}" || c === ";")) flush(c);
+    } else if (parens === 0 && (c === "{" || c === "}" || c === ";")) flush(c, i);
     else seg += c;
   }
   flush("end");
@@ -546,10 +555,11 @@ const BY_LANG: Record<string, FormatKind> = {
 export function formatKindFor(lang: string, text: string): FormatKind | null {
   if (BY_LANG[lang]) return BY_LANG[lang];
   if (lang !== "text") return null;
-  const s = text.trimStart();
-  if (/^[{[]/.test(s)) return "json";
-  if (/^<!doctype html|^<html/i.test(s)) return "html";
-  if (s.startsWith("<")) return "xml";
+  // The whole text must look like JSON or XML ("[ ] buy milk" is a note, not JSON).
+  const s = text.trim();
+  if (/^\{[\s\S]*\}$|^\[[\s\S]*\]$/.test(s)) return "json";
+  if (/^<!doctype html|^<html/i.test(s) && s.endsWith(">")) return "html";
+  if (s.startsWith("<") && s.endsWith(">")) return "xml";
   if (/\n\s*\|?\s*:?-{3,}/.test(text) && text.includes("|")) return "tables";
   return null;
 }

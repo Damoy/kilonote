@@ -3,6 +3,7 @@
 // there. Double-click (or Enter / F2): edit a value or rename a key in place.
 // The tree follows the cursor of the editor.
 
+import type { Text } from "@codemirror/state";
 import type { App, Doc } from "../app";
 import { setTreeHighlight } from "../editor/setup";
 import { keySource, nodePath, parseTree, valueSource, type ParsedTree, type TreeFormat, type TreeNode } from "../editor/tree-parse";
@@ -11,6 +12,8 @@ import { showMenu, toast } from "./overlay";
 
 /** Children shown at first in a big array or object ("Show more" for the rest). */
 const PAGE = 200;
+/** Above this size, no tree (parsing at every pause in typing would be too slow). */
+export const MAX_TREE_SIZE = 8 * 1024 * 1024;
 
 interface Row {
   node: TreeNode;
@@ -30,6 +33,10 @@ export class TreeView {
   private title = h("span", { class: "tv-title" });
   private doc: Doc | null = null;
   private tree: ParsedTree | null = null;
+  /** The text the tree was read from: its positions are only valid for it. */
+  private source: Text | null = null;
+  /** The text has an error: the last good tree is shown, read-only. */
+  private stale = false;
   private rows: Row[] = [];
   private focused = -1;
   private current: string | null = null;
@@ -59,13 +66,30 @@ export class TreeView {
   }
 
   /** Parses the document again and redraws (keeps what was expanded). */
-  async render(doc: Doc, text: string, format: TreeFormat) {
+  async render(doc: Doc, source: Text, format: TreeFormat) {
     const token = ++this.renderToken;
-    const tree = await parseTree(text, format);
+    if (source.length > MAX_TREE_SIZE) {
+      this.doc = doc;
+      this.tree = null;
+      this.source = null;
+      this.title.textContent = format === "json" ? "JSON" : "YAML";
+      this.status.hidden = true;
+      this.rows = [];
+      this.body.replaceChildren(h("div", { class: "tv-empty" }, `This file is too large for the tree view (${Math.round(source.length / 1024 / 1024)} MB).`));
+      return;
+    }
+    const tree = await parseTree(source.toString(), format);
     if (token !== this.renderToken || this.editing) return;
     const first = !this.expanded.has(doc.id);
+    // While the text has an error (often: in the middle of typing), the last
+    // good tree of the same document stays, dimmed and read-only.
+    const keep = !!tree.error && !tree.roots.length && this.doc === doc && !!this.tree?.roots.length && this.tree.format === format;
+    this.stale = keep;
     this.doc = doc;
-    this.tree = tree;
+    if (!keep) {
+      this.tree = tree;
+      this.source = source;
+    } else this.tree = { ...this.tree!, error: tree.error };
     if (first) {
       // The first look: the root and its direct children open.
       for (const r of tree.roots) {
@@ -96,13 +120,13 @@ export class TreeView {
       frag.append(row.el);
       this.rows.push(row);
       if (!n.children || !this.open.has(id)) return;
-      const limit = this.limits.get(id) ?? PAGE;
+      const limit = this.limits.get(`${this.doc?.id}:${id}`) ?? PAGE;
       for (const c of n.children.slice(0, limit)) walk(c, [...chain, n], childId(id, c), depth + 1);
       if (n.children.length > limit) {
         const more = h("div", { class: "tv-row tv-more", style: { paddingLeft: `${(depth + 1) * 14 + 22}px` } },
           `Show ${Math.min(PAGE * 5, n.children.length - limit)} more of ${n.children.length - limit}…`);
         more.addEventListener("click", () => {
-          this.limits.set(id, limit + PAGE * 5);
+          this.limits.set(`${this.doc?.id}:${id}`, limit + PAGE * 5);
           this.draw();
         });
         frag.append(more);
@@ -111,7 +135,7 @@ export class TreeView {
     for (const r of tree.roots) walk(r, [], String(r.key), 0);
     if (!tree.roots.length && !tree.error) frag.append(h("div", { class: "tv-empty" }, "Empty document"));
     this.body.replaceChildren(frag);
-    this.body.classList.toggle("stale", !!tree.error);
+    this.body.classList.toggle("stale", this.stale);
     this.body.scrollTop = top;
     this.focused = focusedId ? this.rows.findIndex((r) => r.id === focusedId) : -1;
     this.rows[this.focused]?.el.classList.add("focused");
@@ -250,6 +274,10 @@ export class TreeView {
     const tree = this.tree;
     if (!row || !doc || !tree || this.editing) return;
     const n = row.node;
+    if (this.stale || this.app.view.state.doc !== this.source) {
+      toast(this.stale ? "Fix the error in the text first: the tree shows its last valid version." : "The text just changed: try again in a moment.");
+      return;
+    }
     if (what === "value" && !n.editable) {
       if (n.children) this.toggle(row.id);
       else {
@@ -274,13 +302,17 @@ export class TreeView {
       if (done) return;
       done = true;
       this.editing = false;
-      if (commit && input.value !== original && doc === this.app.active) {
+      // The positions are those of the text the tree was read from: if it
+      // changed in the meantime (typing, reload), nothing is written.
+      const fresh = this.app.view.state.doc === this.source;
+      if (commit && input.value !== original && !fresh) toast("The text changed while you were editing: the change was not applied.", { kind: "error" });
+      if (commit && input.value !== original && doc === this.app.active && fresh) {
         const from = what === "key" ? n.keyFrom! : n.from;
         const to = what === "key" ? n.keyTo! : n.to;
         const insert = what === "key" ? keySource(n, input.value, tree.format) : valueSource(n, input.value, tree.format);
         this.app.applyToDoc(doc, { changes: { from, to, insert }, userEvent: "input.tree" });
         // The preview redraws the tree from the new text.
-      } else this.draw();
+      } else this.app.preview.update(true); // (a redraw may have been skipped while editing)
       this.body.focus({ preventScroll: true });
     };
     input.addEventListener("keydown", (e) => {
