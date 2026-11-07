@@ -67,6 +67,10 @@ interface SessionTab {
   cursor: number;
   scrollTop: number;
   lang?: LangId;
+  /** With `content`: modification time of the file the draft was based on. */
+  mtime?: number;
+  /** The file had changed on disk while the tab had unsaved edits. */
+  conflict?: boolean;
 }
 
 interface Session {
@@ -86,6 +90,8 @@ type AppEvent = "docs" | "active" | "workspace" | "settings" | "saved" | "select
 /** Each window keeps its own session: session.json for the main one, session-<label>.json otherwise. */
 const sessionFileName = (label: string) => (label === "main" ? "session.json" : `session-${label}.json`);
 const SESSION_FILE_RE = /^session-(kn-[a-zA-Z0-9-]+)\.json$/;
+/** Error of the native backend for a file whose content is binary. */
+const NOT_TEXT = "not a text file";
 
 export class App {
   settings!: Settings;
@@ -385,13 +391,7 @@ export class App {
     if (!doc) {
       // KiloNote never hands a file to the operating system to open or run it:
       // executables (and any other non-text file) can only be shown in the file manager.
-      if (isProbablyBinary(path)) {
-        toast(`"${basename(path)}" is not a text file. KiloNote only opens text files and never runs programs.`, {
-          kind: "error",
-          action: { label: "Reveal in file manager", run: () => this.backend.reveal(path) },
-        });
-        return null;
-      }
+      if (isProbablyBinary(path)) return this.refuseBinary(path);
       try {
         const ft = await this.backend.readText(path);
         doc = this.findDoc(path); // opened in the meantime?
@@ -406,6 +406,8 @@ export class App {
           this.emit("docs");
         }
       } catch (e) {
+        // The content says binary (an executable or archive renamed, or without extension).
+        if (String(e).includes(NOT_TEXT)) return this.refuseBinary(path);
         toast(`Cannot open ${basename(path)}: ${e}`, { kind: "error" });
         return null;
       }
@@ -413,6 +415,14 @@ export class App {
     if (activate) this.activate(doc);
     if (opts.line != null || opts.select) this.reveal(doc, opts.line ?? 1, opts.select);
     return doc;
+  }
+
+  private refuseBinary(path: string): null {
+    toast(`"${basename(path)}" is not a text file. KiloNote only opens text files and never runs programs.`, {
+      kind: "error",
+      action: { label: "Reveal in file manager", run: () => this.backend.reveal(path) },
+    });
+    return null;
   }
 
   activate(doc: Doc | null) {
@@ -552,9 +562,13 @@ export class App {
         doc.savedText = snapshot;
         doc.missing = false;
         doc.conflict = false;
+        // Files are always written as UTF-8 (Windows-1252 and UTF-16 files are converted).
+        const encoding = doc.bom ? "UTF-8 BOM" : "UTF-8";
+        const converted = doc.encoding !== encoding;
+        doc.encoding = encoding;
         const wasDirty = doc.dirty;
         doc.dirty = !doc.state.doc.eq(snapshot);
-        if (wasDirty !== doc.dirty) this.emit("docs");
+        if (wasDirty !== doc.dirty || converted) this.emit("docs");
         this.emit("saved");
         if (samePath(path, this.settingsPath)) this.onSettingsSaved(text, !!opts.auto);
         return true;
@@ -576,20 +590,27 @@ export class App {
     const suggested = doc.path ? basename(doc.path) : `${doc.title.replace(/[\\/:*?"<>|]/g, "-")}${extname(doc.title) ? "" : ".txt"}`;
     const target = await this.backend.pickSavePath(base ? join(base, suggested) : suggested);
     if (!target) return false;
-    const other = this.findDoc(target);
-    if (other && other !== doc) await this.closeDoc(other, { force: true });
+    const before = { path: doc.path, title: doc.title, mtime: doc.mtime };
     doc.path = target;
     doc.mtime = 0;
     doc.title = basename(target);
+    if (!(await this.save(doc))) {
+      // Nothing was written: the note stays attached to its previous file.
+      Object.assign(doc, before);
+      this.emit("docs");
+      return false;
+    }
+    // A tab showing the overwritten file is now out of date.
+    const other = this.docs.find((d) => d !== doc && d.path && samePath(d.path, target));
+    if (other) await this.closeDoc(other, { force: true });
     const lang = langForPath(target, doc.lang);
     if (lang !== doc.lang) {
       doc.lang = lang;
       this.applyToDoc(doc, { effects: [reconfigureLanguage(lang), settingsCompartment.reconfigure(settingsExtensions(this.settings, this.taskCfg, lang))] });
     }
-    const ok = await this.save(doc);
     this.emit("docs");
     this.refreshWorkspaceFilesSoon();
-    return ok;
+    return true;
   }
 
   async saveAll() {
@@ -606,6 +627,9 @@ export class App {
       doc.dirty = false;
       doc.mtime = ft.mtime;
       doc.encoding = ft.encoding;
+      // The other program may have changed the line endings or the BOM: keep them.
+      if (ft.text.includes("\n")) doc.eol = ft.text.includes("\r\n") ? "\r\n" : "\n";
+      doc.bom = ft.encoding === "UTF-8 BOM";
       doc.missing = false;
       doc.conflict = false;
       clearTimeout(doc.timer);
@@ -849,6 +873,13 @@ export class App {
   async openFolder(path?: string) {
     const dir = path ?? (await this.backend.pickFolder());
     if (!dir) return;
+    if (path && !(await this.backend.stat(dir))?.isDir) {
+      // A recent folder that was moved, deleted, or is on a disconnected drive.
+      this.recent = this.recent.filter((r) => !samePath(r, dir));
+      toast(`Folder not found: ${dir}`, { kind: "error" });
+      this.emit("workspace");
+      return;
+    }
     this.workspace = dir;
     this.recent = [dir, ...this.recent.filter((r) => !samePath(r, dir))].slice(0, 8);
     this.sidebar.visible = true;
@@ -910,8 +941,11 @@ export class App {
     return [...set].sort((x, y) => x - y);
   }
 
-  /** Ctrl+Enter: next status (or `target`) on the selected lines. */
-  cycleTasks(target?: string, doc = this.active, lines?: number[]) {
+  /**
+   * Ctrl+Enter: next status (or `target`) on the selected lines.
+   * Resolves once an automatic archive (auto_archive) is written.
+   */
+  async cycleTasks(target?: string, doc = this.active, lines?: number[]): Promise<void> {
     if (!doc) return;
     const state = doc === this.active ? this.view.state : doc.state;
     const nums = lines ?? this.selectedLines(state);
@@ -939,7 +973,7 @@ export class App {
       scrollIntoView: doc === this.active,
     });
     if (this.settings.auto_archive && nowDone.length && doc.path && !isDoneFile(doc.path, this.settings.archive_suffix)) {
-      void this.archiveLines(doc, nowDone);
+      await this.archiveLines(doc, nowDone);
     }
   }
 
@@ -983,7 +1017,12 @@ export class App {
       await this.appendToFile(target, out);
     } catch (e) {
       const current = doc === this.active ? this.view.state : doc.state;
-      if (current === after) this.applyToDoc(doc, { changes: removal.invert(state.doc) });
+      if (current.doc === after.doc) this.applyToDoc(doc, { changes: removal.invert(state.doc) });
+      else {
+        // The note was edited meanwhile: put the lines back where they were, as near as possible.
+        const at = current.doc.lineAt(Math.min(specs[0].from, current.doc.length)).from;
+        this.applyToDoc(doc, { changes: { from: at, insert: lines.map((l) => l.text).join("\n") + "\n" } });
+      }
       toast(`Could not archive (${e}). Nothing was lost.`, { kind: "error" });
       return;
     }
@@ -1408,6 +1447,8 @@ export class App {
       cursor: state.selection.main.head,
       scrollTop: d === this.active ? this.view.scrollDOM.scrollTop : 0,
       lang: d.path ? undefined : d.lang,
+      mtime: keepContent && d.path ? d.mtime : undefined,
+      conflict: d.conflict || undefined,
     };
   }
 
@@ -1473,6 +1514,7 @@ export class App {
         this.workspace = s.workspace;
         void this.refreshWorkspaceFiles();
       }
+      const conflicts: Doc[] = [];
       const docs = await Promise.all(
         (s.tabs ?? []).map(async (t) => {
           if (!t.path) {
@@ -1480,10 +1522,15 @@ export class App {
           }
           try {
             const ft = await this.backend.readText(t.path);
-            return this.createDoc({
+            const d = this.createDoc({
               path: t.path, text: t.content ?? ft.text, savedText: ft.text, eol: t.eol, bom: ft.encoding === "UTF-8 BOM",
               encoding: ft.encoding, mtime: ft.mtime, color: t.color, groupId: t.group, cursor: t.cursor, scrollTop: t.scrollTop,
             });
+            // A draft restored on top of a file that changed since (or was already in
+            // conflict): never overwrite the file without asking.
+            const changedOnDisk = t.mtime != null && Math.abs(ft.mtime - t.mtime) > 1;
+            if (d.dirty && (t.conflict || changedOnDisk)) conflicts.push(d);
+            return d;
           } catch {
             if (t.content == null) return null;
             const d = this.createDoc({ path: t.path, text: t.content, savedText: "", eol: t.eol, color: t.color, groupId: t.group });
@@ -1500,6 +1547,7 @@ export class App {
       const target = activeTab ? this.docs.find((d) => (activeTab.path ? d.path === activeTab.path : d.title === activeTab.title)) : this.docs[0];
       if (s.zen) this.setZen(true);
       this.activate(target ?? this.docs[0] ?? null);
+      for (const d of conflicts) this.flagConflict(d);
     }
     this.sessionReady = true;
   }

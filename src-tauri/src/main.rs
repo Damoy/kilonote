@@ -121,10 +121,26 @@ fn decode(bytes: Vec<u8>) -> (String, &'static str) {
     }
 }
 
+/// Error returned for binary content (the frontend recognizes this text).
+const NOT_TEXT: &str = "not a text file";
+
+/// A NUL byte near the start means binary content (an executable, an archive, an
+/// image…), whatever the extension says. UTF-16 text (with its BOM) has NUL bytes too.
+fn looks_binary(bytes: &[u8]) -> bool {
+    if bytes.starts_with(&[0xFF, 0xFE]) || bytes.starts_with(&[0xFE, 0xFF]) {
+        return false;
+    }
+    bytes.iter().take(8192).any(|&b| b == 0)
+}
+
 #[tauri::command]
 async fn read_text(path: String) -> Result<FileText, String> {
     let p = PathBuf::from(&path);
     let bytes = fs::read(&p).map_err(err)?;
+    // Opening it as text would show garbage, and saving it would corrupt it.
+    if looks_binary(&bytes) {
+        return Err(NOT_TEXT.into());
+    }
     let (text, encoding) = decode(bytes);
     let mtime = meta_of(&p).map(|m| m.mtime).unwrap_or(0.0);
     Ok(FileText {
@@ -293,7 +309,11 @@ async fn read_many(paths: Vec<String>, max_size: u64) -> Vec<Option<String>> {
             if !m.is_file() || m.len() > max_size {
                 return None;
             }
-            Some(decode(fs::read(p).ok()?).0)
+            let bytes = fs::read(p).ok()?;
+            if looks_binary(&bytes) {
+                return None;
+            }
+            Some(decode(bytes).0)
         })
         .collect()
 }
@@ -528,4 +548,46 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("failed to start KiloNote");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn binary_content_is_detected() {
+        assert!(looks_binary(b"MZ\x90\x00\x03\x00\x00\x00"));
+        assert!(looks_binary(b"\x7fELF\x02\x01\x01\x00"));
+        assert!(!looks_binary(b"- call colleague X - todo\r\n"));
+        assert!(!looks_binary("caf\u{e9}".as_bytes()));
+        assert!(!looks_binary(b""));
+        // UTF-16 text with its BOM is text.
+        assert!(!looks_binary(&[0xFF, 0xFE, b'h', 0, b'i', 0]));
+    }
+
+    #[test]
+    fn encodings_are_decoded() {
+        assert_eq!(decode(b"abc".to_vec()), ("abc".to_string(), "UTF-8"));
+        assert_eq!(
+            decode(vec![0xEF, 0xBB, 0xBF, b'x']),
+            ("x".to_string(), "UTF-8 BOM")
+        );
+        assert_eq!(
+            decode(vec![0xFF, 0xFE, b'h', 0, b'i', 0]),
+            ("hi".to_string(), "UTF-16 LE")
+        );
+        assert_eq!(
+            decode(vec![b'c', b'a', b'f', 0xE9, 0x80]),
+            ("caf\u{e9}\u{20ac}".to_string(), "Windows-1252")
+        );
+    }
+
+    #[test]
+    fn window_labels_are_restricted() {
+        assert!(valid_label("main"));
+        assert!(valid_label("kn-19a3f0c2b1d"));
+        assert!(!valid_label("kn-../../evil"));
+        assert!(!valid_label("other"));
+        assert!(!valid_label(&format!("kn-{}", "a".repeat(40))));
+    }
 }

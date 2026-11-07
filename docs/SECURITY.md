@@ -9,7 +9,7 @@ workstation. Every point can be checked in the source code.
 |---|---|
 | What it is | A local text file editor (functionally like Notepad++) |
 | Network access | **None.** No HTTP client is compiled in, no telemetry, no automatic updates |
-| Running programs | **Never.** Opening, dropping or passing a file on the command line only reads text; a non-text file (`.exe`, `.msi`…) can only be revealed in the file manager |
+| Running programs | **Never.** Opening, dropping or passing a file on the command line only reads text; a non-text file (`.exe`, `.msi`…, or any file whose content is binary, whatever its extension) can only be revealed in the file manager |
 | Data | Text files chosen by the user, on the local disk, in plain text (like Notepad) |
 | Privileges | **Standard user.** No administrator rights, no service, nothing launched at startup |
 | Rendering engine | Microsoft Edge WebView2 (part of Windows 10/11, updated by Windows Update) |

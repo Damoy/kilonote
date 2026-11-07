@@ -73,8 +73,11 @@ export class StatusBar {
     const head = sel.main.head;
     const line = st.doc.lineAt(head);
     let text = `Ln ${line.number}, Col ${head - line.from + 1}`;
-    if (sel.ranges.length > 1) text += ` · ${sel.ranges.length} curseurs`;
-    else if (!sel.main.empty) text += ` · ${Math.abs(sel.main.to - sel.main.from)} car.`;
+    if (sel.ranges.length > 1) text += ` · ${sel.ranges.length} cursors`;
+    else if (!sel.main.empty) {
+      const n = sel.main.to - sel.main.from;
+      text += ` · ${n} char${n > 1 ? "s" : ""}`;
+    }
     this.pos.textContent = text;
   }
 

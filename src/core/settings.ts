@@ -140,6 +140,13 @@ export function mergeSettings(user: Partial<Settings> | null | undefined): Setti
   out.line_height = clamp(out.line_height, 1, 3);
   out.tab_size = clamp(Math.round(out.tab_size), 1, 12);
   out.autosave_delay = clamp(out.autosave_delay, 100, 60_000);
+  // ".md" or "MD" mean "md".
+  out.note_extensions = out.note_extensions
+    .filter((e): e is string => typeof e === "string")
+    .map((e) => e.trim().replace(/^\.+/, "").toLowerCase())
+    .filter(Boolean);
+  // Without a suffix, a note would be its own archive.
+  if (typeof out.archive_suffix !== "string" || !out.archive_suffix.trim()) out.archive_suffix = DEFAULT_SETTINGS.archive_suffix;
   return out;
 }
 

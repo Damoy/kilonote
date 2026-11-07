@@ -11,8 +11,8 @@ export interface ReportSource {
 
 export interface Period {
   label: string;
-  from: string | null; // AAAA-MM-JJ inclus
-  to: string | null; // AAAA-MM-JJ inclus
+  from: string | null; // YYYY-MM-DD, inclusive
+  to: string | null; // YYYY-MM-DD, inclusive
 }
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -119,7 +119,8 @@ export function buildReport(sources: ReportSource[], cfg: TaskConfig, period: Pe
   lines.push("");
 
   lines.push("| Project | Done | Ongoing | To do | Blocked |", "|---|---:|---:|---:|---:|");
-  for (const p of projects) lines.push(`| ${p.name} | ${p.done} | ${p.ongoing.length} | ${p.todo} | ${p.blocked} |`);
+  // A "|" in a folder or file name would break the table.
+  for (const p of projects) lines.push(`| ${p.name.replace(/\|/g, "\\|")} | ${p.done} | ${p.ongoing.length} | ${p.todo} | ${p.blocked} |`);
   lines.push("");
 
   for (const p of projects.filter((x) => x.done)) {

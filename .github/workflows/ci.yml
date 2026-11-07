@@ -27,5 +27,7 @@ jobs:
         run: npm test
       - name: Type-check and build the frontend
         run: npm run build
-      - name: Check the Rust backend
-        run: cargo check --manifest-path src-tauri/Cargo.toml
+      - name: Check and test the Rust backend
+        run: |
+          cargo check --manifest-path src-tauri/Cargo.toml
+          cargo test --manifest-path src-tauri/Cargo.toml

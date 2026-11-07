@@ -416,7 +416,7 @@ export class Sidebar {
         const color = resolveColor(cfg.statuses[t.task.key]);
         const row = h(
           "div",
-          { class: `sb-task${isDoneStatus(t.task.key, cfg) ? " done" : ""}`, title: `${t.raw.trim()}\nLigne ${t.line}` },
+          { class: `sb-task${isDoneStatus(t.task.key, cfg) ? " done" : ""}`, title: `${t.raw.trim()}\nLine ${t.line}` },
           h("span", { class: "sb-task-status", style: { "--c": color } }, t.task.status),
           h("span", { class: "sb-task-text" }, t.task.text.replace(/(\*\*|\*|`)(\S(?:.*?\S)?)\1/g, "$2")),
           h("span", { class: "sb-task-actions" },
@@ -442,7 +442,7 @@ export class Sidebar {
       void this.renderTasks();
       return;
     }
-    if (action === "cycle") app.cycleTasks(undefined, doc, [t.line]);
+    if (action === "cycle") await app.cycleTasks(undefined, doc, [t.line]);
     else await app.archiveLines(doc, [t.line]);
     await app.save(doc);
     this.taskTexts.set(path, doc.state.doc.toString());

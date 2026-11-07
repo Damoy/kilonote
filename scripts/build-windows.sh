@@ -106,11 +106,18 @@ if [ "$INSTALL" = 1 ]; then
     say "  $(wslpath -w "$BUILDS/$(basename "$SETUP")")"
     exit 0
   fi
+  [ -f "$OUT/KiloNote.exe" ] || die "No portable exe in dist-windows/: the installed KiloNote was left as is"
   # Executables left by previous updates (one still in use stays until next time).
   for old in "$APP_DIR"/kilonote.*.old; do [ -e "$old" ] && rm -f "$old" 2>/dev/null || true; done
   # A running exe can be renamed on Windows, not overwritten: rename, then copy.
-  mv "$APP_DIR/kilonote.exe" "$APP_DIR/kilonote.$(date +%Y%m%d-%H%M%S).old" ||
+  PREVIOUS="$APP_DIR/kilonote.$(date +%Y%m%d-%H%M%S).old"
+  mv "$APP_DIR/kilonote.exe" "$PREVIOUS" ||
     die "Could not update $(wslpath -w "$APP_DIR"): close KiloNote and run this again"
-  cp "$OUT/KiloNote.exe" "$APP_DIR/kilonote.exe"
+  if ! cp "$OUT/KiloNote.exe" "$APP_DIR/kilonote.exe"; then
+    # Never leave KiloNote without its exe: put the previous one back.
+    rm -f "$APP_DIR/kilonote.exe"
+    mv "$PREVIOUS" "$APP_DIR/kilonote.exe"
+    die "Could not copy the new exe: the previous version was put back"
+  fi
   say "KiloNote is updated: the new build starts the next time you open it."
 fi
