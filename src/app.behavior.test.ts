@@ -426,3 +426,19 @@ describe("document types and formatting", () => {
     expect(document.querySelector(".kn-toast.error")?.textContent).toContain("line 1, column 9");
   });
 });
+
+describe("untitled notes", () => {
+  it("a new draft takes the smallest free number", async () => {
+    const { app } = await start({});
+    const a = app.newDoc();
+    expect(a.title).toBe("Untitled 1");
+    await app.closeDoc(a);
+    expect(app.newDoc().title).toBe("Untitled 1");
+    const b = app.newDoc();
+    expect(b.title).toBe("Untitled 2");
+    app.newDoc();
+    await app.closeDoc(b);
+    expect(app.newDoc().title).toBe("Untitled 2");
+    expect(app.newDoc().title).toBe("Untitled 4");
+  });
+});

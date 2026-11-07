@@ -87,7 +87,8 @@ interface Session {
   tabs: SessionTab[];
   active: number;
   groups: TabGroup[];
-  untitled: number;
+  /** No longer written (the number of a new draft comes from the open ones). */
+  untitled?: number;
   sidebar: { visible: boolean; width: number; panel: string; expanded: string[] };
   zen?: boolean;
   preview?: boolean;
@@ -174,7 +175,6 @@ export class App {
   sessionPath = "";
   zen = false;
   private nextId = 1;
-  private untitledCounter = 0;
   private closed: SessionTab[] = [];
   private listeners = new Map<AppEvent, Set<() => void>>();
   private systemDark = matchMedia("(prefers-color-scheme: dark)");
@@ -394,7 +394,7 @@ export class App {
     const doc: Doc = {
       id: this.nextId++,
       path: init.path,
-      title: init.title ?? (init.path ? basename(init.path) : `Untitled ${++this.untitledCounter}`),
+      title: init.title ?? (init.path ? basename(init.path) : this.untitledTitle()),
       state: null as unknown as EditorState,
       savedText: Text.empty,
       dirty: false,
@@ -511,6 +511,18 @@ export class App {
       }),
       pick: (it) => this.setLang(doc, it.value as LangId),
     });
+  }
+
+  /** "Untitled N" with the smallest N that no open draft uses (closed drafts free their number). */
+  private untitledTitle(): string {
+    const used = new Set<number>();
+    for (const d of this.docs) {
+      const m = !d.path && /^Untitled (\d+)$/.exec(d.title);
+      if (m) used.add(Number(m[1]));
+    }
+    let n = 1;
+    while (used.has(n)) n++;
+    return `Untitled ${n}`;
   }
 
   private defaultEol(): "\n" | "\r\n" {
@@ -1920,7 +1932,6 @@ export class App {
       tabs: tabs.map((d) => this.sessionTab(d)),
       active: this.active ? tabs.indexOf(this.active) : -1,
       groups: this.groups,
-      untitled: this.untitledCounter,
       sidebar: this.sidebar.sessionState(),
       zen: this.zen,
       preview: this.preview.visible,
@@ -1968,7 +1979,6 @@ export class App {
     if (s && s.version === 1) {
       this.recent = s.recent ?? [];
       this.groups = (s.groups ?? []).map((g) => ({ ...g }));
-      this.untitledCounter = s.untitled ?? 0;
       this.sidebar.restore(s.sidebar);
       if (s.workspace && (await this.backend.stat(s.workspace))?.isDir) {
         this.workspace = s.workspace;
