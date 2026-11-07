@@ -15,9 +15,10 @@ import { fuzzyFilter } from "./core/fuzzy";
 import { editorHooks } from "./editor/decorations";
 import { createEditorState, langForPath, reconfigureLanguage, settingsCompartment, settingsExtensions, type LangId } from "./editor/setup";
 import {
-  archivedLine, cycleLine, findTasks, isDoneStatus, makeTaskConfig, parseTask, todayISO, type TaskConfig,
+  archivedLine, cycleLine, findTags, findTasks, isDoneStatus, makeTaskConfig, parseDateInput, parseTask, setDueInLine, todayISO,
+  type TaskConfig,
 } from "./editor/tasks";
-import { buildReport, periodFor, type ReportSource } from "./report";
+import { buildReport, periodFor, type PeriodKind, type ReportSource } from "./report";
 import { debounce } from "./ui/dom";
 import { confirm, prompt, setFocusRestorer, showMenu, toast, type MenuItem } from "./ui/overlay";
 import { openPicker, setPaletteFocusRestorer, type PickItem } from "./ui/palette";
@@ -248,6 +249,8 @@ export class App {
       statuses: s.task_statuses,
       cycle: s.task_cycle,
       done: s.task_done_statuses,
+      ongoing: s.task_ongoing_statuses,
+      blocked: s.task_blocked_statuses,
       archiveStatus: s.archive_status,
       archiveDate: s.archive_date,
     });
@@ -1249,50 +1252,136 @@ export class App {
   // -------------------------------------------------------------------------
   // Activity report
 
-  async generateReport() {
-    if (!this.workspace) {
-      toast("Open the folder that contains your notes first.", { action: { label: "Open folder", run: () => void this.openFolder() } });
-      return;
+  private needFolder(): boolean {
+    if (this.workspace) return true;
+    toast("Open the folder that contains your notes first.", { action: { label: "Open folder", run: () => void this.openFolder() } });
+    return false;
+  }
+
+  /** Every project of the folder: its note and its _done archive. */
+  private async reportSources(): Promise<ReportSource[]> {
+    await this.refreshWorkspaceFiles();
+    const suffix = this.settings.archive_suffix;
+    const notes = this.workspaceFiles.filter((p) => this.isNoteFile(p));
+    const projects = new Map<string, { done: string | null; active: string | null }>();
+    const keyOf = (p: string) => join(dirname(p), projectName(p, suffix));
+    for (const p of notes) if (isDoneFile(p, suffix)) projects.set(keyOf(p), { done: p, active: null });
+    for (const p of notes) {
+      if (isDoneFile(p, suffix)) continue;
+      const k = keyOf(p);
+      if (projects.has(k)) projects.get(k)!.active = p;
+      else projects.set(k, { done: null, active: p });
     }
-    const choices: { kind: "year" | "lastYear" | "12months" | "all"; label: string }[] = [
-      { kind: "year", label: `This year (${new Date().getFullYear()})` },
-      { kind: "lastYear", label: `Last year (${new Date().getFullYear() - 1})` },
+    const entries = [...projects.entries()];
+    const paths = entries.flatMap(([, v]) => [v.done, v.active].filter((x): x is string => !!x));
+    const texts = await this.readFiles(paths);
+    const byPath = new Map(paths.map((p, i) => [p, texts[i]]));
+    return entries.map(([k, v]) => ({
+      project: relative(this.workspace, k).replace(/\\/g, "/"),
+      doneText: v.done ? byPath.get(v.done) ?? null : null,
+      activeText: v.active ? byPath.get(v.active) ?? null : null,
+    }));
+  }
+
+  async generateReport(tag: string | null = null) {
+    if (!this.needFolder()) return;
+    const y = new Date().getFullYear();
+    const choices: { kind: PeriodKind; label: string }[] = [
+      { kind: "year", label: `This year (${y})` },
+      { kind: "lastYear", label: `Last year (${y - 1})` },
       { kind: "12months", label: "Last 12 months" },
+      { kind: "month", label: "This month" },
+      { kind: "lastMonth", label: "Last month" },
+      { kind: "week", label: "This week" },
+      { kind: "lastWeek", label: "Last week" },
       { kind: "all", label: "All time" },
     ];
     openPicker({
-      placeholder: "Report period",
+      placeholder: tag ? `Report period (${tag})` : "Report period",
       provide: (q) => ({
         items: fuzzyFilter(q, choices, (c) => c.label).map(({ item, result }) => ({
           label: item.label, icon: "chart", positions: result.positions, value: item.kind,
         })),
       }),
       pick: async (it) => {
-        await this.refreshWorkspaceFiles();
-        const suffix = this.settings.archive_suffix;
-        const notes = this.workspaceFiles.filter((p) => this.isNoteFile(p));
-        const doneFiles = notes.filter((p) => isDoneFile(p, suffix));
-        const projects = new Map<string, { done: string | null; active: string | null }>();
-        const keyOf = (p: string) => join(dirname(p), projectName(p, suffix));
-        for (const p of doneFiles) projects.set(keyOf(p), { done: p, active: null });
-        for (const p of notes) {
-          if (isDoneFile(p, suffix)) continue;
-          const k = keyOf(p);
-          if (projects.has(k)) projects.get(k)!.active = p;
-          else projects.set(k, { done: null, active: p });
+        const period = periodFor(it.value as PeriodKind);
+        const md = buildReport(await this.reportSources(), this.taskCfg, period, new Date(), { tag });
+        this.newDoc({ text: md, title: `Activity report — ${period.label}${tag ? ` ${tag}` : ""}.md`, lang: "markdown" });
+      },
+    });
+  }
+
+  /** The report limited to one #tag (a client, a topic…). */
+  async generateTagReport() {
+    if (!this.needFolder()) return;
+    const counts = new Map<string, number>();
+    for (const src of await this.reportSources()) {
+      for (const text of [src.doneText, src.activeText]) {
+        for (const line of text?.split(/\r\n|\r|\n/) ?? []) for (const t of findTags(line)) counts.set(t, (counts.get(t) ?? 0) + 1);
+      }
+    }
+    if (!counts.size) {
+      toast("No #tag in your notes yet: add one to a task, e.g. \"- call the client #acme - todo\".");
+      return;
+    }
+    const tags = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    openPicker({
+      placeholder: "Report for the tag…",
+      provide: (q) => ({
+        items: fuzzyFilter(q, tags, (t) => t[0]).map(({ item, result }) => ({
+          label: item[0], hint: `${item[1]} line${item[1] > 1 ? "s" : ""}`, icon: "chart", positions: result.positions, value: item[0],
+        })),
+      }),
+      pick: (it) => this.generateReport(it.value as string),
+    });
+  }
+
+  /** Ctrl+Shift+U: sets the due date ("@2026-11-14") of the selected tasks. */
+  setDueDate() {
+    const doc = this.active;
+    if (!doc) return;
+    const lines = this.selectedLines(this.view.state).filter((n) => parseTask(this.view.state.doc.line(n).text, this.taskCfg));
+    if (!lines.length) {
+      toast(`Put the cursor on a task first (${shortcutFor("task.cycle")} turns a line into a task).`);
+      return;
+    }
+    const current = parseTask(this.view.state.doc.line(lines[0]).text, this.taskCfg)?.due ?? null;
+    const today = new Date();
+    const plus = (days: number) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() + days);
+      return todayISO(d);
+    };
+    const monday = plus(((8 - today.getDay()) % 7) || 7);
+    const endOfMonth = todayISO(new Date(today.getFullYear(), today.getMonth() + 1, 0));
+    const presets: { label: string; date: string | null }[] = [
+      { label: "Today", date: todayISO(today) },
+      { label: "Tomorrow", date: plus(1) },
+      { label: "Next Monday", date: monday },
+      { label: "In a week", date: plus(7) },
+      { label: "In two weeks", date: plus(14) },
+      { label: "End of the month", date: endOfMonth },
+    ];
+    if (current) presets.push({ label: "Remove the due date", date: null });
+    openPicker({
+      placeholder: "Due date: pick one, or type 2026-11-14, 14/11, +3, 2w…",
+      provide: (q) => {
+        const typed = q.trim() ? parseDateInput(q) : null;
+        const items = typed
+          ? [{ label: `Due ${typed}`, icon: "calendar", value: typed }]
+          : presets.map((p) => ({ label: p.label, hint: p.date ?? undefined, icon: "calendar", value: p.date }));
+        return { items, empty: "Not a date: try 2026-11-14, 14/11, +3 or 2w" };
+      },
+      pick: (it) => {
+        const due = it.value as string | null;
+        const state = this.view.state;
+        const changes: ChangeSpec[] = [];
+        for (const n of lines) {
+          const line = state.doc.line(n);
+          const edit = setDueInLine(line.text, this.taskCfg, due);
+          if (edit) for (const c of edit.changes) changes.push({ from: line.from + c.from, to: line.from + c.to, insert: c.insert });
         }
-        const entries = [...projects.entries()];
-        const paths = entries.flatMap(([, v]) => [v.done, v.active].filter((x): x is string => !!x));
-        const texts = await this.readFiles(paths);
-        const byPath = new Map(paths.map((p, i) => [p, texts[i]]));
-        const sources: ReportSource[] = entries.map(([k, v]) => ({
-          project: relative(this.workspace, k).replace(/\\/g, "/"),
-          doneText: v.done ? byPath.get(v.done) ?? null : null,
-          activeText: v.active ? byPath.get(v.active) ?? null : null,
-        }));
-        const period = periodFor(it.value as "year");
-        const md = buildReport(sources, this.taskCfg, period);
-        this.newDoc({ text: md, title: `Activity report — ${period.label}.md`, lang: "markdown" });
+        if (changes.length) this.applyToDoc(doc, { changes, userEvent: "input.due" });
       },
     });
   }
@@ -1797,6 +1886,7 @@ export class App {
       "Mod+Enter": "task.cycle",
       "Mod+Shift+Enter": "task.archive",
       "Mod+Shift+D": "file.toggleDone",
+      "Mod+Shift+U": "task.due",
       "Mod+,": "settings.open",
       "Mod+=": "view.zoomIn",
       "Mod++": "view.zoomIn",
@@ -1873,6 +1963,8 @@ export class App {
       { id: "task.archive", title: "Task: Archive line to _done", run: () => this.archiveSelection() },
       { id: "task.archiveDone", title: "Task: Archive all completed tasks", run: () => this.archiveAllDone() },
       { id: "report.generate", title: "Report: Generate activity report…", run: () => this.generateReport() },
+      { id: "report.tag", title: "Report: Activity report for a #tag…", run: () => this.generateTagReport() },
+      { id: "task.due", title: "Task: Set due date…", run: () => this.setDueDate() },
       { id: "help.guide", title: "Help: KiloNote guide", run: () => this.newDoc({ text: GUIDE, title: "KiloNote guide.md", lang: "markdown" }) },
       { id: "help.about", title: "Help: About", run: () => this.showAbout() },
     ];

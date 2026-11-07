@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS } from "../core/settings";
 import {
-  applyLineEdit, archivedLine, cycleLine, findDateInLine, findTasks, makeTaskConfig, nextStatus, parseTask,
+  applyLineEdit, archivedLine, cycleLine, dueState, findDateInLine, findTags, findTasks, makeTaskConfig, nextStatus, parseDateInput,
+  parseTask, setDueInLine,
 } from "./tasks";
 
 const cfg = makeTaskConfig({
@@ -110,5 +111,52 @@ describe("findTasks / dates", () => {
     expect(findDateInLine("- x - done [2026-02-03]")).toBe("2026-02-03");
     expect(findDateInLine("meeting on 4/11/2026")).toBe("2026-11-04");
     expect(findDateInLine("nothing")).toBeNull();
+  });
+});
+
+describe("due dates", () => {
+  const setDue = (line: string, due: string | null) => {
+    const edit = setDueInLine(line, cfg, due);
+    return edit ? applyLineEdit(line, edit) : null;
+  };
+
+  it("are read from the task text", () => {
+    expect(parseTask("- send the report @2026-11-14 - todo", cfg)?.due).toBe("2026-11-14");
+    expect(parseTask("- send the report - todo", cfg)?.due).toBeNull();
+    expect(parseTask("- mail bob@2026-11-14.com - todo", cfg)?.due).toBeNull();
+  });
+
+  it("are set, changed and removed", () => {
+    expect(setDue("- send the report - todo", "2026-11-14")).toBe("- send the report @2026-11-14 - todo");
+    expect(setDue("- send @2026-11-14 the report - todo", "2026-12-01")).toBe("- send @2026-12-01 the report - todo");
+    expect(setDue("- send the report @2026-11-14 - todo", null)).toBe("- send the report - todo");
+    expect(setDue("- @2026-11-14 send - todo", null)).toBe("- send - todo");
+    expect(setDue("not a task", "2026-11-14")).toBeNull();
+  });
+
+  it("know when they are overdue", () => {
+    expect(dueState("2026-11-01", "2026-11-07")).toBe("overdue");
+    expect(dueState("2026-11-07", "2026-11-07")).toBe("today");
+    expect(dueState("2026-11-10", "2026-11-07")).toBe("soon");
+    expect(dueState("2026-11-20", "2026-11-07")).toBe("later");
+  });
+
+  it("are typed in several ways", () => {
+    const today = new Date(2026, 10, 7);
+    expect(parseDateInput("2026-12-01", today)).toBe("2026-12-01");
+    expect(parseDateInput("1/12/2026", today)).toBe("2026-12-01");
+    expect(parseDateInput("14/11", today)).toBe("2026-11-14");
+    expect(parseDateInput("3/1", today)).toBe("2027-01-03");
+    expect(parseDateInput("+3", today)).toBe("2026-11-10");
+    expect(parseDateInput("2w", today)).toBe("2026-11-21");
+    expect(parseDateInput("31/02/2026", today)).toBeNull();
+    expect(parseDateInput("soon", today)).toBeNull();
+  });
+});
+
+describe("tags", () => {
+  it("are found in lowercase, once", () => {
+    expect(findTags("fix #Bug for #acme and #bug (#v2/api)")).toEqual(["#bug", "#acme", "#v2/api"]);
+    expect(findTags("issue#3 is not a tag")).toEqual([]);
   });
 });

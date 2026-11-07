@@ -2,12 +2,17 @@
 //   - call colleague X - todo
 //   - call colleague X - ongoing
 //   - call colleague X - done [2026-11-02]      ← in work_done.txt
+//   - send the report @2026-11-14 - todo        ← due date
 // This module is deliberately pure (no DOM) so that it is easy to test.
 
 export interface TaskConfig {
   statuses: Record<string, string>; // lowercase name → color
   cycle: string[];
   done: Set<string>;
+  /** Statuses that mean "in progress" (listed first, counted as ongoing). */
+  ongoing: Set<string>;
+  /** Statuses that mean "blocked" (a separate column of the report). */
+  blocked: Set<string>;
   archiveStatus: string;
   archiveDate: boolean;
   regex: RegExp;
@@ -21,6 +26,7 @@ export interface TaskMatch {
   key: string; // lowercase status
   stamp: string; // "[2026-11-02]" or ""
   date: string | null; // YYYY-MM-DD when present in the stamp
+  due: string | null; // YYYY-MM-DD of an "@2026-11-14" in the text
   /** Positions within the line. */
   textFrom: number;
   textTo: number;
@@ -36,6 +42,8 @@ export function makeTaskConfig(opts: {
   statuses: Record<string, string>;
   cycle: string[];
   done: string[];
+  ongoing?: string[];
+  blocked?: string[];
   archiveStatus: string;
   archiveDate: boolean;
 }): TaskConfig {
@@ -53,6 +61,8 @@ export function makeTaskConfig(opts: {
     statuses,
     cycle: cycle.length ? cycle : Object.keys(statuses).slice(0, 3),
     done: new Set((opts.done ?? []).map((s) => s.toLowerCase())),
+    ongoing: new Set((opts.ongoing ?? ["ongoing"]).map((s) => s.toLowerCase())),
+    blocked: new Set((opts.blocked ?? ["blocked"]).map((s) => s.toLowerCase())),
     archiveStatus: opts.archiveStatus || "done",
     archiveDate: opts.archiveDate,
     regex,
@@ -71,12 +81,90 @@ export function parseTask(line: string, cfg: TaskConfig): TaskMatch | null {
   const stampTo = stampFrom + stamp.length;
   const date = /\[(\d{4}-\d{2}-\d{2})/.exec(stamp)?.[1] ?? null;
   return {
-    indent, bullet, text, status, key: status.toLowerCase(), stamp: stamp.trim(), date,
+    indent, bullet, text, status, key: status.toLowerCase(), stamp: stamp.trim(), date, due: findDue(text),
     textFrom, textTo, statusFrom, statusTo, stampFrom, stampTo,
   };
 }
 
 export const isDoneStatus = (key: string, cfg: TaskConfig) => cfg.done.has(key.toLowerCase());
+export const isOngoingStatus = (key: string, cfg: TaskConfig) => cfg.ongoing.has(key.toLowerCase());
+export const isBlockedStatus = (key: string, cfg: TaskConfig) => cfg.blocked.has(key.toLowerCase());
+
+// ---------------------------------------------------------------------------
+// Due dates: "@2026-11-14" anywhere in the task text.
+
+export const DUE_RE = /(^|\s)@(\d{4}-\d{2}-\d{2})(?=$|[\s,.;:!?)])/;
+
+export function findDue(text: string): string | null {
+  return DUE_RE.exec(text)?.[2] ?? null;
+}
+
+export type DueState = "overdue" | "today" | "soon" | "later";
+
+/** How urgent a due date is (soon: within 3 days). */
+export function dueState(due: string, today = todayISO()): DueState {
+  if (due < today) return "overdue";
+  if (due === today) return "today";
+  const soon = new Date(today + "T12:00:00");
+  soon.setDate(soon.getDate() + 3);
+  return due <= todayISO(soon) ? "soon" : "later";
+}
+
+/** Sets (or with null removes) the due date of a task line. */
+export function setDueInLine(line: string, cfg: TaskConfig, due: string | null): LineEdit | null {
+  const task = parseTask(line, cfg);
+  if (!task) return null;
+  const m = DUE_RE.exec(task.text);
+  if (m) {
+    const from = task.textFrom + m.index + m[1].length;
+    const to = from + 1 + m[2].length;
+    if (due) return { changes: [{ from: from + 1, to, insert: due }] };
+    // Remove the token and the space before it (or after it, at the start of the text).
+    const before = from > task.textFrom && /\s/.test(line[from - 1]);
+    return { changes: [{ from: before ? from - 1 : from, to: before ? to : Math.min(to + 1, task.textTo), insert: "" }] };
+  }
+  if (!due) return null;
+  return { changes: [{ from: task.textTo, to: task.textTo, insert: ` @${due}` }] };
+}
+
+/** Reads a date typed by the user: 2026-11-14, 14/11/2026, 14/11, +3 (days), 2w (weeks). */
+export function parseDateInput(input: string, today = new Date()): string | null {
+  const q = input.trim().toLowerCase();
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(q);
+  const make = (y: number, mo: number, d: number) => {
+    const date = new Date(y, mo - 1, d);
+    return date.getFullYear() === y && date.getMonth() === mo - 1 && date.getDate() === d ? todayISO(date) : null;
+  };
+  if (m) return make(+m[1], +m[2], +m[3]);
+  if ((m = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?$/.exec(q))) {
+    const y = m[3] ? +m[3] : today.getFullYear();
+    const d = make(y, +m[2], +m[1]);
+    // "14/01" in December means next January.
+    if (d && !m[3] && d < todayISO(today)) return make(y + 1, +m[2], +m[1]);
+    return d;
+  }
+  if ((m = /^\+?(\d{1,3})\s*(d|days?|w|weeks?)?$/.exec(q))) {
+    const date = new Date(today);
+    date.setDate(date.getDate() + +m[1] * (m[2]?.startsWith("w") ? 7 : 1));
+    return todayISO(date);
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Tags: "#client" anywhere in a line.
+
+export const TAG_RE = /(^|[\s(])(#[\p{L}\p{N}_][\p{L}\p{N}_\-/]*)/gu;
+
+/** Tags of a text, lowercase, without duplicates. */
+export function findTags(text: string): string[] {
+  if (!text.includes("#")) return [];
+  const out = new Set<string>();
+  for (const m of text.matchAll(TAG_RE)) out.add(m[2].toLowerCase());
+  return [...out];
+}
+
+export const hasTag = (text: string, tag: string) => findTags(text).includes(tag.toLowerCase());
 
 export function nextStatus(current: string | null, cfg: TaskConfig): string {
   if (current == null) return cfg.cycle[0];

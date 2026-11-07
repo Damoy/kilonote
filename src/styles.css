@@ -227,6 +227,7 @@ body.zen .cm-gutters { display: none !important; }
   background: var(--kn-orange); color: var(--kn-bg);
   font-size: 10px; font-weight: 700; line-height: 15px; text-align: center;
 }
+.sb-badge.overdue { background: var(--kn-red); }
 
 .sb-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .sb-header { flex: none; display: flex; align-items: center; gap: 2px; height: 34px; padding: 0 6px 0 14px; }
@@ -263,7 +264,7 @@ body.zen .cm-gutters { display: none !important; }
 .sb-recent { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 6px; border-radius: 6px; color: var(--kn-fg-muted); text-align: left; }
 .sb-recent:hover { background: var(--kn-hover); color: var(--kn-fg); }
 
-.sb-chips { flex: none; display: flex; gap: 4px; padding: 0 10px 8px; }
+.sb-chips { flex: none; display: flex; flex-wrap: wrap; gap: 4px; padding: 0 10px 8px; }
 .sb-chip {
   height: 24px; padding: 0 10px; border-radius: 12px;
   color: var(--kn-fg-muted); border: 1px solid var(--kn-border);
@@ -289,6 +290,13 @@ body.zen .cm-gutters { display: none !important; }
   color: var(--c); background: color-mix(in srgb, var(--c) 16%, transparent);
 }
 .sb-task-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--kn-fg); }
+.sb-due { flex: none; font-size: 11px; color: var(--kn-fg-muted); font-variant-numeric: tabular-nums; }
+.sb-due.soon { color: var(--kn-yellow); }
+.sb-due.today { color: var(--kn-orange); font-weight: 600; }
+.sb-due.overdue { color: var(--kn-red); font-weight: 600; }
+.sb-task:hover .sb-due { display: none; }
+.sb-tag-chip { display: inline-flex; align-items: center; gap: 3px; padding: 0 8px; }
+.sb-tag-chip .kn-icon { width: 13px; height: 13px; }
 .sb-task-actions { display: none; gap: 0; }
 .sb-task:hover .sb-task-actions { display: flex; }
 .sb-task-actions .kn-icon-btn { width: 22px; height: 22px; }
@@ -368,7 +376,7 @@ button.st-item:hover { background: var(--kn-hover); color: var(--kn-fg); }
 }
 .kn-status * { color: inherit !important; }
 .kn-status:hover { background: color-mix(in srgb, var(--c) 28%, transparent); }
-.cm-line.kn-task-ongoing { background-image: linear-gradient(90deg, color-mix(in srgb, var(--c) 11%, transparent), transparent 70%); }
+.cm-line.kn-task-active { background-image: linear-gradient(90deg, color-mix(in srgb, var(--c) 11%, transparent), transparent 70%); }
 .kn-stamp { color: var(--kn-fg-faint); }
 .kn-stamp .kn-date { color: inherit; }
 .kn-done-text { color: var(--kn-fg-muted); }
@@ -382,6 +390,11 @@ button.st-item:hover { background: var(--kn-hover); color: var(--kn-fg); }
 .kn-bullet { color: var(--kn-accent); font-weight: 700; }
 .kn-url { color: var(--kn-cyan); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--kn-cyan) 45%, transparent); text-underline-offset: 2px; }
 .kn-date { color: var(--kn-purple); }
+.kn-due { color: var(--kn-purple); border-radius: 4px; }
+.kn-due-soon { color: var(--kn-yellow); }
+.kn-due-today { color: var(--kn-orange); font-weight: 650; }
+.kn-due-overdue { color: var(--kn-red); font-weight: 650; background: color-mix(in srgb, var(--kn-red) 13%, transparent); }
+.kn-due-done { color: var(--kn-fg-faint); }
 .kn-tag { color: var(--kn-pink); font-weight: 600; }
 .kn-mention { color: var(--kn-cyan); font-weight: 600; }
 .kn-code { color: var(--kn-orange); background: color-mix(in srgb, var(--kn-fg) 6%, transparent); border-radius: 3px; }

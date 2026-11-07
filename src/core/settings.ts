@@ -26,6 +26,8 @@ export interface Settings {
   task_statuses: Record<string, string>;
   task_cycle: string[];
   task_done_statuses: string[];
+  task_ongoing_statuses: string[];
+  task_blocked_statuses: string[];
   archive_suffix: string;
   archive_status: string;
   archive_date: boolean;
@@ -91,8 +93,12 @@ export const SETTINGS_TEMPLATE = `// KiloNote settings
   },
   // Status order when pressing Ctrl+Enter
   "task_cycle": ["todo", "ongoing", "done"],
-  // Statuses that mean "completed"
+  // Statuses that mean "completed", "in progress" and "blocked" (tasks panel, report)
   "task_done_statuses": ["done", "ok"],
+  "task_ongoing_statuses": ["ongoing"],
+  "task_blocked_statuses": ["blocked"],
+  // Due dates: write "@2026-11-14" in a task (or use "Task: Set due date…");
+  // overdue tasks turn red.
   // Archiving (Ctrl+Shift+Enter): work.txt → work_done.txt
   "archive_suffix": "_done",
   // Status written to the archive file (unless the task is already completed)

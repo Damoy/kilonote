@@ -5,12 +5,19 @@ import { shortcutFor, titleWithKey } from "../core/commands";
 import type { Entry } from "../core/backend";
 import { basename, dirname, extname, isDoneFile, projectName, relative, samePath } from "../core/path";
 import { resolveColor } from "../core/themes";
-import { findTasks, isDoneStatus, type FoundTask } from "../editor/tasks";
+import { dueState, findTags, findTasks, isDoneStatus, isOngoingStatus, todayISO, type FoundTask } from "../editor/tasks";
 import { debounce, h, icon } from "./dom";
 import { showMenu, toast, type MenuItem } from "./overlay";
 
 export type Panel = "files" | "tasks" | "search";
-type TaskFilter = "open" | "ongoing" | "all";
+
+/** "2026-11-14" → "Nov 14" (with the year when it is not the current one). */
+function shortDate(iso: string): string {
+  const d = new Date(iso + "T12:00:00");
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString("en-US", sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
+}
+type TaskFilter = "open" | "ongoing" | "due" | "all";
 
 export class Sidebar {
   visible = true;
@@ -25,6 +32,9 @@ export class Sidebar {
   private filesHeader = h("div", { class: "sb-header" });
   private tasksList = h("div", { class: "sb-list" });
   private taskFilter: TaskFilter = "open";
+  private taskTag: string | null = null;
+  private tagChip = h("button", { class: "sb-chip sb-tag-chip", title: "Filter by #tag" });
+  private lastTags = new Map<string, number>();
   private searchInput = h("input", { class: "kn-input sb-search-input", type: "text", placeholder: "Search in folder…", spellcheck: "false" });
   private searchResults = h("div", { class: "sb-list" });
   private searchCase = false;
@@ -52,7 +62,7 @@ export class Sidebar {
     });
 
     const filterBar = h("div", { class: "sb-chips" });
-    const filters: [TaskFilter, string][] = [["open", "Open"], ["ongoing", "Ongoing"], ["all", "All"]];
+    const filters: [TaskFilter, string][] = [["open", "Open"], ["ongoing", "Ongoing"], ["due", "Due"], ["all", "All"]];
     for (const [f, label] of filters) {
       filterBar.append(
         h("button", {
@@ -65,6 +75,9 @@ export class Sidebar {
         }, label),
       );
     }
+    this.tagChip.addEventListener("click", (e) => this.tagMenu(e));
+    filterBar.append(this.tagChip);
+    this.renderTagChip();
     const tasksPanel = h(
       "div",
       { class: "sb-panel" },
@@ -376,30 +389,48 @@ export class Sidebar {
     for (const d of app.docs) if (d.path && this.taskTexts.has(d.path)) this.taskTexts.set(d.path, d.state.doc.toString());
     const texts = files.map((f) => this.taskTexts.get(f) ?? null);
     const cfg = app.taskCfg;
+    const today = todayISO();
     let ongoingTotal = 0;
+    let overdueTotal = 0;
+    const tagCounts = new Map<string, number>();
     const groups: { path: string; tasks: FoundTask[]; ongoing: number }[] = [];
     files.forEach((path, i) => {
       const text = texts[i];
       if (!text) return;
       const all = findTasks(text, cfg);
-      const ongoing = all.filter((t) => t.task.key === "ongoing").length;
+      const ongoing = all.filter((t) => isOngoingStatus(t.task.key, cfg)).length;
       ongoingTotal += ongoing;
+      for (const t of all) {
+        const open = !isDoneStatus(t.task.key, cfg);
+        if (open && t.task.due && t.task.due < today) overdueTotal++;
+        if (open || this.taskFilter === "all") for (const tag of findTags(t.raw)) tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+      }
       const tasks = all.filter((t) => {
+        if (this.taskTag && !findTags(t.raw).includes(this.taskTag)) return false;
         if (this.taskFilter === "all") return true;
-        if (this.taskFilter === "ongoing") return t.task.key === "ongoing";
+        if (this.taskFilter === "ongoing") return isOngoingStatus(t.task.key, cfg);
+        if (this.taskFilter === "due") return !!t.task.due && !isDoneStatus(t.task.key, cfg);
         return !isDoneStatus(t.task.key, cfg);
       });
       if (tasks.length) groups.push({ path, tasks, ongoing });
     });
-    this.taskBadge.textContent = ongoingTotal ? String(ongoingTotal) : "";
-    this.taskBadge.title = `${ongoingTotal} ongoing task${ongoingTotal > 1 ? "s" : ""}`;
+    this.lastTags = tagCounts;
+    // The badge: overdue tasks (red) first, otherwise the ongoing ones.
+    this.taskBadge.classList.toggle("overdue", overdueTotal > 0);
+    this.taskBadge.textContent = overdueTotal ? String(overdueTotal) : ongoingTotal ? String(ongoingTotal) : "";
+    this.taskBadge.title = overdueTotal
+      ? `${overdueTotal} overdue task${overdueTotal > 1 ? "s" : ""}`
+      : `${ongoingTotal} ongoing task${ongoingTotal > 1 ? "s" : ""}`;
     groups.sort((a, b) => b.ongoing - a.ongoing || basename(a.path).localeCompare(basename(b.path)));
     const order = cfg.cycle;
-    const rank = (k: string) => (k === "ongoing" ? -1 : order.indexOf(k) < 0 ? 99 : order.indexOf(k));
+    const rank = (k: string) => (isOngoingStatus(k, cfg) ? -1 : order.indexOf(k) < 0 ? 99 : order.indexOf(k));
+    // Earliest due date first; tasks without one after.
+    const dueKey = (t: FoundTask) => t.task.due ?? "9999";
 
     const frag = document.createDocumentFragment();
     if (!groups.length) {
-      frag.append(h("div", { class: "sb-empty" }, h("p", {}, this.taskFilter === "ongoing" ? "No ongoing task." : "No task found."), h("p", { class: "sb-hint" }, `Write "- my task - todo" or press ${shortcutFor("task.cycle")} on a line.`)));
+      const what = this.taskFilter === "ongoing" ? "No ongoing task" : this.taskFilter === "due" ? "No task with a due date" : "No task found";
+      frag.append(h("div", { class: "sb-empty" }, h("p", {}, `${what}${this.taskTag ? ` tagged ${this.taskTag}` : ""}.`), h("p", { class: "sb-hint" }, `Write "- my task - todo" or press ${shortcutFor("task.cycle")} on a line.`)));
     }
     for (const g of groups) {
       const rel = relative(app.workspace, dirname(g.path));
@@ -411,14 +442,16 @@ export class Sidebar {
           h("span", { class: "kn-spacer" }),
           h("span", { class: "sb-count" }, String(g.tasks.length))),
       );
-      g.tasks.sort((a, b) => rank(a.task.key) - rank(b.task.key) || a.line - b.line);
+      if (this.taskFilter === "due") g.tasks.sort((a, b) => dueKey(a).localeCompare(dueKey(b)) || a.line - b.line);
+      else g.tasks.sort((a, b) => rank(a.task.key) - rank(b.task.key) || dueKey(a).localeCompare(dueKey(b)) || a.line - b.line);
       for (const t of g.tasks) {
         const color = resolveColor(cfg.statuses[t.task.key]);
         const row = h(
           "div",
           { class: `sb-task${isDoneStatus(t.task.key, cfg) ? " done" : ""}`, title: `${t.raw.trim()}\nLine ${t.line}` },
           h("span", { class: "sb-task-status", style: { "--c": color } }, t.task.status),
-          h("span", { class: "sb-task-text" }, t.task.text.replace(/(\*\*|\*|`)(\S(?:.*?\S)?)\1/g, "$2")),
+          h("span", { class: "sb-task-text" }, t.task.text.replace(/(\*\*|\*|`)(\S(?:.*?\S)?)\1/g, "$2").replace(/(^|\s)@\d{4}-\d{2}-\d{2}/, "")),
+          t.task.due ? h("span", { class: `sb-due ${isDoneStatus(t.task.key, cfg) ? "" : dueState(t.task.due, today)}`, title: `Due ${t.task.due}` }, shortDate(t.task.due)) : null,
           h("span", { class: "sb-task-actions" },
             h("button", { class: "kn-icon-btn", title: "Next status", onclick: (e: Event) => { e.stopPropagation(); void this.taskAction(g.path, t, "cycle"); } }, icon("cycle")),
             h("button", { class: "kn-icon-btn", title: "Archive to _done", onclick: (e: Event) => { e.stopPropagation(); void this.taskAction(g.path, t, "archive"); } }, icon("archive"))),
@@ -428,6 +461,37 @@ export class Sidebar {
       }
     }
     this.tasksList.replaceChildren(frag);
+  }
+
+  private renderTagChip() {
+    this.tagChip.classList.toggle("active", !!this.taskTag);
+    if (this.taskTag) this.tagChip.replaceChildren(h("span", {}, this.taskTag), icon("x"));
+    else this.tagChip.replaceChildren(icon("tag"));
+    this.tagChip.title = this.taskTag ? "Remove the tag filter" : "Filter by #tag";
+  }
+
+  private tagMenu(e: MouseEvent) {
+    if (this.taskTag) {
+      this.taskTag = null;
+      this.renderTagChip();
+      void this.renderTasks(false);
+      return;
+    }
+    const tags = [...this.lastTags].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 40);
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    showMenu(
+      tags.length
+        ? [{ header: "Show the tasks tagged" }, ...tags.map(([t, n]) => ({
+            label: `${t}  (${n})`, icon: "tag", action: () => {
+              this.taskTag = t;
+              this.renderTagChip();
+              void this.renderTasks(false);
+            },
+          }))]
+        : [{ header: "No #tag in the tasks yet" }],
+      r.left,
+      r.bottom + 4,
+    );
   }
 
   /** Quick action from the list, without necessarily opening a tab. */
