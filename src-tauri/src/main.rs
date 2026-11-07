@@ -461,16 +461,42 @@ fn valid_label(label: &str) -> bool {
 #[tauri::command]
 fn window_paths(window: WebviewWindow, state: State<Windows>) -> Vec<String> {
     let label = window.label();
+    // The lock also orders this with deliver_paths (files opened during startup).
+    let mut pending = state.pending.lock().unwrap();
+    let mut paths = Vec::new();
     if label == "main" && !state.argv_taken.swap(true, Ordering::SeqCst) {
         let cwd = std::env::current_dir().unwrap_or_default();
-        return resolve_paths(std::env::args().skip(1), &cwd);
+        paths = resolve_paths(std::env::args().skip(1), &cwd);
     }
-    state
-        .pending
-        .lock()
-        .unwrap()
-        .remove(label)
-        .unwrap_or_default()
+    paths.extend(pending.remove(label).unwrap_or_default());
+    paths
+}
+
+/// Files the system asks KiloNote to open (second launch, "Open with", Finder):
+/// shown in the last used window, or handed to the main window if it is still
+/// starting.
+fn deliver_paths(app: &AppHandle, paths: Vec<String>) {
+    let state = app.state::<Windows>();
+    {
+        let mut pending = state.pending.lock().unwrap();
+        if !state.argv_taken.load(Ordering::SeqCst) {
+            pending.entry("main".into()).or_default().extend(paths);
+            return;
+        }
+    }
+    let last = state.last_focused.lock().unwrap().clone();
+    let target = app
+        .get_webview_window(&last)
+        .or_else(|| app.get_webview_window("main"))
+        .or_else(|| app.webview_windows().into_values().next());
+    if let Some(window) = target {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+        if !paths.is_empty() {
+            let _ = app.emit_to(window.label(), "kilonote://open-paths", paths);
+        }
+    }
 }
 
 /// Opens a new window (a fresh label, or a given one to restore a saved window).
@@ -625,21 +651,10 @@ fn main() {
         // A single KiloNote process: launching the app again (pinned shortcut,
         // "Open with"…) brings the last used window back and opens the files there.
         .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
-            let state = app.state::<Windows>();
-            let last = state.last_focused.lock().unwrap().clone();
-            let target = app
-                .get_webview_window(&last)
-                .or_else(|| app.get_webview_window("main"))
-                .or_else(|| app.webview_windows().into_values().next());
-            if let Some(window) = target {
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
-                let paths = resolve_paths(argv.into_iter().skip(1), Path::new(&cwd));
-                if !paths.is_empty() {
-                    let _ = app.emit_to(window.label(), "kilonote://open-paths", paths);
-                }
-            }
+            deliver_paths(
+                app,
+                resolve_paths(argv.into_iter().skip(1), Path::new(&cwd)),
+            );
         }))
         .plugin(
             tauri_plugin_window_state::Builder::default()
@@ -683,8 +698,21 @@ fn main() {
             delete_session,
             prune_history
         ])
-        .run(tauri::generate_context!())
-        .expect("failed to start KiloNote");
+        .build(tauri::generate_context!())
+        .expect("failed to start KiloNote")
+        .run(|_app, _event| {
+            // macOS hands the files opened from the Finder ("Open with", double
+            // click, a file dropped on the Dock icon) as an event, not as arguments.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = _event {
+                let paths = urls
+                    .into_iter()
+                    .filter_map(|u| u.to_file_path().ok())
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .collect();
+                deliver_paths(_app, paths);
+            }
+        });
 }
 
 #[cfg(test)]
