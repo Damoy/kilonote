@@ -51,3 +51,30 @@ jobs:
       - run: npm run build
       - name: Lint the Rust backend (macOS)
         run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+
+  # The real app, driven through WebDriver (tauri-driver + WebKitWebDriver)
+  # in a virtual display: e2e/app.e2e.mjs.
+  e2e:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: System dependencies (WebKitGTK, its WebDriver, a virtual display)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf webkit2gtk-driver xvfb
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+          key: e2e
+      - name: tauri-driver
+        run: command -v tauri-driver || cargo install tauri-driver --locked
+      - run: npm ci
+      - name: Build the app (debug)
+        run: npx tauri build --debug --no-bundle
+      - name: End-to-end tests
+        run: xvfb-run -a node e2e/app.e2e.mjs
