@@ -3,7 +3,7 @@
 // what reaches the files when saving, reloading, restoring a session…
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { App } from "./app";
+import { App, historyName, parseHistoryName, pathHash } from "./app";
 import type { Backend, Entry, Meta } from "./core/backend";
 import { basename, dirname, isInside } from "./core/path";
 
@@ -90,6 +90,7 @@ function memoryBackend(init: Record<string, string> = {}, opts: { savePath?: str
     openWindow: async () => {},
     windowCount: async () => 1,
     deleteSession: async () => {},
+    pruneHistory: async () => {},
     broadcastSettingsChanged: () => {},
     onSettingsChanged: () => {},
     pickFolder: async () => null,
@@ -218,6 +219,38 @@ describe("session", () => {
     app.flushAutosaves();
     await new Promise((r) => setTimeout(r, 10));
     expect(disk.text("/notes/a.txt")).toBe("changed elsewhere");
+  });
+});
+
+describe("local history", () => {
+  it("names sort by time and keep the kind; Windows paths hash case-insensitively", () => {
+    const name = historyName("C:\\Notes\\work_v2.txt", "disk", new Date(2026, 10, 7, 9, 5, 3, 7));
+    expect(name).toMatch(/^20261107-090503-007_[0-9a-f]{8}_disk_work_v2\.txt$/);
+    expect(parseHistoryName(name)).toEqual({ hash: pathHash("c:/notes/WORK_V2.TXT"), kind: "disk", when: "2026-11-07 09:05:03" });
+    expect(pathHash("/a/b")).not.toBe(pathHash("/a/B"));
+  });
+
+  it("keeping my version saves the disk version first; reloading saves my edits first", async () => {
+    const { app, disk } = await start({ "/notes/a.txt": "v1" });
+    const doc = (await app.openFile("/notes/a.txt"))!;
+    type(app, " mine");
+    disk.external("/notes/a.txt", "v2 from elsewhere");
+    await app.checkExternalChanges();
+    expect(doc.conflict).toBe(true);
+    await app.resolveConflict(doc, "mine");
+    expect(disk.text("/notes/a.txt")).toBe("v1 mine");
+    type(app, " again");
+    await app.reloadDoc(doc, true);
+    const kept = [...disk.files.keys()].filter((p) => p.startsWith("/config/history/")).sort();
+    expect(kept.map((p) => disk.text(p))).toEqual(["v2 from elsewhere", "v1 mine again"]);
+    // The history picker opens a version in a new tab.
+    await app.showLocalHistory();
+    const rows = document.querySelectorAll(".kn-palette-row");
+    expect(rows).toHaveLength(2);
+    rows[1].dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await tick(5);
+    expect(app.active?.state.doc.toString()).toBe("v2 from elsewhere");
+    expect(app.active?.path).toBeNull();
   });
 });
 

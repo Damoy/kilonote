@@ -7,7 +7,7 @@ import type { Backend } from "./core/backend";
 import { registerCommands, runCommand, setKeybindings, setPlatform, shortcutFor, type Command } from "./core/commands";
 import { parseJsonc } from "./core/jsonc";
 import {
-  basename, dirname, doneFileFor, extname, isDoneFile, isInside, isProbablyBinary, join, projectName, relative, samePath, stem,
+  basename, dirname, doneFileFor, extname, isDoneFile, isInside, isProbablyBinary, isWindowsPath, join, projectName, relative, samePath, stem,
 } from "./core/path";
 import { mergeSettings, setSettingInText, SETTINGS_TEMPLATE, type Settings } from "./core/settings";
 import { applyMascot, applyTheme, findTheme, MASCOT_VARIANTS, PALETTE_LABELS, THEMES } from "./core/themes";
@@ -92,6 +92,38 @@ const sessionFileName = (label: string) => (label === "main" ? "session.json" : 
 const SESSION_FILE_RE = /^session-(kn-[a-zA-Z0-9-]+)\.json$/;
 /** Error of the native backend for a file whose content is binary. */
 const NOT_TEXT = "not a text file";
+
+/** Local history: <config>/history/<stamp>_<path hash>_<kind>_<file name>, newest kept. */
+type HistoryKind = "disk" | "mine" | "replace";
+const HISTORY_KEEP = 300;
+const HISTORY_LABELS: Record<HistoryKind, string> = {
+  disk: "Version on disk, before KiloNote overwrote it",
+  mine: "Your unsaved edits, before reloading from disk",
+  replace: "Before \"Replace in files\"",
+};
+
+/** FNV-1a hash of a path (case-insensitive on Windows). */
+export function pathHash(path: string): string {
+  const norm = isWindowsPath(path) ? path.replace(/\\/g, "/").toLowerCase() : path;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < norm.length; i++) {
+    h ^= norm.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+
+export function historyName(path: string, kind: HistoryKind, now = new Date()): string {
+  const p = (n: number, w = 2) => String(n).padStart(w, "0");
+  const stamp = `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}-${p(now.getMilliseconds(), 3)}`;
+  return `${stamp}_${pathHash(path)}_${kind}_${basename(path)}`;
+}
+
+export function parseHistoryName(name: string): { hash: string; kind: HistoryKind; when: string } | null {
+  const m = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-\d{3}_([0-9a-f]{8})_(disk|mine|replace)_/.exec(name);
+  if (!m) return null;
+  return { hash: m[7], kind: m[8] as HistoryKind, when: `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}` };
+}
 
 /** Files above this size ask for confirmation; above the maximum, they are not opened. */
 const LARGE_FILE_SIZE = 20 * 1024 * 1024;
@@ -612,6 +644,7 @@ export class App {
           return false;
         }
         if (r === "cancel") return false;
+        await this.keepVersion(doc, "disk");
       }
       try {
         const text = snapshot.sliceString(0, snapshot.length, doc.eol);
@@ -680,6 +713,7 @@ export class App {
   async reloadDoc(doc: Doc, force = false) {
     if (!doc.path) return;
     if (doc.dirty && !force) return;
+    if (doc.dirty) await this.keepVersion(doc, "mine");
     try {
       const ft = await this.backend.readText(doc.path);
       this.replaceDocContent(doc, ft.text);
@@ -749,11 +783,61 @@ export class App {
     });
   }
 
-  resolveConflict(doc: Doc, keep: "disk" | "mine") {
+  async resolveConflict(doc: Doc, keep: "disk" | "mine") {
     if (keep === "disk") return this.reloadDoc(doc, true);
+    await this.keepVersion(doc, "disk");
     doc.conflict = false;
     doc.mtime = 0; // skip the next check: overwrite
     return this.save(doc);
+  }
+
+  // -------------------------------------------------------------------------
+  // Local history: a copy of any version KiloNote is about to throw away
+  // (the file on disk before overwriting it, unsaved edits before reloading).
+
+  private historyDir() {
+    return join(this.configDir, "history");
+  }
+
+  async keepVersion(doc: Doc, kind: HistoryKind) {
+    if (!doc.path) return;
+    try {
+      const text = kind === "mine" ? (doc === this.active ? this.view.state : doc.state).doc.toString() : (await this.backend.readText(doc.path)).text;
+      await this.backend.writeText(join(this.historyDir(), historyName(doc.path, kind)), text);
+      void this.backend.pruneHistory(HISTORY_KEEP).catch(() => {});
+    } catch {
+      /* best effort: never block a save or a reload */
+    }
+  }
+
+  async showLocalHistory() {
+    const doc = this.active;
+    if (!doc?.path) {
+      toast("Local history keeps earlier versions of saved notes.");
+      return;
+    }
+    const path = doc.path;
+    const entries = (await this.backend.listDir(this.historyDir(), true).catch(() => []))
+      .map((e) => ({ entry: e, info: parseHistoryName(e.name) }))
+      .filter((x) => x.info?.hash === pathHash(path))
+      .sort((a, b) => b.entry.name.localeCompare(a.entry.name));
+    if (!entries.length) {
+      toast(`No earlier version of "${basename(path)}" yet. KiloNote keeps one whenever a version is about to be overwritten (conflicts, reloads, replace in files).`, { timeout: 6000 });
+      return;
+    }
+    openPicker({
+      placeholder: `Earlier versions of ${basename(path)}`,
+      provide: (q) => ({
+        items: fuzzyFilter(q, entries, (x) => `${x.info!.when} ${HISTORY_LABELS[x.info!.kind]}`).map(({ item }) => ({
+          label: item.info!.when, detail: HISTORY_LABELS[item.info!.kind], icon: "file", value: item.entry.path,
+        })),
+      }),
+      pick: async (it) => {
+        const { text } = await this.backend.readText(it.value as string);
+        const when = parseHistoryName(basename(it.value as string))!.when;
+        this.newDoc({ text, title: `${basename(path)} (${when})`, lang: doc.lang });
+      },
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -1754,6 +1838,7 @@ export class App {
       { id: "file.copyPath", title: "File: Copy path", run: () => this.active?.path && this.copyText(this.active.path) },
       { id: "file.toggleDone", title: "Tasks: Switch between note and its _done archive", run: () => this.toggleDoneFile() },
       { id: "file.reload", title: "File: Reload from disk", run: () => this.active && this.reloadDoc(this.active, true) },
+      { id: "file.history", title: "File: Local history (earlier versions)…", run: () => this.showLocalHistory() },
       { id: "tab.close", title: "Tab: Close", run: () => this.active && this.closeDoc(this.active) },
       { id: "tab.closeOthers", title: "Tab: Close others", run: () => this.closeMany(this.docs.filter((d) => d !== this.active)) },
       { id: "tab.closeAll", title: "Tab: Close all", run: () => this.closeMany(this.docs) },

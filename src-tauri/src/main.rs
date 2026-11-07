@@ -544,6 +544,27 @@ fn delete_session(app: AppHandle, label: String) -> Result<(), String> {
     }
 }
 
+/// Keeps the `keep` newest files of the local history (`<config>/history`, whose
+/// file names start with a timestamp) and deletes the others.
+#[tauri::command]
+fn prune_history(app: AppHandle, keep: usize) -> Result<(), String> {
+    let dir = app.path().app_config_dir().map_err(err)?.join("history");
+    let Ok(entries) = fs::read_dir(&dir) else {
+        return Ok(());
+    };
+    let mut files: Vec<PathBuf> = entries
+        .flatten()
+        .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+        .map(|e| e.path())
+        .collect();
+    files.sort();
+    let extra = files.len().saturating_sub(keep);
+    for file in files.into_iter().take(extra) {
+        let _ = fs::remove_file(file);
+    }
+    Ok(())
+}
+
 /// The frontend shows a window once it is ready (no white flash).
 /// Safety net: show it anyway after a short delay.
 fn show_soon(window: WebviewWindow) {
@@ -613,7 +634,8 @@ fn main() {
             window_paths,
             open_window,
             window_count,
-            delete_session
+            delete_session,
+            prune_history
         ])
         .run(tauri::generate_context!())
         .expect("failed to start KiloNote");

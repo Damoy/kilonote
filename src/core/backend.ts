@@ -48,6 +48,8 @@ export interface Backend {
   /** Opens another window, optionally restoring a saved one by its label. */
   openWindow(paths: string[], label?: string): Promise<void>;
   windowCount(): Promise<number>;
+  /** Keeps only the `keep` newest files of the local history (config folder only). */
+  pruneHistory(keep: number): Promise<void>;
   /** Removes the saved session of a window (config folder only). */
   deleteSession(label: string): Promise<void>;
   /** Tells the other windows that the settings file changed. */
@@ -114,6 +116,7 @@ export async function createTauriBackend(): Promise<Backend> {
     openWindow: async (paths, label) => void (await invoke<string>("open_window", { paths, label: label ?? null })),
     windowCount: () => invoke<number>("window_count"),
     deleteSession: (label) => invoke("delete_session", { label }),
+    pruneHistory: (keep) => invoke("prune_history", { keep }),
     broadcastSettingsChanged: () => void emit("kilonote://settings-changed", { from: win.label }),
     onSettingsChanged(handler) {
       void listen<{ from: string }>("kilonote://settings-changed", (ev) => {
@@ -335,6 +338,11 @@ export function createWebBackend(): Backend {
       window.open(`${location.pathname}?window=${encodeURIComponent(next)}`, "_blank");
     },
     windowCount: async () => 1,
+    async pruneHistory(keep) {
+      const old = [...files.keys()].filter((p) => dirname(p) === "/.config/history").sort().slice(0, -keep || undefined);
+      for (const p of old) files.delete(p);
+      persist();
+    },
     async deleteSession(label) {
       files.delete(label === "main" ? "/.config/session.json" : `/.config/session-${label}.json`);
       persist();
