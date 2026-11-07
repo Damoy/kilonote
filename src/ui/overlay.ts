@@ -246,7 +246,7 @@ export function confirm(opts: ConfirmOptions): Promise<"ok" | "alt" | "cancel"> 
       h(
         "div",
         { class: "kn-modal-actions" },
-        opts.altLabel ? h("button", { class: "kn-btn subtle", onclick: () => finish("alt") }, opts.altLabel) : null,
+        opts.altLabel ? h("button", { class: "kn-btn", onclick: () => finish("alt") }, opts.altLabel) : null,
         h("span", { class: "kn-spacer" }),
         h("button", { class: "kn-btn", onclick: () => finish("cancel") }, opts.cancelLabel ?? "Cancel"),
         ok,

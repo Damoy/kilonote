@@ -500,10 +500,12 @@ fn deliver_paths(app: &AppHandle, paths: Vec<String>) {
 }
 
 /// Opens a new window (a fresh label, or a given one to restore a saved window).
+/// Async on purpose: a synchronous command runs on the main thread, and
+/// creating a webview from there deadlocks on Windows (WebView2).
 #[tauri::command]
-fn open_window(
+async fn open_window(
     app: AppHandle,
-    state: State<Windows>,
+    state: State<'_, Windows>,
     paths: Vec<String>,
     label: Option<String>,
     position: Option<(f64, f64)>,
