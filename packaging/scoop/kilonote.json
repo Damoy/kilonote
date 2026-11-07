@@ -1,0 +1,22 @@
+{
+  "version": "0.1.1",
+  "description": "Light, keyboard-driven notes with built-in task tracking",
+  "homepage": "https://github.com/Damoy/kilonote",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/Damoy/kilonote/releases/download/v0.1.1/KiloNote_0.1.1_x64-portable.exe#/KiloNote.exe",
+      "hash": "e73476636bff8298d5f255627a917cedd21b226ae9f47df71dd444ef4c8681e3"
+    }
+  },
+  "shortcuts": [["KiloNote.exe", "KiloNote"]],
+  "checkver": "github",
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/Damoy/kilonote/releases/download/v$version/KiloNote_$version_x64-portable.exe#/KiloNote.exe",
+        "hash": { "url": "$baseurl/SHA256SUMS.txt" }
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: Damoy.KiloNote
+PackageVersion: 0.1.1
+PackageLocale: en-US
+Publisher: Damoy
+PublisherUrl: https://github.com/Damoy
+PackageName: KiloNote
+PackageUrl: https://github.com/Damoy/kilonote
+License: MIT
+LicenseUrl: https://github.com/Damoy/kilonote/blob/main/LICENSE
+ShortDescription: Light, keyboard-driven notes with built-in task tracking
+Description: KiloNote is a fast, keyboard-driven note-taking editor built to track tasks (todo / ongoing / done), archive completed ones and produce activity reports. Notes stay plain text files; no network access, no telemetry.
+Moniker: kilonote
+Tags:
+  - notes
+  - todo
+  - tasks
+  - text-editor
+  - markdown
+ReleaseNotesUrl: https://github.com/Damoy/kilonote/releases/tag/v0.1.1
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0
