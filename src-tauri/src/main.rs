@@ -121,6 +121,9 @@ fn decode(bytes: Vec<u8>) -> (String, &'static str) {
     }
 }
 
+/// Largest file read as text (bytes).
+const MAX_TEXT_SIZE: u64 = 512 * 1024 * 1024;
+
 /// Error returned for binary content (the frontend recognizes this text).
 const NOT_TEXT: &str = "not a text file";
 
@@ -136,6 +139,10 @@ fn looks_binary(bytes: &[u8]) -> bool {
 #[tauri::command]
 async fn read_text(path: String) -> Result<FileText, String> {
     let p = PathBuf::from(&path);
+    // Safety net (the interface already refuses files this large).
+    if fs::metadata(&p).map(|m| m.len()).unwrap_or(0) > MAX_TEXT_SIZE {
+        return Err("file too large".into());
+    }
     let bytes = fs::read(&p).map_err(err)?;
     // Opening it as text would show garbage, and saving it would corrupt it.
     if looks_binary(&bytes) {

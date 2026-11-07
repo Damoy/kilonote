@@ -93,6 +93,27 @@ const SESSION_FILE_RE = /^session-(kn-[a-zA-Z0-9-]+)\.json$/;
 /** Error of the native backend for a file whose content is binary. */
 const NOT_TEXT = "not a text file";
 
+/** Files above this size ask for confirmation; above the maximum, they are not opened. */
+const LARGE_FILE_SIZE = 20 * 1024 * 1024;
+const MAX_FILE_SIZE = 300 * 1024 * 1024;
+const formatSize = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(0)} MB` : `${Math.ceil(n / 1024)} KB`);
+
+/** Removes whole lines (1-based numbers, ascending), in contiguous blocks so that changes never overlap. */
+function lineRemoval(doc: Text, numbers: number[]): ChangeSet {
+  const specs: { from: number; to: number }[] = [];
+  let i = 0;
+  while (i < numbers.length) {
+    let j = i;
+    while (j + 1 < numbers.length && numbers[j + 1] === numbers[j] + 1) j++;
+    const a = doc.line(numbers[i]);
+    const b = doc.line(numbers[j]);
+    if (b.number < doc.lines) specs.push({ from: a.from, to: b.to + 1 });
+    else specs.push({ from: a.number > 1 ? a.from - 1 : a.from, to: b.to });
+    i = j + 1;
+  }
+  return ChangeSet.of(specs, doc.length);
+}
+
 export class App {
   settings!: Settings;
   taskCfg!: TaskConfig;
@@ -392,6 +413,20 @@ export class App {
       // KiloNote never hands a file to the operating system to open or run it:
       // executables (and any other non-text file) can only be shown in the file manager.
       if (isProbablyBinary(path)) return this.refuseBinary(path);
+      // A huge file (a log of several hundred MB…) would freeze the window.
+      const size = (await this.backend.stat(path))?.size ?? 0;
+      if (size > MAX_FILE_SIZE) {
+        toast(`"${basename(path)}" is too large to open (${formatSize(size)}).`, { kind: "error" });
+        return null;
+      }
+      if (size > LARGE_FILE_SIZE) {
+        const r = await confirm({
+          title: `Open "${basename(path)}"?`,
+          message: `This file is large (${formatSize(size)}): KiloNote may slow down while it is open.`,
+          okLabel: "Open anyway",
+        });
+        if (r !== "ok") return null;
+      }
       try {
         const ft = await this.backend.readText(path);
         doc = this.findDoc(path); // opened in the meantime?
@@ -471,7 +506,10 @@ export class App {
     const doc = this.active;
     if (!doc) return;
     doc.state = u.state;
-    if (u.docChanged) this.afterDocChange(doc);
+    if (u.docChanged) {
+      this.notifyChanges(doc, u.changes);
+      this.afterDocChange(doc);
+    }
     if (u.docChanged || u.selectionSet) this.emit("selection");
   }
 
@@ -489,8 +527,29 @@ export class App {
     else {
       const tr = doc.state.update(spec);
       doc.state = tr.state;
-      if (tr.docChanged) this.afterDocChange(doc);
+      if (tr.docChanged) {
+        this.notifyChanges(doc, tr.changes);
+        this.afterDocChange(doc);
+      }
     }
+  }
+
+  private changeWatchers = new Map<Doc, Set<(changes: ChangeSet) => void>>();
+  private notifyChanges(doc: Doc, changes: ChangeSet) {
+    this.changeWatchers.get(doc)?.forEach((fn) => fn(changes));
+  }
+
+  /** Collects the edits made to a document from now on (to map positions across an await). */
+  private trackChanges(doc: Doc) {
+    const start = doc === this.active ? this.view.state.doc : doc.state.doc;
+    let since = ChangeSet.empty(start.length);
+    const fn = (c: ChangeSet) => (since = since.compose(c));
+    if (!this.changeWatchers.has(doc)) this.changeWatchers.set(doc, new Set());
+    this.changeWatchers.get(doc)!.add(fn);
+    return {
+      changes: () => since,
+      stop: () => this.changeWatchers.get(doc)?.delete(fn),
+    };
   }
 
   /** Replaces the content with a minimal change (cursor and undo history are preserved). */
@@ -997,40 +1056,36 @@ export class App {
     const out = lines.map((l) => archivedLine(l.text, this.taskCfg, date));
     const target = doneFileFor(doc.path, suffix);
 
-    // Remove the lines in contiguous blocks, so that changes never overlap.
-    const specs: { from: number; to: number }[] = [];
-    let i = 0;
-    while (i < lines.length) {
-      let j = i;
-      while (j + 1 < lines.length && lines[j + 1].number === lines[j].number + 1) j++;
-      const a = lines[i];
-      const b = lines[j];
-      if (b.number < state.doc.lines) specs.push({ from: a.from, to: b.to + 1 });
-      else specs.push({ from: a.number > 1 ? a.from - 1 : a.from, to: b.to });
-      i = j + 1;
-    }
-    const removal = ChangeSet.of(specs, state.doc.length);
-    this.applyToDoc(doc, { changes: removal, userEvent: "delete.archive" });
-    const after = doc === this.active ? this.view.state : doc.state;
-
+    // The archive is written first: if that fails, the note is left untouched.
+    const tracker = this.trackChanges(doc);
     try {
       await this.appendToFile(target, out);
     } catch (e) {
-      const current = doc === this.active ? this.view.state : doc.state;
-      if (current.doc === after.doc) this.applyToDoc(doc, { changes: removal.invert(state.doc) });
-      else {
-        // The note was edited meanwhile: put the lines back where they were, as near as possible.
-        const at = current.doc.lineAt(Math.min(specs[0].from, current.doc.length)).from;
-        this.applyToDoc(doc, { changes: { from: at, insert: lines.map((l) => l.text).join("\n") + "\n" } });
-      }
-      toast(`Could not archive (${e}). Nothing was lost.`, { kind: "error" });
+      toast(`Could not archive (${e}). The note was not changed.`, { kind: "error" });
       return;
+    } finally {
+      tracker.stop();
     }
+    // Then the lines leave the note, wherever they are now (it may have been edited meanwhile).
+    const current = doc === this.active ? this.view.state : doc.state;
+    const since = tracker.changes();
+    const kept: number[] = [];
+    const now: number[] = [];
+    for (const l of lines) {
+      const pos = since.mapPos(l.from, 1);
+      const line = current.doc.lineAt(Math.min(pos, current.doc.length));
+      if (line.from === pos && line.text === l.text && !now.includes(line.number)) now.push(line.number);
+      else kept.push(l.number);
+    }
+    const removal = lineRemoval(current.doc, now);
+    if (!removal.empty) this.applyToDoc(doc, { changes: removal, userEvent: "delete.archive" });
     const n = out.length;
-    toast(`${n} task${n > 1 ? "s" : ""} archived → ${basename(target)}`, {
-      kind: "success",
-      action: { label: "Open", run: () => void this.openFile(target) },
-    });
+    toast(
+      kept.length
+        ? `${n} task${n > 1 ? "s" : ""} archived → ${basename(target)}. ${kept.length} line${kept.length > 1 ? "s were" : " was"} edited meanwhile and kept in the note.`
+        : `${n} task${n > 1 ? "s" : ""} archived → ${basename(target)}`,
+      { kind: "success", action: { label: "Open", run: () => void this.openFile(target) } },
+    );
     this.refreshWorkspaceFilesSoon();
   }
 

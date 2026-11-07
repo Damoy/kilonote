@@ -14,6 +14,8 @@ interface Disk {
   failWrites: Set<string>;
   /** Appends take a while, like a real disk behind IPC. */
   appendDelay: number;
+  /** Reported size of some files (to simulate huge files). */
+  sizes: Map<string, number>;
   clock: number;
   /** Simulates another program changing a file. */
   external(path: string, text: string): void;
@@ -26,6 +28,7 @@ function memoryBackend(init: Record<string, string> = {}, opts: { savePath?: str
     dirs: new Set(["/", "/notes", "/config"]),
     failWrites: new Set(),
     appendDelay: 0,
+    sizes: new Map(),
     clock: 1_000,
     external(path, text) {
       disk.clock += 5_000;
@@ -36,7 +39,7 @@ function memoryBackend(init: Record<string, string> = {}, opts: { savePath?: str
   for (const [p, t] of Object.entries(init)) disk.files.set(p, { text: t, mtime: disk.clock });
   const meta = (p: string): Meta | null => {
     const f = disk.files.get(p);
-    if (f) return { mtime: f.mtime, size: f.text.length, isDir: false };
+    if (f) return { mtime: f.mtime, size: disk.sizes.get(p) ?? f.text.length, isDir: false };
     return disk.dirs.has(p) ? { mtime: 0, size: 0, isDir: true } : null;
   };
   const write = (p: string, text: string): Meta => {
@@ -150,7 +153,28 @@ describe("saving", () => {
   });
 });
 
+const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
+const clickButton = (label: string) =>
+  [...document.querySelectorAll<HTMLButtonElement>(".kn-modal button")].find((b) => b.textContent === label)!.click();
+
 describe("opening", () => {
+  it("a large file asks first, a huge one is refused", async () => {
+    const { app, disk } = await start({ "/notes/big.log": "x", "/notes/huge.log": "y" });
+    disk.sizes.set("/notes/big.log", 50 * 1024 * 1024);
+    disk.sizes.set("/notes/huge.log", 900 * 1024 * 1024);
+    const pending = app.openFile("/notes/big.log");
+    await tick();
+    expect(document.querySelector(".kn-modal-message")?.textContent).toContain("50 MB");
+    clickButton("Cancel");
+    expect(await pending).toBeNull();
+    const again = app.openFile("/notes/big.log");
+    await tick();
+    clickButton("Open anyway");
+    expect((await again)?.path).toBe("/notes/big.log");
+    expect(await app.openFile("/notes/huge.log")).toBeNull();
+    expect(app.docs).toHaveLength(1);
+  });
+
   it("binary content is refused whatever the extension", async () => {
     const { app, disk } = await start({ "/notes/tool": "MZ\u0090\u0000\u0003", "/notes/renamed.txt": "PK\u0003\u0004\u0000" });
     expect(await app.openFile("/notes/tool")).toBeNull();
@@ -223,6 +247,31 @@ describe("tasks", () => {
     await app.closeDoc(doc, { force: true });
     await new Promise((r) => setTimeout(r, 20));
     expect(disk.text("/notes/work.txt")).toBe("- call X - done\n- other - todo\n");
+  });
+
+  it("the archive is written first; a failure leaves the note untouched", async () => {
+    const { app, disk } = await start({ "/notes/work.txt": "- a - done\n- b - todo\n" });
+    disk.failWrites.add("/notes/work_done.txt");
+    const doc = (await app.openFile("/notes/work.txt"))!;
+    await app.archiveLines(doc, [1]);
+    expect(app.view.state.doc.toString()).toBe("- a - done\n- b - todo\n");
+    expect(doc.dirty).toBe(false);
+  });
+
+  it("lines edited while the archive is written stay; the others leave the note where they now are", async () => {
+    const { app, disk } = await start({ "/notes/work.txt": "- a - done\n- b - todo\n- c - done\n" });
+    disk.appendDelay = 5;
+    const doc = (await app.openFile("/notes/work.txt"))!;
+    const archiving = app.archiveLines(doc, [1, 3]);
+    // Meanwhile: a new line on top, and the "c" task is edited. (Unfocused: happy-dom
+    // fires selectionchange synchronously, which real browsers never do.)
+    app.view.contentDOM.blur();
+    app.view.dispatch({ changes: { from: 0, insert: "# Top\n" } });
+    const c = app.view.state.doc.line(4);
+    app.view.dispatch({ changes: { from: c.to, insert: "!" } });
+    await archiving;
+    expect(app.view.state.doc.toString()).toBe("# Top\n- b - todo\n- c - done!\n");
+    expect(disk.text("/notes/work_done.txt")).toMatch(/^- a - done \[[\d-]+\]\n- c - done \[[\d-]+\]\n$/);
   });
 
   it("archiving needs a non-empty suffix (never appends a note to itself)", async () => {
