@@ -2,7 +2,7 @@
 // Behavioral tests of the whole controller against an in-memory disk:
 // what reaches the files when saving, reloading, restoring a session…
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./app";
 import { historyName, parseHistoryName, pathHash, replaceInFiles, showLocalHistory } from "./history";
 import type { Backend, Entry, Meta } from "../core/backend";
@@ -365,6 +365,7 @@ describe("tasks", () => {
 describe("cheat sheet", () => {
   it("shows at startup until 'Don't show at startup' is ticked", async () => {
     const { app, disk } = await start({});
+    await vi.waitFor(() => expect(document.querySelector(".kn-cheatsheet")).not.toBeNull()); // loaded on first use
     const sheet = document.querySelector(".kn-cheatsheet");
     expect(sheet).not.toBeNull();
     const box = sheet!.querySelector<HTMLInputElement>(".cs-check input")!;
@@ -377,6 +378,7 @@ describe("cheat sheet", () => {
     document.getElementById("overlay-root")!.replaceChildren();
     const again = new App(app.backend);
     await again.init();
+    await new Promise((r) => setTimeout(r, 50));
     expect(document.querySelector(".kn-cheatsheet")).toBeNull();
   });
 });
@@ -420,13 +422,13 @@ describe("document types and formatting", () => {
   it("Format document rewrites JSON in one undoable step; invalid JSON is left alone", async () => {
     const { app } = await start({ "/notes/data.json": '{"a":[1,2],"b":{"c":true}}' });
     await app.openFile("/notes/data.json");
-    formatDocument(app);
+    await formatDocument(app);
     expect(app.view.state.doc.toString()).toBe('{\n    "a": [1, 2],\n    "b": {\n        "c": true\n    }\n}\n');
     const { undo } = await import("@codemirror/commands");
     undo(app.view);
     expect(app.view.state.doc.toString()).toBe('{"a":[1,2],"b":{"c":true}}');
     app.view.dispatch({ changes: { from: 0, to: app.view.state.doc.length, insert: '{"a": 1 "b": 2}' } });
-    formatDocument(app);
+    await formatDocument(app);
     expect(app.view.state.doc.toString()).toBe('{"a": 1 "b": 2}');
     expect(document.querySelector(".kn-toast.error")?.textContent).toContain("line 1, column 9");
   });

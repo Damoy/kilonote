@@ -8,11 +8,11 @@ import { findTheme, MASCOT_VARIANTS, PALETTE_LABELS, PALETTE_NAMES, resolveColor
 import { h, icon } from "./dom";
 import { ICON_PACKS } from "./icons";
 import { confirm, showMenu } from "./overlay";
-import { showCheatSheet } from "./cheatsheet";
+import { openCheatSheet } from "./lazy";
 import { listCommands, selectTheme } from "../app/pickers";
 
-type Section = "appearance" | "editor" | "files" | "tasks" | "shortcuts";
-const SECTIONS: [Section, string, string][] = [
+export type SettingsSection = "appearance" | "editor" | "files" | "tasks" | "shortcuts";
+const SECTIONS: [SettingsSection, string, string][] = [
   ["appearance", "Appearance", "palette"],
   ["editor", "Editor", "file"],
   ["files", "Files", "folder"],
@@ -22,7 +22,7 @@ const SECTIONS: [Section, string, string][] = [
 
 let open: SettingsView | null = null;
 
-export function showSettingsView(app: App, section: Section = "appearance") {
+export function showSettingsView(app: App, section: SettingsSection = "appearance") {
   if (open) open.show(section);
   else open = new SettingsView(app, section);
 }
@@ -31,7 +31,7 @@ class SettingsView {
   private backdrop: HTMLElement;
   private content = h("div", { class: "kn-settings-content" });
   private nav = h("nav", { class: "kn-settings-nav" });
-  private section: Section;
+  private section: SettingsSection;
   private onKey = (e: KeyboardEvent) => {
     if (e.key === "Escape" && !document.querySelector(".kn-menu")) {
       e.preventDefault();
@@ -40,7 +40,7 @@ class SettingsView {
     }
   };
 
-  constructor(private app: App, section: Section) {
+  constructor(private app: App, section: SettingsSection) {
     this.section = section;
     for (const [id, label, ic] of SECTIONS) {
       this.nav.append(h("button", { class: "kn-settings-tab", "data-section": id, onclick: () => this.show(id) }, icon(ic), h("span", {}, label)));
@@ -69,7 +69,7 @@ class SettingsView {
     this.show(section);
   }
 
-  show(section: Section) {
+  show(section: SettingsSection) {
     this.section = section;
     this.nav.querySelectorAll<HTMLElement>(".kn-settings-tab").forEach((b) => b.classList.toggle("active", b.dataset.section === section));
     this.render();
@@ -341,7 +341,7 @@ class SettingsView {
       .sort((a, b) => a.title.localeCompare(b.title));
     return [
       this.toggle("show_shortcuts_at_startup", "Show the cheat sheet at startup", "The main shortcuts, on one screen"),
-      h("button", { class: "kn-btn subtle kn-set-link", onclick: () => { this.close(); showCheatSheet(this.app); } }, icon("keyboard"), "Open the cheat sheet"),
+      h("button", { class: "kn-btn subtle kn-set-link", onclick: () => { this.close(); void openCheatSheet(this.app); } }, icon("keyboard"), "Open the cheat sheet"),
       this.heading("All commands"),
       h("p", { class: "kn-set-note" }, 'To change a shortcut, add it to "keybindings" in settings.json, e.g. { "Ctrl+Alt+T": "task.cycle" }; an empty command id disables a shortcut.'),
       h("div", { class: "kn-set-keys" },

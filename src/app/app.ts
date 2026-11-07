@@ -30,8 +30,7 @@ import { Sidebar } from "../ui/sidebar";
 import { StatusBar } from "../ui/statusbar";
 import { Welcome } from "../ui/welcome";
 import { Preview } from "../ui/views/preview";
-import { showSettingsView } from "../ui/settings-view";
-import { showCheatSheet } from "../ui/cheatsheet";
+import { openCheatSheet, openSettingsView } from "../ui/lazy";
 import { setIconPack, type IconPack } from "../ui/icons";
 import { historyDir, historyName, keepVersion } from "./history";
 import { beforeClose, restoreOtherWindows, restoreSession, saveSessionNow, sessionFileName, sessionTab, type SessionTab } from "./session";
@@ -172,7 +171,7 @@ export class App {
     if (this.backend.windowLabel === "main") {
       void restoreOtherWindows(this);
       // Once per launch, in the first window, until "Don't show at startup" is ticked.
-      if (this.settings.show_shortcuts_at_startup) showCheatSheet(this, { startup: true });
+      if (this.settings.show_shortcuts_at_startup) void openCheatSheet(this, { startup: true });
     }
   }
 
@@ -274,7 +273,7 @@ export class App {
   /** The settings screen, or the settings.json file itself. */
   async openSettings(json = false) {
     if (!json) {
-      showSettingsView(this);
+      void openSettingsView(this);
       return;
     }
     const exists = await this.backend.stat(this.settingsPath);

@@ -5,7 +5,7 @@
 import type { App } from "../app/app";
 import { formatCombo, onBeforeCommand, shortcutFor } from "../core/commands";
 import { h, icon } from "./dom";
-import { showSettingsView } from "./settings-view";
+import { openSettingsView } from "./lazy";
 import { mascot } from "./welcome";
 
 type Row = [label: string, keys: string];
@@ -140,7 +140,7 @@ export function showCheatSheet(app: App, opts: { startup?: boolean } = {}) {
     h("div", { class: "cs-foot" },
       h("label", { class: "cs-check" }, hide, "Don't show at startup"),
       h("span", { class: "kn-spacer" }),
-      h("button", { class: "kn-btn subtle", onclick: () => { close(); showSettingsView(app, "shortcuts"); } }, icon("keyboard"), "Change shortcuts…"),
+      h("button", { class: "kn-btn subtle", onclick: () => { close(); void openSettingsView(app, "shortcuts"); } }, icon("keyboard"), "Change shortcuts…"),
       done),
   );
   // Not a modal: every shortcut keeps working. It closes the sheet and runs

@@ -97,11 +97,11 @@ describe("hardening of the Windows build and of the release", () => {
 describe("diagrams and previews build no markup from the content", () => {
   it("diagrams are shown as images, page edits are written as text", () => {
     const code = (f: string) => read(f).split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
-    for (const f of ["src/ui/views/mermaid.ts", "src/ui/views/diagram-view.ts", "src/ui/views/sql-view.ts", "src/ui/views/preview.ts", "src/ui/views/tree-view.ts", "src/text/sql-parse.ts"]) {
+    for (const f of ["src/ui/views/mermaid.ts", "src/ui/views/markdown-view.ts", "src/ui/views/diagram-view.ts", "src/ui/views/sql-view.ts", "src/ui/views/preview.ts", "src/ui/views/tree-view.ts", "src/text/sql-parse.ts"]) {
       expect(code(f), f).not.toMatch(/\.innerHTML\s*=|outerHTML\s*=|insertAdjacentHTML|document\.write|new Function|\beval\(/);
     }
     expect(read("src/ui/views/mermaid.ts")).toMatch(/securityLevel: "strict"/);
-    expect(read("src/ui/views/preview.ts")).toMatch(/const insert = escapeHtmlText\(text\)/);
+    expect(read("src/ui/views/preview.ts")).toMatch(/const insert = this\.html!\.escapeHtmlText\(text\)/);
   });
 });
 

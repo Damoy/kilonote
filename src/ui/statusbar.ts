@@ -7,7 +7,7 @@ import { isCodeLang, languageLabel } from "../editor/languages";
 import { findTasks } from "../text/tasks";
 import { debounce, h, icon } from "./dom";
 import { showMenu } from "./overlay";
-import { showCheatSheet } from "./cheatsheet";
+import { openCheatSheet } from "./lazy";
 import { SIDE_LABELS, sideKindFor } from "./views/preview";
 import { openQuickOpen, selectLanguage, selectTheme } from "../app/pickers";
 
@@ -36,7 +36,7 @@ export class StatusBar {
     const sidebarBtn = h("button", { class: "st-item st-icon", title: titleWithKey("Sidebar", "view.sidebar"), onclick: () => app.sidebar.toggle() }, icon("sidebar"));
     const themeBtn = h("button", { class: "st-item st-icon", title: "Theme", onclick: () => selectTheme(app) }, icon("palette"));
     const settingsBtn = h("button", { class: "st-item st-icon", title: titleWithKey("Settings", "settings.open"), onclick: () => app.openSettings() }, icon("gear"));
-    const keysBtn = h("button", { class: "st-item st-icon", title: titleWithKey("Keyboard shortcuts", "help.shortcuts"), onclick: () => showCheatSheet(app) }, icon("keyboard"));
+    const keysBtn = h("button", { class: "st-item st-icon", title: titleWithKey("Keyboard shortcuts", "help.shortcuts"), onclick: () => void openCheatSheet(app) }, icon("keyboard"));
     this.left.append(sidebarBtn, this.tasks);
     this.right.append(this.pos, this.words, this.encoding, this.eol, this.lang, this.previewBtn, this.save, themeBtn, keysBtn, settingsBtn);
     this.previewBtn.addEventListener("click", () => app.preview.toggle());

@@ -3,8 +3,7 @@
 import { openSearchPanel } from "@codemirror/search";
 import { registerCommands, type Command } from "../core/commands";
 import { confirm } from "../ui/overlay";
-import { showCheatSheet } from "../ui/cheatsheet";
-import { GUIDE } from "./guide";
+import { openCheatSheet } from "../ui/lazy";
 import type { App } from "./app";
 import { formatDocument } from "./editing";
 import { copyText, renamePath } from "./files";
@@ -142,8 +141,8 @@ export function registerAllCommands(app: App) {
     { id: "report.generate", title: "Report: Generate activity report…", run: () => generateReport(app) },
     { id: "report.tag", title: "Report: Generate activity report for a #tag…", run: () => generateTagReport(app) },
     { id: "task.due", title: "Task: Set due date…", run: () => setDueDate(app) },
-    { id: "help.shortcuts", title: "Help: Keyboard shortcuts (cheat sheet)", run: () => showCheatSheet(app) },
-    { id: "help.guide", title: "Help: KiloNote guide", run: () => app.newDoc({ text: GUIDE, title: "KiloNote guide.md", lang: "markdown" }) },
+    { id: "help.shortcuts", title: "Help: Keyboard shortcuts (cheat sheet)", run: () => openCheatSheet(app) },
+    { id: "help.guide", title: "Help: KiloNote guide", run: async () => app.newDoc({ text: (await import("./guide")).GUIDE, title: "KiloNote guide.md", lang: "markdown" }) },
     { id: "help.about", title: "Help: About", run: () => showAbout() },
   ];
   for (let i = 1; i <= 9; i++) {

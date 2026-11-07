@@ -2,7 +2,6 @@
 // whole text or the selection.
 
 import { languageLabel } from "../editor/languages";
-import { FormatError, formatKindFor, formatText, minifyJson } from "../text/format";
 import { toast } from "../ui/overlay";
 import type { App } from "./app";
 
@@ -10,9 +9,12 @@ import type { App } from "./app";
  * Formats the selection, or the whole document: JSON (comments kept), XML,
  * HTML, CSS, SQL, Markdown tables. One undo step; the cursor stays close.
  */
-export function formatDocument(app: App, mode: "format" | "minify" = "format") {
+export async function formatDocument(app: App, mode: "format" | "minify" = "format") {
   const doc = app.active;
   if (!doc) return;
+  // The formatters are loaded the first time they are used.
+  const { FormatError, formatKindFor, formatText, minifyJson } = await import("../text/format");
+  if (doc !== app.active) return;
   const st = app.view.state;
   const sel = st.selection.main;
   const whole = sel.empty;

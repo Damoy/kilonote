@@ -4,21 +4,30 @@
 //   JSON, YAML, XML → an editable tree (tree-view.ts)
 //   Mermaid        → the diagram (diagram-view.ts)
 //   SQL            → schema diagram, tables, data, statements (sql-view.ts)
-// Each view is turned on or off on its own (kept with the session).
+// Each view is turned on or off on its own (kept with the session), and its
+// code is only loaded the first time it is shown: the app starts lighter.
 
 import type { Text } from "@codemirror/state";
 import type { App, Doc } from "../../app/app";
 import { handleKeydown } from "../../core/commands";
 import { extname, stem } from "../../core/path";
 import { findTheme } from "../../core/themes";
-import { diagramError, fixSvgSize, renderMermaid, svgDataUrl } from "./mermaid";
-import { renderMarkdown } from "./markdown-render";
-import { todayISO } from "../../text/tasks";
-import { DiagramView } from "./diagram-view";
 import { debounce, h, icon } from "../dom";
-import { escapeHtmlText, HtmlFrame, markTextRuns, type TextRun } from "./html-preview";
-import { SqlView } from "./sql-view";
-import { TreeView } from "./tree-view";
+import { toast } from "../overlay";
+import type { DiagramView } from "./diagram-view";
+import type { HtmlFrame, TextRun } from "./html-preview";
+import type { MarkdownView } from "./markdown-view";
+import type { SqlView } from "./sql-view";
+import type { TreeView } from "./tree-view";
+
+type HtmlModule = typeof import("./html-preview");
+interface Views {
+  markdown: MarkdownView;
+  html: HtmlFrame;
+  tree: TreeView;
+  diagram: DiagramView;
+  sql: SqlView;
+}
 
 export type SideKind = "markdown" | "html" | "tree" | "diagram" | "sql";
 export const SIDE_KINDS: SideKind[] = ["markdown", "html", "tree", "diagram", "sql"];
@@ -62,13 +71,11 @@ export class Preview {
   /** Writing an edit made in the preview: the page already shows it. */
   private writingRun = false;
   private pane: HTMLElement;
-  private md = h("div", { class: "pv-md", tabindex: "-1" });
-  private frame: HtmlFrame;
-  private tree: TreeView;
-  private diagram: DiagramView;
-  private sql: SqlView;
+  /** The views loaded so far. */
+  private views: Partial<Views> = {};
+  private loading = new Set<SideKind>();
+  private html: HtmlModule | null = null;
   private rendered: unknown = null;
-  private mdToken = 0;
   private renderedKind: SideKind | null = null;
   private syncing = false;
 
@@ -81,26 +88,12 @@ export class Preview {
     }
     this.pane = pane;
     pane.hidden = true;
-    this.frame = new HtmlFrame((url) => void app.backend.openUrl(url));
-    this.tree = new TreeView(app);
-    this.diagram = new DiagramView(app);
-    this.sql = new SqlView(app);
-    // Created once and never moved: a moved frame would reload.
-    pane.replaceChildren(this.md, this.frame.el, this.tree.el, this.diagram.el, this.sql.el, this.editBtn, this.onlyBtn);
+    pane.replaceChildren(this.editBtn, this.onlyBtn);
     this.editBtn.replaceChildren(icon("pencil"));
     this.editBtn.addEventListener("click", () => this.setHtmlEdit(!this.htmlEdit));
-    this.frame.onEdit = (i, text) => this.writeRun(i, text);
-    this.frame.onKey = (e) => void handleKeydown(e);
     pane.before(this.resizer);
     this.onlyBtn.addEventListener("click", () => this.setOnly(!this.only));
     this.setupResizer();
-    // Links: only http(s) and mailto, opened in the browser.
-    this.md.addEventListener("click", (e) => {
-      const a = (e.target as HTMLElement).closest<HTMLElement>("a[data-url]");
-      if (!a) return;
-      e.preventDefault();
-      void app.backend.openUrl(a.dataset.url!);
-    });
     const soon = debounce(() => this.update(), 160);
     const slow = debounce(() => this.update(), 450);
     app.on("selection", () => {
@@ -111,8 +104,46 @@ export class Preview {
     app.on("active", () => this.update(true));
     app.on("settings", () => this.update(true));
     app.on("docs", () => this.update());
-    // The preview follows the editor's scrolling.
-    this.md.addEventListener("scroll", () => this.follow(this.md, app.view.scrollDOM));
+  }
+
+  /** Loads the code of a view the first time it is needed, then shows it. */
+  private load(kind: SideKind) {
+    if (this.views[kind] || this.loading.has(kind)) return;
+    this.loading.add(kind);
+    const app = this.app;
+    const create = async (): Promise<Views[SideKind]> => {
+      switch (kind) {
+        case "markdown": {
+          const view = new (await import("./markdown-view")).MarkdownView(app);
+          // The preview follows the editor's scrolling, and the other way round.
+          view.el.addEventListener("scroll", () => this.follow(view.el, app.view.scrollDOM));
+          return view;
+        }
+        case "html": {
+          this.html = await import("./html-preview");
+          const frame = new this.html.HtmlFrame((url) => void app.backend.openUrl(url));
+          frame.onEdit = (i, text) => this.writeRun(i, text);
+          frame.onKey = (e) => void handleKeydown(e);
+          return frame;
+        }
+        case "tree":
+          return new (await import("./tree-view")).TreeView(app);
+        case "diagram":
+          return new (await import("./diagram-view")).DiagramView(app);
+        case "sql":
+          return new (await import("./sql-view")).SqlView(app);
+      }
+    };
+    create()
+      .then((view) => {
+        (this.views as Record<SideKind, Views[SideKind]>)[kind] = view;
+        view.el.hidden = true;
+        // Added once and never moved: a moved frame would reload.
+        this.pane.insertBefore(view.el, this.editBtn);
+        this.update(true);
+      })
+      .catch((e) => toast(`Could not show this view: ${e}`, { kind: "error" }))
+      .finally(() => this.loading.delete(kind));
   }
 
   private setupResizer() {
@@ -165,7 +196,7 @@ export class Preview {
       this.update(true);
       return;
     }
-    const insert = escapeHtmlText(text);
+    const insert = this.html!.escapeHtmlText(text);
     const delta = insert.length - (run.to - run.from);
     // Only the part that changed is written: typing groups into one undo step, as in the editor.
     const old = this.app.view.state.sliceDoc(run.from, run.to);
@@ -191,7 +222,9 @@ export class Preview {
 
   /** Called once the editor exists. */
   attach() {
-    this.app.view.scrollDOM.addEventListener("scroll", () => this.follow(this.app.view.scrollDOM, this.md));
+    this.app.view.scrollDOM.addEventListener("scroll", () => {
+      if (this.views.markdown) this.follow(this.app.view.scrollDOM, this.views.markdown.el);
+    });
   }
 
   private follow(from: HTMLElement, to: HTMLElement) {
@@ -251,14 +284,16 @@ export class Preview {
       this.renderedKind = null;
       return;
     }
+    const views = this.views;
+    const view = views[kind];
+    if (!view) {
+      this.load(kind); // shown once loaded
+      return;
+    }
     const doc = this.app.view.state.doc;
     if (kind !== this.renderedKind) force = true;
     this.pane.dataset.kind = kind;
-    this.md.hidden = kind !== "markdown";
-    this.frame.el.hidden = kind !== "html";
-    this.tree.el.hidden = kind !== "tree";
-    this.diagram.el.hidden = kind !== "diagram";
-    this.sql.el.hidden = kind !== "sql";
+    for (const k of SIDE_KINDS) if (views[k]) views[k]!.el.hidden = k !== kind;
     if (this.writingRun && kind === "html") {
       this.rendered = doc;
       return;
@@ -269,50 +304,27 @@ export class Preview {
       const text = doc.length > MAX_PREVIEW ? doc.sliceString(0, MAX_PREVIEW) : doc.toString();
       const active = this.app.active!;
       const name = active.path ? stem(active.path) : "diagram";
-      if (kind === "markdown") {
-        const top = this.md.scrollTop;
-        this.md.replaceChildren(renderMarkdown(text, { taskCfg: this.app.taskCfg, today: todayISO() }));
-        this.md.scrollTop = top;
-        void this.drawMarkdownDiagrams();
-      } else if (kind === "diagram") {
-        void this.diagram.render(text, { dark: this.dark(), title: "MERMAID", name });
-      } else if (kind === "sql") {
-        this.sql.render(text, { dark: this.dark(), name });
-      } else if (kind === "html") {
+      if (kind === "markdown") views.markdown!.render(text, this.dark());
+      else if (kind === "diagram") void views.diagram!.render(text, { dark: this.dark(), title: "MERMAID", name });
+      else if (kind === "sql") views.sql!.render(text, { dark: this.dark(), name });
+      else if (kind === "html") {
         const edit = this.htmlEdit && !svg;
         if (edit) {
-          this.runs = markTextRuns(text).runs;
+          this.runs = this.html!.markTextRuns(text).runs;
           this.runsDoc = doc;
         }
-        void this.frame.show(text, svg ? "svg" : "html", edit);
+        void views.html!.show(text, svg ? "svg" : "html", edit);
       } else {
-        void this.tree.render(active, doc, active.lang === "yaml" ? "yaml" : active.lang === "xml" ? "xml" : "json").then(() =>
-          this.tree.followCursor(this.app.view.state.selection.main.head));
+        const tree = views.tree!;
+        void tree.render(active, doc, active.lang === "yaml" ? "yaml" : active.lang === "xml" ? "xml" : "json").then(() =>
+          tree.followCursor(this.app.view.state.selection.main.head));
         return;
       }
     }
-    if (kind === "tree") this.tree.followCursor(this.app.view.state.selection.main.head);
+    if (kind === "tree") views.tree!.followCursor(this.app.view.state.selection.main.head);
   }
 
   private dark(): boolean {
     return findTheme(this.app.settings.theme, matchMedia("(prefers-color-scheme: dark)").matches).dark;
-  }
-
-  /** ```mermaid blocks of a Markdown note, drawn in place of their code. */
-  private async drawMarkdownDiagrams() {
-    const token = ++this.mdToken;
-    const blocks = [...this.md.querySelectorAll<HTMLElement>("pre > code[data-lang]")].filter((c) => /^mermaid\b/i.test(c.dataset.lang!));
-    for (const code of blocks) {
-      const pre = code.parentElement!;
-      try {
-        const svg = fixSvgSize(await renderMermaid(code.textContent ?? "", this.dark()));
-        if (token !== this.mdToken) return;
-        const img = h("img", { class: "md-diagram-img", alt: "Diagram", src: svgDataUrl(svg) });
-        pre.replaceWith(h("figure", { class: "md-diagram" }, img));
-      } catch (e) {
-        if (token !== this.mdToken) return;
-        pre.before(h("div", { class: "md-diagram-error" }, `Diagram: ${diagramError(e)}`));
-      }
-    }
   }
 }

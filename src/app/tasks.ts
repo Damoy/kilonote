@@ -7,7 +7,7 @@ import { basename, dirname, doneFileFor, extname, isDoneFile, join, projectName,
 import { fuzzyFilter } from "../core/fuzzy";
 import { isCodeLang, languageLabel } from "../editor/languages";
 import { archivedLine, cycleLine, findTags, findTasks, isDoneStatus, parseDateInput, parseTask, setDueInLine, todayISO } from "../text/tasks";
-import { buildReport, periodFor, type PeriodKind, type ReportSource } from "../text/report";
+import type { PeriodKind, ReportSource } from "../text/report";
 import { showMenu, toast, type MenuItem } from "../ui/overlay";
 import { openPicker } from "../ui/palette";
 import type { App, Doc } from "./app";
@@ -261,6 +261,7 @@ export async function generateReport(app: App, tag: string | null = null) {
       })),
     }),
     pick: async (it) => {
+      const { buildReport, periodFor } = await import("../text/report");
       const period = periodFor(it.value as PeriodKind);
       const md = buildReport(await reportSources(app), app.taskCfg, period, new Date(), { tag });
       app.newDoc({ text: md, title: `Activity report — ${period.label}${tag ? ` ${tag}` : ""}.md`, lang: "markdown" });
