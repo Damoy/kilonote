@@ -1,38 +1,42 @@
-// Main controller: documents, tabs, tab groups, session, commands.
+// The controller of a window: its state (documents, tabs, tab groups, folder,
+// settings) and the core document actions (open, activate, save, reload,
+// close). The features built on it are functions over the App, one module each:
+//
+//   commands.ts  every command and the default shortcuts
+//   pickers.ts   command palette, Go to file / line / heading, theme pickers
+//   tasks.ts     next status, archive, due dates, status menu, activity reports
+//   history.ts   local history of replaced versions, Replace in files
+//   editing.ts   Format document
+//   files.ts     create, rename, trash, copy a path
+//   session.ts   session of the window, closing
+//   windows.ts   moving a tab to another window
 
-import { ChangeSet, EditorState, Text, type ChangeSpec, type TransactionSpec } from "@codemirror/state";
+import { ChangeSet, EditorState, Text, type TransactionSpec } from "@codemirror/state";
 import { EditorView, type ViewUpdate } from "@codemirror/view";
-import { openSearchPanel } from "@codemirror/search";
 import type { Backend } from "../core/backend";
-import { registerCommands, runCommand, setKeybindings, setPlatform, shortcutFor, type Command } from "../core/commands";
+import { setKeybindings, setPlatform, type Command } from "../core/commands";
 import { parseJsonc } from "../core/jsonc";
-import {
-  basename, dirname, doneFileFor, extname, isDoneFile, isInside, isProbablyBinary, isWindowsPath, join, projectName, relative, samePath, stem,
-} from "../core/path";
+import { basename, dirname, extname, isProbablyBinary, join, samePath } from "../core/path";
 import { mergeSettings, setSettingInText, SETTINGS_TEMPLATE, type Settings } from "../core/settings";
-import { applyMascot, applyTheme, findTheme, MASCOT_VARIANTS, PALETTE_LABELS, THEMES } from "../core/themes";
-import { fuzzyFilter } from "../core/fuzzy";
+import { applyMascot, applyTheme, findTheme } from "../core/themes";
 import { editorHooks } from "../editor/decorations";
 import { createEditorState, langForPath, languageReady, loadLanguage, reconfigureLanguage, settingsCompartment, settingsExtensions, type LangId } from "../editor/setup";
-import { isCodeLang, isLangId, LANGUAGES, languageLabel } from "../editor/languages";
-import { FormatError, formatKindFor, formatText, minifyJson } from "../text/format";
-import {
-  archivedLine, cycleLine, findTags, findTasks, isDoneStatus, makeTaskConfig, parseDateInput, parseTask, setDueInLine, todayISO,
-  type TaskConfig,
-} from "../text/tasks";
-import { buildReport, periodFor, type PeriodKind, type ReportSource } from "../text/report";
+import { makeTaskConfig, type TaskConfig } from "../text/tasks";
 import { debounce } from "../ui/dom";
-import { confirm, prompt, setFocusRestorer, showMenu, toast, type MenuItem } from "../ui/overlay";
-import { openPicker, setPaletteFocusRestorer, type PickItem } from "../ui/palette";
+import { confirm, prompt, setFocusRestorer, toast } from "../ui/overlay";
+import { setPaletteFocusRestorer } from "../ui/palette";
 import { TabBar } from "../ui/tabbar";
 import { Sidebar } from "../ui/sidebar";
 import { StatusBar } from "../ui/statusbar";
 import { Welcome } from "../ui/welcome";
-import { Preview, SIDE_KINDS, type SideKind } from "../ui/views/preview";
+import { Preview } from "../ui/views/preview";
 import { showSettingsView } from "../ui/settings-view";
 import { showCheatSheet } from "../ui/cheatsheet";
 import { setIconPack, type IconPack } from "../ui/icons";
-import { GUIDE } from "./guide";
+import { historyDir, historyName, keepVersion } from "./history";
+import { beforeClose, restoreOtherWindows, restoreSession, saveSessionNow, sessionFileName, sessionTab, type SessionTab } from "./session";
+import { defaultKeybindings, registerAllCommands, registerStatusCommands } from "./commands";
+import { showStatusMenu } from "./tasks";
 
 export interface Doc {
   id: number;
@@ -64,100 +68,15 @@ export interface TabGroup {
   collapsed: boolean;
 }
 
-interface SessionTab {
-  path: string | null;
-  title: string;
-  color: string | null;
-  group: string | null;
-  content?: string;
-  eol: "\n" | "\r\n";
-  cursor: number;
-  scrollTop: number;
-  lang?: LangId;
-  /** With `content`: modification time of the file the draft was based on. */
-  mtime?: number;
-  /** The file had changed on disk while the tab had unsaved edits. */
-  conflict?: boolean;
-}
+export type AppEvent = "docs" | "active" | "workspace" | "settings" | "saved" | "selection";
 
-interface Session {
-  version: 1;
-  workspace: string | null;
-  recent: string[];
-  tabs: SessionTab[];
-  active: number;
-  groups: TabGroup[];
-  /** No longer written (the number of a new draft comes from the open ones). */
-  untitled?: number;
-  sidebar: { visible: boolean; width: number; panel: string; expanded: string[] };
-  zen?: boolean;
-  /** The side views turned on (older sessions: true for the Markdown preview). */
-  preview?: SideKind[] | boolean;
-  /** Width share of the preview pane, and whether it hides the editor. */
-  previewSize?: number;
-  previewOnly?: boolean;
-}
-
-type AppEvent = "docs" | "active" | "workspace" | "settings" | "saved" | "selection";
-
-/** Each window keeps its own session: session.json for the main one, session-<label>.json otherwise. */
-const sessionFileName = (label: string) => (label === "main" ? "session.json" : `session-${label}.json`);
-const SESSION_FILE_RE = /^session-(kn-[a-zA-Z0-9-]+)\.json$/;
 /** Error of the native backend for a file whose content is binary. */
-const NOT_TEXT = "not a text file";
-
-/** Local history: <config>/history/<stamp>_<path hash>_<kind>_<file name>, newest kept. */
-type HistoryKind = "disk" | "mine" | "replace";
-const HISTORY_KEEP = 300;
-const HISTORY_LABELS: Record<HistoryKind, string> = {
-  disk: "Version on disk, before KiloNote overwrote it",
-  mine: "Your unsaved edits, before reloading from disk",
-  replace: "Before \"Replace in files\"",
-};
-
-/** FNV-1a hash of a path (case-insensitive on Windows). */
-export function pathHash(path: string): string {
-  const norm = isWindowsPath(path) ? path.replace(/\\/g, "/").toLowerCase() : path;
-  let h = 0x811c9dc5;
-  for (let i = 0; i < norm.length; i++) {
-    h ^= norm.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h.toString(16).padStart(8, "0");
-}
-
-export function historyName(path: string, kind: HistoryKind, now = new Date()): string {
-  const p = (n: number, w = 2) => String(n).padStart(w, "0");
-  const stamp = `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}-${p(now.getMilliseconds(), 3)}`;
-  return `${stamp}_${pathHash(path)}_${kind}_${basename(path)}`;
-}
-
-export function parseHistoryName(name: string): { hash: string; kind: HistoryKind; when: string } | null {
-  const m = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-\d{3}_([0-9a-f]{8})_(disk|mine|replace)_/.exec(name);
-  if (!m) return null;
-  return { hash: m[7], kind: m[8] as HistoryKind, when: `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}` };
-}
+export const NOT_TEXT = "not a text file";
 
 /** Files above this size ask for confirmation; above the maximum, they are not opened. */
-const LARGE_FILE_SIZE = 20 * 1024 * 1024;
-const MAX_FILE_SIZE = 300 * 1024 * 1024;
-const formatSize = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(0)} MB` : `${Math.ceil(n / 1024)} KB`);
-
-/** Removes whole lines (1-based numbers, ascending), in contiguous blocks so that changes never overlap. */
-function lineRemoval(doc: Text, numbers: number[]): ChangeSet {
-  const specs: { from: number; to: number }[] = [];
-  let i = 0;
-  while (i < numbers.length) {
-    let j = i;
-    while (j + 1 < numbers.length && numbers[j + 1] === numbers[j] + 1) j++;
-    const a = doc.line(numbers[i]);
-    const b = doc.line(numbers[j]);
-    if (b.number < doc.lines) specs.push({ from: a.from, to: b.to + 1 });
-    else specs.push({ from: a.number > 1 ? a.from - 1 : a.from, to: b.to });
-    i = j + 1;
-  }
-  return ChangeSet.of(specs, doc.length);
-}
+export const LARGE_FILE_SIZE = 20 * 1024 * 1024;
+export const MAX_FILE_SIZE = 300 * 1024 * 1024;
+export const formatSize = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(0)} MB` : `${Math.ceil(n / 1024)} KB`);
 
 export class App {
   settings!: Settings;
@@ -181,7 +100,7 @@ export class App {
   private nextId = 1;
   private closed: SessionTab[] = [];
   private listeners = new Map<AppEvent, Set<() => void>>();
-  private systemDark = matchMedia("(prefers-color-scheme: dark)");
+  systemDark = matchMedia("(prefers-color-scheme: dark)");
 
   constructor(public backend: Backend) {}
 
@@ -211,7 +130,7 @@ export class App {
     this.settings = mergeSettings(await this.readSettingsFile());
     this.taskCfg = this.makeTaskCfg();
     // Shortcuts first: the widgets below show them in their tooltips.
-    setKeybindings(this.defaultKeybindings(), this.settings.keybindings);
+    setKeybindings(defaultKeybindings(this), this.settings.keybindings);
 
     const host = document.getElementById("editor-host")!;
     this.view = new EditorView({ parent: host, state: this.blankState() });
@@ -224,10 +143,10 @@ export class App {
 
     setFocusRestorer(() => this.focusEditor());
     setPaletteFocusRestorer(() => this.focusEditor());
-    editorHooks.onStatusClick = (_v, line, x, y) => this.showStatusMenu(line, x, y);
+    editorHooks.onStatusClick = (_v, line, x, y) => showStatusMenu(this, line, x, y);
     editorHooks.openUrl = (url) => void this.backend.openUrl(url);
 
-    this.registerAllCommands();
+    registerAllCommands(this);
     this.applySettings();
     this.systemDark.addEventListener("change", () => this.settings.theme === "auto" && this.applySettings());
 
@@ -239,11 +158,11 @@ export class App {
     setInterval(() => document.hasFocus() && this.active?.path && void this.checkExternalChanges([this.active]), 4000);
     this.backend.onFileDrop((paths) => void this.openPaths(paths));
     this.backend.onOpenRequest((paths) => void this.openPaths(paths));
-    this.backend.onCloseRequested(() => this.beforeClose());
+    this.backend.onCloseRequested(() => beforeClose(this));
 
     this.backend.onSettingsChanged(() => void this.reloadSettingsFromDisk());
 
-    await this.restoreSession();
+    await restoreSession(this);
     const startup = await this.backend.windowPaths().catch(() => [] as string[]);
     if (this.backend.kind === "web" && this.backend.windowLabel === "main") {
       // Browser demo: the main window opens the demo folder.
@@ -251,7 +170,7 @@ export class App {
     } else if (startup.length) await this.openPaths(startup);
     this.renderAll();
     if (this.backend.windowLabel === "main") {
-      void this.restoreOtherWindows();
+      void restoreOtherWindows(this);
       // Once per launch, in the first window, until "Don't show at startup" is ticked.
       if (this.settings.show_shortcuts_at_startup) showCheatSheet(this, { startup: true });
     }
@@ -309,9 +228,9 @@ export class App {
     root.setProperty("--kn-font-size", `${s.font_size}px`);
     root.setProperty("--kn-line-height", String(s.line_height));
     root.setProperty("--kn-ui-size", `${s.ui_font_size}px`);
-    setKeybindings(this.defaultKeybindings(), s.keybindings);
+    setKeybindings(defaultKeybindings(this), s.keybindings);
     this.taskCfg = this.makeTaskCfg();
-    this.registerStatusCommands();
+    registerStatusCommands(this);
     for (const doc of this.docs) {
       const effects = settingsCompartment.reconfigure(settingsExtensions(s, this.taskCfg, doc.lang));
       if (doc === this.active) this.view.dispatch({ effects });
@@ -390,7 +309,7 @@ export class App {
   // -------------------------------------------------------------------------
   // Documents
 
-  private createDoc(init: {
+  createDoc(init: {
     path: string | null; text: string; savedText?: string; eol?: "\n" | "\r\n"; encoding?: string;
     mtime?: number; title?: string; lang?: LangId; color?: string | null; groupId?: string | null; cursor?: number; scrollTop?: number;
   }): Doc {
@@ -438,85 +357,6 @@ export class App {
     if (languageReady(lang)) return;
     void loadLanguage(lang).then((ok) => {
       if (ok && doc.lang === lang) this.applyToDoc(doc, { effects: reconfigureLanguage(lang) });
-    });
-  }
-
-  /**
-   * Formats the selection, or the whole document: JSON (comments kept), XML,
-   * HTML, CSS, SQL, Markdown tables. One undo step; the cursor stays close.
-   */
-  formatDocument(mode: "format" | "minify" = "format") {
-    const doc = this.active;
-    if (!doc) return;
-    const st = this.view.state;
-    const sel = st.selection.main;
-    const whole = sel.empty;
-    const from = whole ? 0 : sel.from;
-    const to = whole ? st.doc.length : sel.to;
-    const text = st.sliceDoc(from, to);
-    if (!text.trim()) return;
-    // A selection is recognized by its content first (some JSON in a note).
-    const kind = mode === "minify" ? "json" : whole ? formatKindFor(doc.lang, text) : (formatKindFor("text", text) ?? formatKindFor(doc.lang, text));
-    if (!kind) {
-      this.toastInfo(`Nothing to format in ${languageLabel(doc.lang)}: KiloNote formats JSON, XML, HTML, CSS, SQL and Markdown tables (select some JSON or XML to format just that).`);
-      return;
-    }
-    let out: string;
-    try {
-      const indent = this.settings.indent_with_tabs ? "\t" : " ".repeat(this.settings.tab_size);
-      out = mode === "minify" ? minifyJson(text) : formatText(kind, text, indent);
-    } catch (e) {
-      if (!(e instanceof FormatError)) {
-        toast(`Could not format: ${(e as Error).message}`, { kind: "error" });
-        return;
-      }
-      const pos = from + Math.min(e.pos, text.length);
-      const goto = () => {
-        if (doc !== this.active) this.activate(doc);
-        const line = this.view.state.doc.lineAt(Math.min(pos, this.view.state.doc.length));
-        this.reveal(doc, line.number, [pos - line.from, pos - line.from]);
-      };
-      toast(e.message, { kind: "error", action: { label: "Go to the error", run: goto } });
-      return;
-    }
-    if (!whole && !text.endsWith("\n")) out = out.replace(/\n$/, "");
-    if (whole && mode === "minify" && text.endsWith("\n")) out += "\n";
-    if (out === text) {
-      this.toastInfo(mode === "minify" ? "Already minified." : "Already formatted.");
-      return;
-    }
-    // Only the part that differs is replaced: the cursor and the scroll stay put.
-    let a = 0;
-    while (a < text.length && a < out.length && text[a] === out[a]) a++;
-    let b = 0;
-    while (b < text.length - a && b < out.length - a && text[text.length - 1 - b] === out[out.length - 1 - b]) b++;
-    this.view.dispatch({
-      changes: { from: from + a, to: to - b, insert: out.slice(a, out.length - b) },
-      userEvent: "input.format",
-      ...(whole ? {} : { selection: { anchor: from, head: from + out.length } }),
-    });
-    this.focusEditor();
-  }
-
-  /** Picker of the document types (status bar, palette). */
-  selectLanguage(doc = this.active) {
-    if (!doc) return;
-    const items = LANGUAGES.map((l) => ({ id: l.id, label: l.label, detail: l.exts.slice(0, 5).map((e) => `.${e}`).join("  ") }));
-    openPicker({
-      placeholder: "Document type",
-      initial: Math.max(0, items.findIndex((l) => l.id === doc.lang)),
-      provide: (q) => ({
-        items: fuzzyFilter(q, items, (l) => `${l.label} ${l.detail}`).map(({ item, result }) => ({
-          label: item.label,
-          detail: item.detail,
-          icon: item.id === "text" ? "file" : item.id === "markdown" ? "fileMd" : item.id === "jsonc" ? "fileJson" : "fileCode",
-          positions: result.positions.filter((i) => i < item.label.length),
-          value: item.id,
-          hint: item.id === doc.lang ? "current" : undefined,
-        })),
-        empty: "No such document type",
-      }),
-      pick: (it) => this.setLang(doc, it.value as LangId),
     });
   }
 
@@ -710,7 +550,7 @@ export class App {
   }
 
   /** Collects the edits made to a document from now on (to map positions across an await). */
-  private trackChanges(doc: Doc) {
+  trackChanges(doc: Doc) {
     const start = doc === this.active ? this.view.state.doc : doc.state.doc;
     let since = ChangeSet.empty(start.length);
     const fn = (c: ChangeSet) => (since = since.compose(c));
@@ -755,7 +595,7 @@ export class App {
         void this.save(d, { auto: true });
       }
     }
-    this.saveSessionNow();
+    saveSessionNow(this);
   }
 
   async save(doc: Doc, opts: { auto?: boolean } = {}): Promise<boolean> {
@@ -783,7 +623,7 @@ export class App {
           return false;
         }
         if (r === "cancel") return false;
-        await this.keepVersion(doc, "disk");
+        await keepVersion(this, doc, "disk");
       }
       try {
         const text = snapshot.sliceString(0, snapshot.length, doc.eol);
@@ -849,7 +689,7 @@ export class App {
   async reloadDoc(doc: Doc, force = false) {
     if (!doc.path) return;
     if (doc.dirty && !force) return;
-    if (doc.dirty) await this.keepVersion(doc, "mine");
+    if (doc.dirty) await keepVersion(this, doc, "mine");
     try {
       const ft = await this.backend.readText(doc.path);
       this.replaceDocContent(doc, ft.text);
@@ -904,7 +744,7 @@ export class App {
    * The file changed on disk while the tab has unsaved edits:
    * pause autosave and let the user decide.
    */
-  private flagConflict(doc: Doc) {
+  flagConflict(doc: Doc) {
     if (doc.conflict) return;
     doc.conflict = true;
     clearTimeout(doc.timer);
@@ -921,131 +761,10 @@ export class App {
 
   async resolveConflict(doc: Doc, keep: "disk" | "mine") {
     if (keep === "disk") return this.reloadDoc(doc, true);
-    await this.keepVersion(doc, "disk");
+    await keepVersion(this, doc, "disk");
     doc.conflict = false;
     doc.mtime = 0; // skip the next check: overwrite
     return this.save(doc);
-  }
-
-  // -------------------------------------------------------------------------
-  // Local history: a copy of any version KiloNote is about to throw away
-  // (the file on disk before overwriting it, unsaved edits before reloading).
-
-  private historyDir() {
-    return join(this.configDir, "history");
-  }
-
-  async keepVersion(doc: Doc, kind: HistoryKind) {
-    if (!doc.path) return;
-    try {
-      const text = kind === "mine" ? (doc === this.active ? this.view.state : doc.state).doc.toString() : (await this.backend.readText(doc.path)).text;
-      await this.backend.writeText(join(this.historyDir(), historyName(doc.path, kind)), text);
-      void this.backend.pruneHistory(HISTORY_KEEP).catch(() => {});
-    } catch {
-      /* best effort: never block a save or a reload */
-    }
-  }
-
-  /**
-   * "Replace in files": every match of `re` (line by line) in these files. Open
-   * notes are changed in their tab and saved; the others are rewritten in their
-   * own encoding after a copy goes to the local history. Undo puts every file back.
-   */
-  async replaceInFiles(paths: string[], re: RegExp, replacement: string, literal: boolean): Promise<{ files: number; count: number }> {
-    const flags = re.flags.includes("g") ? re.flags : re.flags + "g";
-    const global = new RegExp(re.source, flags);
-    const done: { path: string; original: string; encoding: string; mtime: number; open: boolean }[] = [];
-    let count = 0;
-    for (const path of paths) {
-      const doc = this.findDoc(path);
-      let original: string;
-      let encoding = "UTF-8";
-      if (doc) original = (doc === this.active ? this.view.state : doc.state).doc.toString();
-      else {
-        try {
-          const ft = await this.backend.readText(path);
-          original = ft.text;
-          encoding = ft.encoding;
-        } catch {
-          continue;
-        }
-      }
-      let n = 0;
-      const eol = original.includes("\r\n") ? "\r\n" : "\n";
-      const next = original
-        .split(/\r\n|\r|\n/)
-        .map((line) => {
-          for (const m of line.matchAll(global)) if (m[0].length) n++;
-          return literal ? line.replace(global, () => replacement) : line.replace(global, replacement);
-        })
-        .join(eol);
-      if (!n || next === original) continue;
-      if (doc) {
-        this.replaceDocContent(doc, next);
-        if (doc.path && !(await this.save(doc))) continue;
-        done.push({ path, original, encoding: doc.encoding, mtime: doc.mtime, open: true });
-      } else {
-        await this.backend.writeText(join(this.historyDir(), historyName(path, "replace")), original).catch(() => {});
-        try {
-          const written = await this.backend.writeText(path, next, encoding);
-          done.push({ path, original, encoding: written.encoding, mtime: written.mtime, open: false });
-        } catch (e) {
-          toast(`Could not write ${basename(path)}: ${e}`, { kind: "error" });
-          continue;
-        }
-      }
-      count += n;
-    }
-    void this.backend.pruneHistory(HISTORY_KEEP).catch(() => {});
-    if (done.length) {
-      const undo = async () => {
-        for (const f of done) {
-          const doc = this.findDoc(f.path);
-          if (doc) {
-            this.replaceDocContent(doc, f.original);
-            await this.save(doc);
-          } else if ((await this.backend.stat(f.path))?.mtime === f.mtime) {
-            await this.backend.writeText(f.path, f.original, f.encoding).catch(() => {});
-          }
-        }
-        this.emit("saved");
-      };
-      toast(`${count} replacement${count > 1 ? "s" : ""} in ${done.length} file${done.length > 1 ? "s" : ""}.`, {
-        kind: "success", timeout: 12000, action: { label: "Undo", run: undo },
-      });
-      this.emit("saved");
-    }
-    return { files: done.length, count };
-  }
-
-  async showLocalHistory() {
-    const doc = this.active;
-    if (!doc?.path) {
-      toast("Local history keeps earlier versions of saved notes.");
-      return;
-    }
-    const path = doc.path;
-    const entries = (await this.backend.listDir(this.historyDir(), true).catch(() => []))
-      .map((e) => ({ entry: e, info: parseHistoryName(e.name) }))
-      .filter((x) => x.info?.hash === pathHash(path))
-      .sort((a, b) => b.entry.name.localeCompare(a.entry.name));
-    if (!entries.length) {
-      toast(`No earlier version of "${basename(path)}" yet. KiloNote keeps one whenever a version is about to be overwritten (conflicts, reloads, replace in files).`, { timeout: 6000 });
-      return;
-    }
-    openPicker({
-      placeholder: `Earlier versions of ${basename(path)}`,
-      provide: (q) => ({
-        items: fuzzyFilter(q, entries, (x) => `${x.info!.when} ${HISTORY_LABELS[x.info!.kind]}`).map(({ item }) => ({
-          label: item.info!.when, detail: HISTORY_LABELS[item.info!.kind], icon: "file", value: item.entry.path,
-        })),
-      }),
-      pick: async (it) => {
-        const { text } = await this.backend.readText(it.value as string);
-        const when = parseHistoryName(basename(it.value as string))!.when;
-        this.newDoc({ text, title: `${basename(path)} (${when})`, lang: doc.lang });
-      },
-    });
   }
 
   // -------------------------------------------------------------------------
@@ -1072,7 +791,7 @@ export class App {
     const i = this.docs.indexOf(doc);
     if (i < 0) return true;
     if (doc.path) {
-      this.closed.push(this.sessionTab(doc));
+      this.closed.push(sessionTab(this, doc));
       if (this.closed.length > 30) this.closed.shift();
     }
     this.docs.splice(i, 1);
@@ -1296,360 +1015,11 @@ export class App {
     return out;
   }
 
-  // -------------------------------------------------------------------------
-  // Tasks
-
-  private selectedLines(state: EditorState): number[] {
-    const set = new Set<number>();
-    for (const r of state.selection.ranges) {
-      const a = state.doc.lineAt(r.from).number;
-      const endLine = state.doc.lineAt(r.to);
-      let b = endLine.number;
-      if (!r.empty && b > a && endLine.from === r.to) b--;
-      for (let i = a; i <= b; i++) set.add(i);
-    }
-    return [...set].sort((x, y) => x - y);
-  }
-
-  /**
-   * Ctrl+Enter: next status (or `target`) on the selected lines.
-   * Resolves once an automatic archive (auto_archive) is written.
-   */
-  /** Tasks belong to notes: in code and data files, a line is never turned into one. */
-  private notesOnly(doc: Doc): boolean {
-    if (!isCodeLang(doc.lang)) return true;
-    this.toastInfo(`Tasks live in notes (text and Markdown files): this is a ${languageLabel(doc.lang)} file, it is left as it is.`);
-    return false;
-  }
-
-  async cycleTasks(target?: string, doc = this.active, lines?: number[]): Promise<void> {
-    if (!doc || !this.notesOnly(doc)) return;
-    const state = doc === this.active ? this.view.state : doc.state;
-    const nums = lines ?? this.selectedLines(state);
-    const multi = nums.length > 1;
-    const changes: ChangeSpec[] = [];
-    let cursor: number | null = null;
-    const nowDone: number[] = [];
-    for (const n of nums) {
-      const line = state.doc.line(n);
-      if (multi && !line.text.trim()) continue;
-      const edit = cycleLine(line.text, this.taskCfg, target);
-      if (!edit) continue;
-      for (const c of edit.changes) changes.push({ from: line.from + c.from, to: line.from + c.to, insert: c.insert });
-      if (!multi && edit.cursor != null) cursor = line.from + edit.cursor;
-      let text = line.text;
-      for (const c of [...edit.changes].reverse()) text = text.slice(0, c.from) + c.insert + text.slice(c.to);
-      const t = parseTask(text, this.taskCfg);
-      if (t && isDoneStatus(t.key, this.taskCfg)) nowDone.push(n);
-    }
-    if (!changes.length) return;
-    this.applyToDoc(doc, {
-      changes,
-      selection: cursor != null ? { anchor: cursor } : undefined,
-      userEvent: "input.task",
-      scrollIntoView: doc === this.active,
-    });
-    if (this.settings.auto_archive && nowDone.length && doc.path && !isDoneFile(doc.path, this.settings.archive_suffix)) {
-      await this.archiveLines(doc, nowDone);
-    }
-  }
-
-  /** Moves lines to the archive file (<name>_done.<ext>). */
-  async archiveLines(doc: Doc, lineNumbers: number[]) {
-    if (!doc.path) {
-      toast("Save this note first to archive its tasks.", {
-        action: { label: "Save", run: () => void this.saveAs(doc) },
-      });
-      return;
-    }
-    const suffix = this.settings.archive_suffix;
-    if (isDoneFile(doc.path, suffix)) {
-      toast("This note is already an archive file.");
-      return;
-    }
-    const state = doc === this.active ? this.view.state : doc.state;
-    const lines = lineNumbers.map((n) => state.doc.line(n)).filter((l) => l.text.trim());
-    if (!lines.length) return;
-    const date = todayISO();
-    const out = lines.map((l) => archivedLine(l.text, this.taskCfg, date));
-    const target = doneFileFor(doc.path, suffix);
-
-    // The archive is written first: if that fails, the note is left untouched.
-    const tracker = this.trackChanges(doc);
-    try {
-      await this.appendToFile(target, out);
-    } catch (e) {
-      toast(`Could not archive (${e}). The note was not changed.`, { kind: "error" });
-      return;
-    } finally {
-      tracker.stop();
-    }
-    // Then the lines leave the note, wherever they are now (it may have been edited meanwhile).
-    const current = doc === this.active ? this.view.state : doc.state;
-    const since = tracker.changes();
-    const kept: number[] = [];
-    const now: number[] = [];
-    for (const l of lines) {
-      const pos = since.mapPos(l.from, 1);
-      const line = current.doc.lineAt(Math.min(pos, current.doc.length));
-      if (line.from === pos && line.text === l.text && !now.includes(line.number)) now.push(line.number);
-      else kept.push(l.number);
-    }
-    const removal = lineRemoval(current.doc, now);
-    if (!removal.empty) this.applyToDoc(doc, { changes: removal, userEvent: "delete.archive" });
-    const n = out.length;
-    toast(
-      kept.length
-        ? `${n} task${n > 1 ? "s" : ""} archived → ${basename(target)}. ${kept.length} line${kept.length > 1 ? "s were" : " was"} edited meanwhile and kept in the note.`
-        : `${n} task${n > 1 ? "s" : ""} archived → ${basename(target)}`,
-      { kind: "success", action: { label: "Open", run: () => void this.openFile(target) } },
-    );
-    this.refreshWorkspaceFilesSoon();
-  }
-
-  async archiveSelection() {
-    const doc = this.active;
-    if (!doc || !this.notesOnly(doc)) return;
-    await this.archiveLines(doc, this.selectedLines(this.view.state));
-  }
-
-  async archiveAllDone() {
-    const doc = this.active;
-    if (!doc || !this.notesOnly(doc)) return;
-    const found = findTasks(this.view.state.doc.toString(), this.taskCfg).filter((f) => isDoneStatus(f.task.key, this.taskCfg));
-    if (!found.length) {
-      toast("No completed task in this note.");
-      return;
-    }
-    await this.archiveLines(doc, found.map((f) => f.line));
-  }
-
-  private async appendToFile(path: string, lines: string[]) {
-    const open = this.findDoc(path);
-    if (open) {
-      const d = open.state.doc;
-      const last = d.line(d.lines);
-      const prefix = d.length === 0 || last.length === 0 ? "" : "\n";
-      this.applyToDoc(open, { changes: { from: d.length, insert: prefix + lines.join("\n") + "\n" } });
-      if (!(await this.save(open))) throw new Error("could not save the archive");
-    } else {
-      await this.backend.appendLines(path, lines);
-    }
-  }
-
-  /** Switches between work.txt and work_done.txt. */
-  async toggleDoneFile() {
-    const doc = this.active;
-    if (!doc?.path) return;
-    const suffix = this.settings.archive_suffix;
-    let target: string;
-    if (isDoneFile(doc.path, suffix)) {
-      const s = stem(doc.path);
-      target = join(dirname(doc.path), s.slice(0, s.length - suffix.length) + (extname(doc.path) ? doc.path.slice(doc.path.lastIndexOf(".")) : ""));
-    } else target = doneFileFor(doc.path, suffix);
-    if (!(await this.backend.stat(target))) {
-      toast(`${basename(target)} doesn't exist yet: it will be created by the first archive.`);
-      return;
-    }
-    await this.openFile(target);
-  }
-
-  showStatusMenu(lineNo: number, x: number, y: number) {
-    const doc = this.active;
-    if (!doc) return;
-    const line = this.view.state.doc.line(lineNo);
-    const task = parseTask(line.text, this.taskCfg);
-    const items: MenuItem[] = [{ header: "Status" }];
-    for (const [name, color] of Object.entries(this.taskCfg.statuses)) {
-      items.push({
-        label: name,
-        color,
-        checked: task?.key === name,
-        action: () => this.cycleTasks(name, doc, [lineNo]),
-      });
-    }
-    if (doc.path && !isDoneFile(doc.path, this.settings.archive_suffix)) {
-      items.push({ separator: true });
-      items.push({
-        label: `Archive to ${basename(doneFileFor(doc.path, this.settings.archive_suffix))}`,
-        icon: "archive",
-        shortcut: shortcutFor("task.archive"),
-        action: () => this.archiveLines(doc, [lineNo]),
-      });
-    }
-    showMenu(items, x, y);
-  }
-
-  // -------------------------------------------------------------------------
-  // Activity report
-
-  private needFolder(): boolean {
-    if (this.workspace) return true;
-    toast("Open the folder that contains your notes first.", { action: { label: "Open folder", run: () => void this.openFolder() } });
-    return false;
-  }
-
-  /** Every project of the folder: its note and its _done archive. */
-  private async reportSources(): Promise<ReportSource[]> {
-    await this.refreshWorkspaceFiles();
-    const suffix = this.settings.archive_suffix;
-    const notes = this.workspaceFiles.filter((p) => this.isNoteFile(p));
-    const projects = new Map<string, { done: string | null; active: string | null }>();
-    const keyOf = (p: string) => join(dirname(p), projectName(p, suffix));
-    for (const p of notes) if (isDoneFile(p, suffix)) projects.set(keyOf(p), { done: p, active: null });
-    for (const p of notes) {
-      if (isDoneFile(p, suffix)) continue;
-      const k = keyOf(p);
-      if (projects.has(k)) projects.get(k)!.active = p;
-      else projects.set(k, { done: null, active: p });
-    }
-    const entries = [...projects.entries()];
-    const paths = entries.flatMap(([, v]) => [v.done, v.active].filter((x): x is string => !!x));
-    const texts = await this.readFiles(paths);
-    const byPath = new Map(paths.map((p, i) => [p, texts[i]]));
-    return entries.map(([k, v]) => ({
-      project: relative(this.workspace, k).replace(/\\/g, "/"),
-      doneText: v.done ? byPath.get(v.done) ?? null : null,
-      activeText: v.active ? byPath.get(v.active) ?? null : null,
-    }));
-  }
-
-  async generateReport(tag: string | null = null) {
-    if (!this.needFolder()) return;
-    const y = new Date().getFullYear();
-    const choices: { kind: PeriodKind; label: string }[] = [
-      { kind: "year", label: `This year (${y})` },
-      { kind: "lastYear", label: `Last year (${y - 1})` },
-      { kind: "12months", label: "Last 12 months" },
-      { kind: "month", label: "This month" },
-      { kind: "lastMonth", label: "Last month" },
-      { kind: "week", label: "This week" },
-      { kind: "lastWeek", label: "Last week" },
-      { kind: "all", label: "All time" },
-    ];
-    openPicker({
-      placeholder: tag ? `Report period (${tag})` : "Report period",
-      provide: (q) => ({
-        items: fuzzyFilter(q, choices, (c) => c.label).map(({ item, result }) => ({
-          label: item.label, icon: "chart", positions: result.positions, value: item.kind,
-        })),
-      }),
-      pick: async (it) => {
-        const period = periodFor(it.value as PeriodKind);
-        const md = buildReport(await this.reportSources(), this.taskCfg, period, new Date(), { tag });
-        this.newDoc({ text: md, title: `Activity report — ${period.label}${tag ? ` ${tag}` : ""}.md`, lang: "markdown" });
-      },
-    });
-  }
-
-  /** The report limited to one #tag (a client, a topic…). */
-  async generateTagReport() {
-    if (!this.needFolder()) return;
-    const counts = new Map<string, number>();
-    for (const src of await this.reportSources()) {
-      for (const text of [src.doneText, src.activeText]) {
-        for (const line of text?.split(/\r\n|\r|\n/) ?? []) for (const t of findTags(line)) counts.set(t, (counts.get(t) ?? 0) + 1);
-      }
-    }
-    if (!counts.size) {
-      toast("No #tag in your notes yet: add one to a task, e.g. \"- call the client #acme - todo\".");
-      return;
-    }
-    const tags = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-    openPicker({
-      placeholder: "Report for the tag…",
-      provide: (q) => ({
-        items: fuzzyFilter(q, tags, (t) => t[0]).map(({ item, result }) => ({
-          label: item[0], hint: `${item[1]} line${item[1] > 1 ? "s" : ""}`, icon: "chart", positions: result.positions, value: item[0],
-        })),
-      }),
-      pick: (it) => this.generateReport(it.value as string),
-    });
-  }
-
-  /** Ctrl+Shift+U: sets the due date ("@2026-11-14") of the selected tasks. */
-  setDueDate() {
-    const doc = this.active;
-    if (!doc || !this.notesOnly(doc)) return;
-    const lines = this.selectedLines(this.view.state).filter((n) => parseTask(this.view.state.doc.line(n).text, this.taskCfg));
-    if (!lines.length) {
-      toast(`Put the cursor on a task first (${shortcutFor("task.cycle")} turns a line into a task).`);
-      return;
-    }
-    const current = parseTask(this.view.state.doc.line(lines[0]).text, this.taskCfg)?.due ?? null;
-    const today = new Date();
-    const plus = (days: number) => {
-      const d = new Date(today);
-      d.setDate(d.getDate() + days);
-      return todayISO(d);
-    };
-    const monday = plus(((8 - today.getDay()) % 7) || 7);
-    const endOfMonth = todayISO(new Date(today.getFullYear(), today.getMonth() + 1, 0));
-    const presets: { label: string; date: string | null }[] = [
-      { label: "Today", date: todayISO(today) },
-      { label: "Tomorrow", date: plus(1) },
-      { label: "Next Monday", date: monday },
-      { label: "In a week", date: plus(7) },
-      { label: "In two weeks", date: plus(14) },
-      { label: "End of the month", date: endOfMonth },
-    ];
-    if (current) presets.push({ label: "Remove the due date", date: null });
-    openPicker({
-      placeholder: "Due date: pick one, or type 2026-11-14, 14/11, +3, 2w…",
-      provide: (q) => {
-        const typed = q.trim() ? parseDateInput(q) : null;
-        const items = typed
-          ? [{ label: `Due ${typed}`, icon: "calendar", value: typed }]
-          : presets.map((p) => ({ label: p.label, hint: p.date ?? undefined, icon: "calendar", value: p.date }));
-        return { items, empty: "Not a date: try 2026-11-14, 14/11, +3 or 2w" };
-      },
-      pick: (it) => {
-        const due = it.value as string | null;
-        const state = this.view.state;
-        const changes: ChangeSpec[] = [];
-        for (const n of lines) {
-          const line = state.doc.line(n);
-          const edit = setDueInLine(line.text, this.taskCfg, due);
-          if (edit) for (const c of edit.changes) changes.push({ from: line.from + c.from, to: line.from + c.to, insert: c.insert });
-        }
-        if (changes.length) this.applyToDoc(doc, { changes, userEvent: "input.due" });
-      },
-    });
-  }
-
-  // -------------------------------------------------------------------------
-  // Palette
-
-  openCommandPalette(query = "") {
-    openPicker({
-      placeholder: "Command…",
-      query,
-      provide: (q) => {
-        const cmds = this.paletteCommands();
-        return {
-          items: fuzzyFilter(q, cmds, (c) => c.title).map(({ item, result }) => ({
-            label: item.title, hint: shortcutFor(item.id), icon: "command", positions: result.positions, value: item.id,
-          })),
-          empty: "No matching command",
-        };
-      },
-      pick: (it) => runCommand(it.value as string),
-    });
-  }
-
-  private paletteCommands(): Command[] {
-    return [...this.commandList].filter((c) => !c.hidden);
-  }
-
-  listCommands(): Command[] {
-    return this.paletteCommands();
-  }
-
   /** settings.json back to the template (the current file goes to the local history). */
   async resetSettings() {
     try {
       const { text } = await this.backend.readText(this.settingsPath);
-      await this.backend.writeText(join(this.historyDir(), historyName(this.settingsPath, "disk")), text);
+      await this.backend.writeText(join(historyDir(this), historyName(this.settingsPath, "disk")), text);
     } catch {
       /* no file yet */
     }
@@ -1664,443 +1034,11 @@ export class App {
     this.backend.broadcastSettingsChanged();
   }
 
-  openQuickOpen(prefix = "") {
-    openPicker({
-      placeholder: "File…   ( > commands   : line   @ headings and tasks )",
-      query: prefix,
-      provide: (q) => {
-        if (q.startsWith(">")) return this.provideCommands(q.slice(1));
-        if (q.startsWith(":")) {
-          const n = parseInt(q.slice(1), 10);
-          const total = this.active ? this.view.state.doc.lines : 0;
-          return { items: [], empty: this.active ? (n ? `Press Enter to go to line ${Math.min(n, total)} / ${total}` : `Line number (1 – ${total})`) : "No open file" };
-        }
-        if (q.startsWith("@")) return this.provideSymbols(q.slice(1));
-        return this.provideFiles(q);
-      },
-      pick: (it, q) => {
-        if (q.startsWith(">")) return runCommand(it.value as string);
-        if (q.startsWith("@")) return this.active && this.reveal(this.active, it.value as number);
-        const v = it.value as { doc?: Doc; path?: string };
-        if (v.doc) this.activate(v.doc);
-        else if (v.path) return this.openFile(v.path);
-      },
-      submit: (q) => {
-        const n = parseInt(q.slice(1), 10);
-        if (q.startsWith(":") && n && this.active) {
-          this.reveal(this.active, n);
-          return true;
-        }
-        return false;
-      },
-    });
-  }
-
-  private provideCommands(q: string) {
-    return {
-      items: fuzzyFilter(q, this.paletteCommands(), (c) => c.title).map(({ item, result }) => ({
-        label: item.title, hint: shortcutFor(item.id), icon: "command", positions: result.positions, value: item.id,
-      })),
-      empty: "No matching command",
-    };
-  }
-
-  private provideSymbols(q: string) {
-    if (!this.active) return { items: [], empty: "No open file" };
-    const doc = this.view.state.doc;
-    const symbols: { label: string; line: number; icon: string; color?: string }[] = [];
-    for (let i = 1; i <= doc.lines; i++) {
-      const text = doc.line(i).text;
-      const h = /^(#{1,6})\s+(.*)$/.exec(text);
-      if (h) symbols.push({ label: `${"  ".repeat(h[1].length - 1)}${h[2]}`, line: i, icon: "chevron" });
-      else {
-        const t = text.length > 4 ? parseTask(text, this.taskCfg) : null;
-        if (t) symbols.push({ label: `${t.text}  · ${t.status}`, line: i, icon: "tasks", color: this.taskCfg.statuses[t.key] });
-      }
-    }
-    return {
-      items: fuzzyFilter(q, symbols, (s) => s.label).map(({ item, result }) => ({
-        label: item.label, icon: item.icon, color: item.color, hint: `L${item.line}`, positions: result.positions, value: item.line,
-      })),
-      empty: "No heading or task in this note",
-    };
-  }
-
-  private provideFiles(q: string) {
-    const items: { label: string; detail: string; doc?: Doc; path?: string; open: boolean }[] = [];
-    const seen = new Set<string>();
-    for (const d of this.docs) {
-      items.push({ label: this.docName(d), detail: d.path ? relative(this.workspace, dirname(d.path)) || "·" : "unsaved", doc: d, open: true });
-      if (d.path) seen.add(d.path);
-    }
-    for (const p of this.workspaceFiles) {
-      if (seen.has(p) || !this.isNoteFile(p)) continue;
-      items.push({ label: basename(p), detail: relative(this.workspace, dirname(p)) || "·", path: p, open: false });
-    }
-    const results = fuzzyFilter(q, items, (it) => (it.detail === "·" ? it.label : `${it.detail}/${it.label}`));
-    return {
-      items: results.map(({ item, result }) => {
-        const offset = item.detail === "·" ? 0 : item.detail.length + 1;
-        return {
-          label: item.label,
-          detail: item.detail === "·" ? undefined : item.detail,
-          positions: result.positions.filter((p) => p >= offset).map((p) => p - offset),
-          detailPositions: result.positions.filter((p) => p < offset),
-          icon: isDoneFile(item.label, this.settings.archive_suffix) ? "fileDone" : "file",
-          hint: item.open ? "open" : undefined,
-          value: { doc: item.doc, path: item.path },
-        } satisfies PickItem;
-      }),
-      empty: this.workspace ? "No matching file" : `Open a folder to search your notes (${shortcutFor("folder.open")})`,
-    };
-  }
-
-  selectTheme() {
-    const original = this.settings.theme;
-    const items = [{ id: "auto", label: "Automatic — follows the system" }, ...THEMES.map((t) => ({ id: t.id, label: t.label }))];
-    openPicker({
-      placeholder: "Theme",
-      initial: Math.max(0, items.findIndex((t) => t.id === original)),
-      provide: (q) => ({
-        items: fuzzyFilter(q, items, (t) => t.label).map(({ item, result }) => ({
-          label: item.label, icon: "palette", positions: result.positions, value: item.id, hint: item.id === original ? "current" : undefined,
-        })),
-      }),
-      highlight: (it) => {
-        if (!it) return;
-        this.settings.theme = it.value as string;
-        this.applySettings();
-      },
-      cancel: () => {
-        this.settings.theme = original;
-        this.applySettings();
-      },
-      pick: (it) => this.updateSetting("theme", it.value),
-    });
-  }
-
-  selectAccent() {
-    const names = Object.keys(PALETTE_LABELS);
-    const opts = [{ id: null as string | null, label: "Theme color" }, ...names.map((n) => ({ id: n as string | null, label: PALETTE_LABELS[n] }))];
-    const original = this.settings.accent;
-    const theme = findTheme(this.settings.theme, this.systemDark.matches);
-    const resolve = (id: string | null) => (id ? (theme.colors as Record<string, string>)[id] ?? null : null);
-    openPicker({
-      placeholder: "Accent color",
-      initial: Math.max(0, opts.findIndex((o) => resolve(o.id) === original)),
-      provide: (q) => ({
-        items: fuzzyFilter(q, opts, (o) => o.label).map(({ item, result }) => ({
-          label: item.label, color: item.id ?? "accent", positions: result.positions, value: item.id,
-        })),
-      }),
-      highlight: (it) => {
-        if (!it) return;
-        this.settings.accent = resolve(it.value as string | null);
-        this.applySettings();
-      },
-      cancel: () => {
-        this.settings.accent = original;
-        this.applySettings();
-      },
-      pick: (it) => {
-        this.settings.accent = original;
-        this.applySettings();
-        const value = resolve(it.value as string | null);
-        return this.updateSetting("accent", value);
-      },
-    });
-  }
-
-  selectMascot() {
-    const original = this.settings.mascot;
-    const items = [{ id: "theme", label: "Theme accent", color: "accent" }, ...Object.entries(MASCOT_VARIANTS).map(([id, [body]]) => ({ id, label: id[0].toUpperCase() + id.slice(1), color: body }))];
-    openPicker({
-      placeholder: "Kilo's color (welcome screen)",
-      initial: Math.max(0, items.findIndex((i) => i.id === original)),
-      provide: (q) => ({
-        items: fuzzyFilter(q, items, (i) => i.label).map(({ item, result }) => ({
-          label: item.label, color: item.color, positions: result.positions, value: item.id, hint: item.id === original ? "current" : undefined,
-        })),
-      }),
-      highlight: (it) => it && applyMascot(it.value as string),
-      cancel: () => applyMascot(original),
-      pick: (it) => this.updateSetting("mascot", it.value),
-    });
-  }
-
   // -------------------------------------------------------------------------
-  // Files (explorer)
+  // Session (session.ts)
 
-  async createFileIn(dir: string) {
-    const r = await prompt({ title: "New note", value: "note.txt", selectStem: true, okLabel: "Create", message: relative(this.workspace, dir) || undefined });
-    if (!r?.value) return;
-    const name = extname(r.value) ? r.value : `${r.value}.txt`;
-    const path = join(dir, name);
-    try {
-      await this.backend.createFile(path);
-    } catch (e) {
-      toast(`Could not create: ${e}`, { kind: "error" });
-      return;
-    }
-    await this.refreshWorkspaceFiles();
-    this.sidebar.refreshTree();
-    await this.openFile(path);
-  }
-
-  async createFolderIn(dir: string) {
-    const r = await prompt({ title: "New folder", placeholder: "Folder name", okLabel: "Create" });
-    if (!r?.value) return;
-    try {
-      await this.backend.createDir(join(dir, r.value));
-      this.sidebar.expand(dir);
-      this.sidebar.refreshTree();
-    } catch (e) {
-      toast(`Could not create: ${e}`, { kind: "error" });
-    }
-  }
-
-  async renamePath(path: string) {
-    const r = await prompt({ title: "Rename", value: basename(path), selectStem: true, okLabel: "Rename" });
-    if (!r?.value || r.value === basename(path)) return;
-    const target = join(dirname(path), r.value);
-    for (const d of this.docs) if (d.dirty && d.path && (samePath(d.path, path) || isInside(d.path, path))) await this.save(d);
-    try {
-      await this.backend.rename(path, target);
-    } catch (e) {
-      toast(`Could not rename: ${e}`, { kind: "error" });
-      return;
-    }
-    for (const d of this.docs) {
-      if (!d.path) continue;
-      if (samePath(d.path, path)) d.path = target;
-      else if (isInside(d.path, path)) d.path = target + d.path.slice(path.length);
-      else continue;
-      d.title = basename(d.path);
-      // "notes.txt" renamed "notes.md": the coloring follows.
-      const lang = langForPath(d.path);
-      if (lang !== d.lang) this.setLang(d, lang);
-      const st = await this.backend.stat(d.path);
-      if (st) d.mtime = st.mtime;
-    }
-    if (this.workspace && samePath(this.workspace, path)) this.workspace = target;
-    this.emit("docs");
-    await this.refreshWorkspaceFiles();
-    this.sidebar.refreshTree();
-  }
-
-  async trashPath(path: string) {
-    const r = await confirm({
-      title: `Move "${basename(path)}" to the trash?`,
-      message: "You can restore it from the system trash.",
-      okLabel: "Move to trash",
-      danger: true,
-    });
-    if (r !== "ok") return;
-    try {
-      await this.backend.trash(path);
-    } catch (e) {
-      toast(`Could not delete: ${e}`, { kind: "error" });
-      return;
-    }
-    for (const d of [...this.docs]) if (d.path && (samePath(d.path, path) || isInside(d.path, path))) await this.closeDoc(d, { force: true });
-    await this.refreshWorkspaceFiles();
-    this.sidebar.refreshTree();
-  }
-
-  async copyText(text: string, what = "Path copied") {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast(what, { timeout: 1500 });
-    } catch {
-      toast("Could not copy", { kind: "error" });
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Session
-
-  private sessionTab(d: Doc): SessionTab {
-    const state = d === this.active ? this.view.state : d.state;
-    const keepContent = this.settings.hot_exit && (d.dirty || !d.path);
-    return {
-      path: d.path,
-      title: d.title,
-      color: d.color,
-      group: d.groupId,
-      content: keepContent ? state.doc.toString() : undefined,
-      eol: d.eol,
-      cursor: state.selection.main.head,
-      scrollTop: d === this.active ? this.view.scrollDOM.scrollTop : 0,
-      lang: d.path ? undefined : d.lang,
-      mtime: keepContent && d.path ? d.mtime : undefined,
-      conflict: d.conflict || undefined,
-    };
-  }
-
-  private sessionData(): Session {
-    const tabs = this.docs.filter((d) => d.path || (this.settings.hot_exit && d.state.doc.length > 0));
-    return {
-      version: 1,
-      workspace: this.workspace,
-      recent: this.recent,
-      tabs: tabs.map((d) => this.sessionTab(d)),
-      active: this.active ? tabs.indexOf(this.active) : -1,
-      groups: this.groups,
-      sidebar: this.sidebar.sessionState(),
-      zen: this.zen,
-      preview: [...this.preview.open],
-      previewSize: this.preview.size,
-      previewOnly: this.preview.only,
-    };
-  }
-
-  private sessionReady = false;
-  private saveSessionNow() {
-    if (!this.sessionReady) return;
-    this.saveSessionSoon.cancel();
-    void this.backend.writeText(this.sessionPath, JSON.stringify(this.sessionData())).catch(() => {});
-  }
-  private saveSessionSoon = debounce(() => this.saveSessionNow(), 1000);
-
-  private async readSession(path: string): Promise<Session | null> {
-    try {
-      return JSON.parse((await this.backend.readText(path)).text) as Session;
-    } catch {
-      return null;
-    }
-  }
-
-  /** Labels of the other windows that have a saved session. */
-  private async otherSessionLabels(): Promise<string[]> {
-    const entries = await this.backend.listDir(this.configDir, true).catch(() => []);
-    return entries.map((e) => SESSION_FILE_RE.exec(e.name)?.[1]).filter((l): l is string => !!l);
-  }
-
-  /** Reopens the other windows of the last session (desktop app only). */
-  private async restoreOtherWindows() {
-    if (this.backend.kind !== "tauri") return;
-    for (const label of await this.otherSessionLabels()) await this.backend.openWindow([], label).catch(() => {});
-  }
-
-  private async restoreSession() {
-    let s = await this.readSession(this.sessionPath);
-    // The main window was closed while others stayed open: take over one of their sessions.
-    if (!s && this.backend.windowLabel === "main") {
-      const other = (await this.otherSessionLabels())[0];
-      if (other) {
-        s = await this.readSession(join(this.configDir, sessionFileName(other)));
-        if (s) await this.backend.deleteSession(other).catch(() => {});
-      }
-    }
-    if (s && s.version === 1) {
-      this.recent = s.recent ?? [];
-      this.groups = (s.groups ?? []).map((g) => ({ ...g }));
-      this.sidebar.restore(s.sidebar);
-      if (s.workspace && (await this.backend.stat(s.workspace))?.isDir) {
-        this.workspace = s.workspace;
-        void this.refreshWorkspaceFiles();
-      }
-      const conflicts: Doc[] = [];
-      const docs = await Promise.all(
-        (s.tabs ?? []).map(async (t) => {
-          if (!t.path) {
-            return this.createDoc({ path: null, text: t.content ?? "", savedText: "", title: t.title, lang: isLangId(t.lang) ? t.lang : undefined, color: t.color, groupId: t.group, cursor: t.cursor, scrollTop: t.scrollTop, eol: t.eol });
-          }
-          try {
-            const ft = await this.backend.readText(t.path);
-            const d = this.createDoc({
-              path: t.path, text: t.content ?? ft.text, savedText: ft.text, eol: t.eol,
-              encoding: ft.encoding, mtime: ft.mtime, color: t.color, groupId: t.group, cursor: t.cursor, scrollTop: t.scrollTop,
-            });
-            // A draft restored on top of a file that changed since (or was already in
-            // conflict): never overwrite the file without asking.
-            const changedOnDisk = t.mtime != null && Math.abs(ft.mtime - t.mtime) > 1;
-            if (d.dirty && (t.conflict || changedOnDisk)) conflicts.push(d);
-            return d;
-          } catch {
-            if (t.content == null) return null;
-            const d = this.createDoc({ path: t.path, text: t.content, savedText: "", eol: t.eol, color: t.color, groupId: t.group });
-            d.missing = true;
-            return d;
-          }
-        }),
-      );
-      this.docs = docs.filter((d): d is Doc => !!d);
-      this.groups = this.groups.filter((g) => this.docs.some((d) => d.groupId === g.id));
-      for (const d of this.docs) if (d.groupId && !this.groups.some((g) => g.id === d.groupId)) d.groupId = null;
-      this.normalizeOrder();
-      const activeTab = s.tabs?.[s.active];
-      const target = activeTab ? this.docs.find((d) => (activeTab.path ? d.path === activeTab.path : d.title === activeTab.title)) : this.docs[0];
-      if (s.zen) this.setZen(true);
-      const views: unknown[] = Array.isArray(s.preview) ? s.preview : s.preview ? ["markdown"] : [];
-      this.preview.open = new Set(views.filter((v): v is SideKind => SIDE_KINDS.includes(v as SideKind)));
-      if (typeof s.previewSize === "number") this.preview.size = Math.min(0.85, Math.max(0.15, s.previewSize));
-      this.preview.only = s.previewOnly === true;
-      this.activate(target ?? this.docs[0] ?? null);
-      for (const d of conflicts) this.flagConflict(d);
-    }
-    this.sessionReady = true;
-  }
-
-  private async beforeClose(): Promise<boolean> {
-    this.sessionReady = true;
-    // Other windows stay open: this window's session is dropped, so unsaved
-    // drafts would be lost (the last window keeps them when hot_exit is on).
-    const others = (await this.backend.windowCount().catch(() => 1)) > 1;
-    if (others || !this.settings.hot_exit) {
-      const unsaved = this.docs.filter((d) => d.dirty && (!d.path || !this.settings.autosave || d.missing || d.conflict));
-      if (unsaved.length) {
-        const r = await confirm({
-          title: others ? "Close this window?" : "Quit without saving?",
-          message: `Unsaved changes will be lost: ${unsaved.map((d) => this.docName(d)).join(", ")}.`,
-          okLabel: others ? "Close window" : "Quit",
-          danger: true,
-        });
-        if (r !== "ok") return false;
-      }
-    }
-    const pending: Promise<boolean>[] = [];
-    for (const d of this.docs) {
-      clearTimeout(d.timer);
-      if (d.dirty && d.path && !d.missing && !d.conflict && this.settings.autosave) pending.push(this.save(d, { auto: true }));
-    }
-    await Promise.all(pending);
-    if (others) {
-      this.sessionReady = false;
-      this.saveSessionSoon.cancel();
-      await this.backend.deleteSession(this.backend.windowLabel).catch(() => {});
-      return true;
-    }
-    await this.backend.writeText(this.sessionPath, JSON.stringify(this.sessionData())).catch(() => {});
-    return true;
-  }
-
-  /**
-   * A tab dropped outside the window: into the window under the pointer, or a
-   * new window opened there (screen coordinates in CSS pixels).
-   */
-  async dropTabOutside(doc: Doc, screenX: number, screenY: number) {
-    if (!doc.path) {
-      toast("Save this note first to move it to another window.", { action: { label: "Save", run: () => void this.saveAs(doc) } });
-      return;
-    }
-    if (doc.dirty && !(await this.save(doc))) return;
-    const target = await this.backend.windowAt(screenX, screenY).catch(() => null);
-    if (target) await this.backend.sendPaths(target, [doc.path]);
-    else await this.backend.openWindow([doc.path], undefined, { x: Math.max(0, screenX - 160), y: Math.max(0, screenY - 16) });
-    await this.closeDoc(doc, { force: true });
-  }
-
-  /** Moves a saved note to a new window. */
-  async moveToNewWindow(doc: Doc) {
-    if (!doc.path) {
-      toast("Save this note first to move it to another window.", { action: { label: "Save", run: () => void this.saveAs(doc) } });
-      return;
-    }
-    if (doc.dirty && !(await this.save(doc))) return;
-    await this.backend.openWindow([doc.path]);
-    await this.closeDoc(doc, { force: true });
-  }
+  sessionReady = false;
+  saveSessionSoon = debounce(() => saveSessionNow(this), 1000);
 
   // -------------------------------------------------------------------------
   // Display
@@ -2127,150 +1065,11 @@ export class App {
     toast(message);
   }
 
-  showAbout() {
-    void confirm({
-      title: `KiloNote ${__APP_VERSION__}`,
-      message: "Notes as light as a kilobyte. A fast editor with todo / ongoing / done tasks, archives and yearly activity reports. Built with Tauri and CodeMirror.",
-      okLabel: "Nice!",
-      cancelLabel: "Close",
-    });
-  }
-
   // -------------------------------------------------------------------------
-  // Commands
+  // Tab order
 
-  private commandList: Command[] = [];
-
-  defaultKeybindings(): Record<string, string> {
-    const keys: Record<string, string> = {
-      "Mod+N": "file.new",
-      "Mod+Shift+N": "window.new",
-      "Mod+O": "file.open",
-      "Mod+Shift+O": "folder.open",
-      "Mod+S": "file.save",
-      "Mod+Shift+S": "file.saveAs",
-      "Mod+W": "tab.close",
-      "Ctrl+F4": "tab.close",
-      "Mod+Shift+T": "tab.reopen",
-      "Ctrl+Tab": "tab.next",
-      "Ctrl+Shift+Tab": "tab.prev",
-      "Mod+PageDown": "tab.next",
-      "Mod+PageUp": "tab.prev",
-      "Mod+P": "palette.files",
-      "Mod+Shift+P": "palette.commands",
-      F1: "palette.commands",
-      "Mod+G": "palette.line",
-      "Mod+R": "palette.symbol",
-      "Mod+B": "view.sidebar",
-      "Mod+Shift+E": "view.files",
-      "Mod+Shift+A": "view.tasks",
-      "Mod+Shift+F": "view.search",
-      "Mod+Enter": "task.cycle",
-      "Mod+Shift+Enter": "task.archive",
-      "Mod+Shift+D": "file.toggleDone",
-      "Mod+Shift+U": "task.due",
-      "Mod+,": "settings.open",
-      "Mod+=": "view.zoomIn",
-      "Mod++": "view.zoomIn",
-      "Mod+-": "view.zoomOut",
-      "Mod+0": "view.zoomReset",
-      F11: "view.fullscreen",
-      "Shift+F11": "view.zen",
-      "Alt+Z": "view.wrap",
-      "Mod+Shift+V": "view.preview",
-      "Shift+Alt+F": "edit.format",
-      "Mod+?": "help.shortcuts",
-    };
-    if (this.backend.platform !== "macos") keys["Mod+H"] = "edit.replace";
-    for (let i = 1; i <= 9; i++) keys[`Mod+${i}`] = `tab.goto.${i}`;
-    return keys;
-  }
-
-  private registerStatusCommands() {
-    const cmds: Command[] = Object.keys(this.taskCfg.statuses).map((name) => ({
-      id: `task.set.${name}`,
-      title: `Task: Mark as "${name}"`,
-      run: () => this.cycleTasks(name),
-    }));
-    this.commandList = this.commandList.filter((c) => !c.id.startsWith("task.set."));
-    this.commandList.push(...cmds);
-    registerCommands(cmds);
-  }
-
-  private registerAllCommands() {
-    const cmds: Command[] = [
-      { id: "file.new", title: "File: New note", run: () => this.newDoc() },
-      { id: "window.new", title: "Window: New window", run: () => this.backend.openWindow([]) },
-      { id: "window.moveTab", title: "Window: Move tab to new window", run: () => this.active && this.moveToNewWindow(this.active) },
-      { id: "file.open", title: "File: Open…", run: async () => { for (const p of await this.backend.pickFiles()) await this.openFile(p); } },
-      { id: "folder.open", title: "Folder: Open…", run: () => this.openFolder() },
-      { id: "folder.close", title: "Folder: Close", run: () => this.closeFolder() },
-      { id: "file.save", title: "File: Save", run: () => this.active && this.save(this.active) },
-      { id: "file.saveAs", title: "File: Save as…", run: () => this.active && this.saveAs(this.active) },
-      { id: "file.saveAll", title: "File: Save all", run: () => this.saveAll() },
-      { id: "file.rename", title: "File: Rename…", run: () => this.active?.path && this.renamePath(this.active.path) },
-      { id: "file.reveal", title: "File: Reveal in file manager", run: () => this.active?.path && this.backend.reveal(this.active.path) },
-      { id: "file.copyPath", title: "File: Copy path", run: () => this.active?.path && this.copyText(this.active.path) },
-      { id: "file.toggleDone", title: "Tasks: Switch between note and its _done archive", run: () => this.toggleDoneFile() },
-      { id: "file.reload", title: "File: Reload from disk", run: () => this.active && this.reloadDoc(this.active, true) },
-      { id: "file.history", title: "File: Local history (earlier versions)…", run: () => this.showLocalHistory() },
-      { id: "tab.close", title: "Tab: Close", run: () => this.active && this.closeDoc(this.active) },
-      { id: "tab.closeOthers", title: "Tab: Close others", run: () => this.closeMany(this.docs.filter((d) => d !== this.active)) },
-      { id: "tab.closeAll", title: "Tab: Close all", run: () => this.closeMany(this.docs) },
-      { id: "tab.reopen", title: "Tab: Reopen last closed", run: () => this.reopenClosed() },
-      { id: "tab.list", title: "Tab: List all tabs", run: () => this.tabbar.showTabList() },
-      { id: "tab.next", title: "Tab: Next", run: () => this.cycleTab(1) },
-      { id: "tab.prev", title: "Tab: Previous", run: () => this.cycleTab(-1) },
-      { id: "tab.color", title: "Tab: Color…", run: () => this.active && this.tabbar.showColorMenu(this.active) },
-      { id: "tab.group", title: "Tab: Add to new group…", run: () => this.active && this.createGroup([this.active]) },
-      { id: "tab.ungroup", title: "Tab: Remove from group", run: () => this.active && this.addToGroup(this.active, null) },
-      { id: "tab.toggleGroup", title: "Tab: Collapse or expand its group", run: () => this.toggleActiveGroup() },
-      { id: "tab.collapseGroups", title: "Tab: Collapse all groups", run: () => this.setAllGroupsCollapsed(true) },
-      { id: "tab.expandGroups", title: "Tab: Expand all groups", run: () => this.setAllGroupsCollapsed(false) },
-      { id: "palette.commands", title: "Command palette", run: () => this.openCommandPalette() },
-      { id: "palette.files", title: "Go to file…", run: () => this.openQuickOpen() },
-      { id: "palette.line", title: "Go to line…", run: () => this.openQuickOpen(":") },
-      { id: "palette.symbol", title: "Go to heading or task…", run: () => this.openQuickOpen("@") },
-      { id: "edit.find", title: "Edit: Find", run: () => this.active && openSearchPanel(this.view) },
-      { id: "edit.replace", title: "Edit: Find and replace", run: () => this.active && openSearchPanel(this.view) },
-      { id: "edit.format", title: "Edit: Format document (JSON, XML, HTML, CSS, SQL, Markdown tables)", run: () => this.formatDocument() },
-      { id: "edit.minify", title: "Edit: Minify JSON", run: () => this.formatDocument("minify") },
-      { id: "view.sidebar", title: "View: Toggle sidebar", run: () => this.sidebar.toggle() },
-      { id: "view.files", title: "View: File explorer", run: () => this.sidebar.show("files") },
-      { id: "view.tasks", title: "View: Folder tasks", run: () => this.sidebar.show("tasks") },
-      { id: "view.search", title: "View: Search in files", run: () => this.sidebar.show("search") },
-      { id: "view.zen", title: "View: Zen mode", run: () => this.setZen(!this.zen) },
-      { id: "view.fullscreen", title: "View: Full screen", run: () => this.backend.toggleFullscreen() },
-      { id: "view.zoomIn", title: "View: Increase text size", run: () => this.zoom(1) },
-      { id: "view.zoomOut", title: "View: Decrease text size", run: () => this.zoom(-1) },
-      { id: "view.zoomReset", title: "View: Reset text size", run: () => this.zoom(null) },
-      { id: "view.wrap", title: "View: Toggle word wrap", run: () => this.updateSetting("word_wrap", !this.settings.word_wrap) },
-      { id: "view.preview", title: "View: Toggle preview or tree view (Markdown, HTML, SVG, JSON, YAML)", run: () => this.preview.toggle() },
-      { id: "view.previewOnly", title: "View: Preview only (hide the editor) / side by side", run: () => this.preview.visible ? this.preview.setOnly(!this.preview.only) : this.preview.toggle() },
-      { id: "view.previewSize", title: "View: Preview and editor half and half", run: () => this.preview.setSize(0.5) },
-      { id: "view.language", title: "View: Document type (syntax coloring)…", run: () => this.selectLanguage() },
-      { id: "view.lineNumbers", title: "View: Toggle line numbers", run: () => this.updateSetting("line_numbers", !this.settings.line_numbers) },
-      { id: "theme.select", title: "Theme: Select…", run: () => this.selectTheme() },
-      { id: "theme.accent", title: "Theme: Accent color…", run: () => this.selectAccent() },
-      { id: "theme.mascot", title: "Theme: Kilo's color…", run: () => this.selectMascot() },
-      { id: "settings.open", title: "Preferences: Settings", run: () => this.openSettings() },
-      { id: "settings.json", title: "Preferences: Open settings.json", run: () => this.openSettings(true) },
-      { id: "task.cycle", title: "Task: Next status", run: () => this.cycleTasks() },
-      { id: "task.archive", title: "Task: Archive line to _done", run: () => this.archiveSelection() },
-      { id: "task.archiveDone", title: "Task: Archive all completed tasks", run: () => this.archiveAllDone() },
-      { id: "report.generate", title: "Report: Generate activity report…", run: () => this.generateReport() },
-      { id: "report.tag", title: "Report: Generate activity report for a #tag…", run: () => this.generateTagReport() },
-      { id: "task.due", title: "Task: Set due date…", run: () => this.setDueDate() },
-      { id: "help.shortcuts", title: "Help: Keyboard shortcuts (cheat sheet)", run: () => showCheatSheet(this) },
-      { id: "help.guide", title: "Help: KiloNote guide", run: () => this.newDoc({ text: GUIDE, title: "KiloNote guide.md", lang: "markdown" }) },
-      { id: "help.about", title: "Help: About", run: () => this.showAbout() },
-    ];
-    for (let i = 1; i <= 9; i++) {
-      cmds.push({ id: `tab.goto.${i}`, title: `Tab ${i}`, hidden: true, run: () => this.gotoTab(i) });
-    }
-    this.commandList = cmds;
-    registerCommands(cmds);
-  }
+  /** Every command (commands.ts), as the palette lists them. */
+  commandList: Command[] = [];
 
   private visibleDocs() {
     return this.docs.filter((d) => !this.isHidden(d) || d === this.active);

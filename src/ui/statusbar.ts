@@ -9,6 +9,7 @@ import { debounce, h, icon } from "./dom";
 import { showMenu } from "./overlay";
 import { showCheatSheet } from "./cheatsheet";
 import { SIDE_LABELS, sideKindFor } from "./views/preview";
+import { openQuickOpen, selectLanguage, selectTheme } from "../app/pickers";
 
 const ENCODINGS: [string, string][] = [
   ["UTF-8", "UTF-8"],
@@ -33,7 +34,7 @@ export class StatusBar {
 
   constructor(private app: App, el: HTMLElement) {
     const sidebarBtn = h("button", { class: "st-item st-icon", title: titleWithKey("Sidebar", "view.sidebar"), onclick: () => app.sidebar.toggle() }, icon("sidebar"));
-    const themeBtn = h("button", { class: "st-item st-icon", title: "Theme", onclick: () => app.selectTheme() }, icon("palette"));
+    const themeBtn = h("button", { class: "st-item st-icon", title: "Theme", onclick: () => selectTheme(app) }, icon("palette"));
     const settingsBtn = h("button", { class: "st-item st-icon", title: titleWithKey("Settings", "settings.open"), onclick: () => app.openSettings() }, icon("gear"));
     const keysBtn = h("button", { class: "st-item st-icon", title: titleWithKey("Keyboard shortcuts", "help.shortcuts"), onclick: () => showCheatSheet(app) }, icon("keyboard"));
     this.left.append(sidebarBtn, this.tasks);
@@ -41,11 +42,11 @@ export class StatusBar {
     this.previewBtn.addEventListener("click", () => app.preview.toggle());
     el.append(this.left, this.right);
 
-    this.pos.addEventListener("click", () => app.openQuickOpen(":"));
-    this.tasks.addEventListener("click", () => app.openQuickOpen("@"));
+    this.pos.addEventListener("click", () => openQuickOpen(app, ":"));
+    this.tasks.addEventListener("click", () => openQuickOpen(app, "@"));
     this.eol.addEventListener("click", (e) => this.eolMenu(e));
     this.encoding.addEventListener("click", (e) => this.encodingMenu(e));
-    this.lang.addEventListener("click", () => app.selectLanguage());
+    this.lang.addEventListener("click", () => selectLanguage(app));
     this.save.addEventListener("click", (e) => {
       const doc = app.active;
       if (!doc?.conflict) return;

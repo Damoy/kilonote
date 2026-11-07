@@ -9,6 +9,9 @@ import { h, icon } from "./dom";
 import { fileIcon } from "./sidebar";
 import { SIDE_LABELS, sideKindFor } from "./views/preview";
 import { showMenu, type MenuItem } from "./overlay";
+import { copyText, renamePath } from "../app/files";
+import { openCommandPalette } from "../app/pickers";
+import { dropTabOutside, moveToNewWindow } from "../app/windows";
 
 export class TabBar {
   private scroller: HTMLElement;
@@ -31,7 +34,7 @@ export class TabBar {
       this.sideBtn,
       this.listBtn,
       h("button", { class: "kn-icon-btn", title: titleWithKey("New note", "file.new"), onclick: () => app.newDoc() }, icon("plus")),
-      h("button", { class: "kn-icon-btn", title: titleWithKey("Command palette", "palette.commands"), onclick: () => app.openCommandPalette() }, icon("more")),
+      h("button", { class: "kn-icon-btn", title: titleWithKey("Command palette", "palette.commands"), onclick: () => openCommandPalette(app) }, icon("more")),
     );
     // Shown only while the sidebar is hidden (see .no-sidebar in the CSS).
     const showSidebar = h("button", { class: "kn-icon-btn kn-show-sidebar", title: titleWithKey("Show sidebar", "view.sidebar"), onclick: () => app.sidebar.toggle() }, icon("panelOpen"));
@@ -258,7 +261,7 @@ export class TabBar {
       this.marker.remove();
       this.dragging = null;
       if (d.outside && e) {
-        void this.app.dropTabOutside(d.doc, e.screenX, e.screenY);
+        void dropTabOutside(this.app, d.doc, e.screenX, e.screenY);
         return;
       }
       this.app.moveDoc(d.doc, docIndex);
@@ -291,7 +294,7 @@ export class TabBar {
       { label: "Close others", action: () => app.closeMany(app.docs.filter((d) => d !== doc)) },
       { label: "Close tabs to the right", disabled: idx === app.docs.length - 1, action: () => app.closeMany(app.docs.slice(idx + 1)) },
       { label: "Close all", shortcut: shortcutFor("tab.closeAll"), action: () => app.closeMany([...app.docs]) },
-      { label: "Move to new window", icon: "newWindow", disabled: !doc.path, action: () => app.moveToNewWindow(doc) },
+      { label: "Move to new window", icon: "newWindow", disabled: !doc.path, action: () => moveToNewWindow(app, doc) },
       { separator: true },
       { header: "Color" },
       { colors: app.settings.tab_colors, selected: doc.color, allowNone: true, onPick: (c) => this.setColor(doc, c) },
@@ -307,9 +310,9 @@ export class TabBar {
       const path = doc.path;
       items.push(
         { separator: true },
-        { label: "Copy path", action: () => app.copyText(path) },
+        { label: "Copy path", action: () => copyText(path) },
         { label: "Reveal in file manager", icon: "folderOpen", action: () => app.backend.reveal(path) },
-        { label: "Rename…", action: () => app.renamePath(path) },
+        { label: "Rename…", action: () => renamePath(app, path) },
       );
     }
     showMenu(items, x, y);

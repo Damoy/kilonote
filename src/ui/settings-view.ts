@@ -9,6 +9,7 @@ import { h, icon } from "./dom";
 import { ICON_PACKS } from "./icons";
 import { confirm, showMenu } from "./overlay";
 import { showCheatSheet } from "./cheatsheet";
+import { listCommands, selectTheme } from "../app/pickers";
 
 type Section = "appearance" | "editor" | "files" | "tasks" | "shortcuts";
 const SECTIONS: [Section, string, string][] = [
@@ -245,7 +246,7 @@ class SettingsView {
       this.number("line_height", "Line height", { min: 1, max: 3, step: 0.05 }),
       this.number("ui_font_size", "Interface text size", { min: 9, max: 22, unit: "px" }),
       h("p", { class: "kn-set-note" }, "Tip: Ctrl+wheel or Ctrl+= / Ctrl+- also change the editor text size. Every theme color can be overridden in settings.json (\"colors\")."),
-      h("button", { class: "kn-btn subtle kn-set-link", onclick: () => app.selectTheme() }, icon("palette"), "Preview the themes one by one…"),
+      h("button", { class: "kn-btn subtle kn-set-link", onclick: () => selectTheme(app) }, icon("palette"), "Preview the themes one by one…"),
     ];
   }
 
@@ -335,7 +336,7 @@ class SettingsView {
   }
 
   private shortcuts(): HTMLElement[] {
-    const rows = this.app.listCommands()
+    const rows = listCommands(this.app)
       .map((c) => ({ title: c.title, key: shortcutFor(c.id), id: c.id }))
       .sort((a, b) => a.title.localeCompare(b.title));
     return [

@@ -3,9 +3,14 @@
 // what reaches the files when saving, reloading, restoring a session…
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { App, historyName, parseHistoryName, pathHash } from "./app";
+import { App } from "./app";
+import { historyName, parseHistoryName, pathHash, replaceInFiles, showLocalHistory } from "./history";
 import type { Backend, Entry, Meta } from "../core/backend";
 import { basename, dirname, isInside } from "../core/path";
+import { formatDocument } from "./editing";
+import { renamePath } from "./files";
+import { saveSessionNow } from "./session";
+import { archiveLines, cycleTasks } from "./tasks";
 
 interface Disk {
   files: Map<string, { text: string; mtime: number }>;
@@ -246,7 +251,7 @@ describe("local history", () => {
     const kept = [...disk.files.keys()].filter((p) => p.startsWith("/config/history/")).sort();
     expect(kept.map((p) => disk.text(p))).toEqual(["v2 from elsewhere", "v1 mine again"]);
     // The history picker opens a version in a new tab.
-    await app.showLocalHistory();
+    await showLocalHistory(app);
     const rows = document.querySelectorAll(".kn-palette-row");
     expect(rows).toHaveLength(2);
     rows[1].dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
@@ -264,7 +269,7 @@ describe("replace in files", () => {
       "/notes/c.txt": "nothing here\n",
     });
     const a = (await app.openFile("/notes/a.txt"))!;
-    const r = await app.replaceInFiles(["/notes/a.txt", "/notes/b.txt", "/notes/c.txt"], /(b)ob/gi, "$1ill", false);
+    const r = await replaceInFiles(app, ["/notes/a.txt", "/notes/b.txt", "/notes/c.txt"], /(b)ob/gi, "$1ill", false);
     expect(r).toEqual({ files: 2, count: 3 });
     expect(disk.text("/notes/a.txt")).toBe("call Bill\r\nBill again\r\n");
     expect(a.dirty).toBe(false);
@@ -281,7 +286,7 @@ describe("replace in files", () => {
 
   it("a literal replacement never expands $ patterns", async () => {
     const { app, disk } = await start({ "/notes/p.txt": "price: 10\n" });
-    await app.replaceInFiles(["/notes/p.txt"], /10/g, "$&0 $1", true);
+    await replaceInFiles(app, ["/notes/p.txt"], /10/g, "$&0 $1", true);
     expect(disk.text("/notes/p.txt")).toBe("price: $&0 $1\n");
   });
 });
@@ -304,7 +309,7 @@ describe("tasks", () => {
     });
     disk.appendDelay = 5;
     const doc = (await app.openFile("/notes/work.txt", { activate: false }))!;
-    await app.cycleTasks(undefined, doc, [1]);
+    await cycleTasks(app, undefined, doc, [1]);
     expect(disk.text("/notes/work_done.txt")).toMatch(/^- call X - done \[\d{4}-\d{2}-\d{2}\]\n$/);
     await app.save(doc);
     expect(disk.text("/notes/work.txt")).toBe("- other - todo\n");
@@ -319,7 +324,7 @@ describe("tasks", () => {
     disk.failWrites.add("/notes/work_done.txt");
     // What the "next status" button of the Tasks panel does on a note that is not open.
     const doc = (await app.openFile("/notes/work.txt", { activate: false }))!;
-    await app.cycleTasks(undefined, doc, [1]);
+    await cycleTasks(app, undefined, doc, [1]);
     await app.save(doc);
     await app.closeDoc(doc, { force: true });
     await new Promise((r) => setTimeout(r, 20));
@@ -330,7 +335,7 @@ describe("tasks", () => {
     const { app, disk } = await start({ "/notes/work.txt": "- a - done\n- b - todo\n" });
     disk.failWrites.add("/notes/work_done.txt");
     const doc = (await app.openFile("/notes/work.txt"))!;
-    await app.archiveLines(doc, [1]);
+    await archiveLines(app, doc, [1]);
     expect(app.view.state.doc.toString()).toBe("- a - done\n- b - todo\n");
     expect(doc.dirty).toBe(false);
   });
@@ -339,7 +344,7 @@ describe("tasks", () => {
     const { app, disk } = await start({ "/notes/work.txt": "- a - done\n- b - todo\n- c - done\n" });
     disk.appendDelay = 5;
     const doc = (await app.openFile("/notes/work.txt"))!;
-    const archiving = app.archiveLines(doc, [1, 3]);
+    const archiving = archiveLines(app, doc, [1, 3]);
     // Meanwhile: a new line on top, and the "c" task is edited. (Unfocused: happy-dom
     // fires selectionchange synchronously, which real browsers never do.)
     app.view.contentDOM.blur();
@@ -403,7 +408,7 @@ describe("document types and formatting", () => {
     expect((await app.openFile("/notes/run.py"))?.lang).toBe("python");
     const doc = (await app.openFile("/notes/notes.txt"))!;
     expect(doc.lang).toBe("text");
-    const renaming = app.renamePath("/notes/notes.txt");
+    const renaming = renamePath(app, "/notes/notes.txt");
     const input = document.querySelector<HTMLInputElement>(".kn-modal input")!;
     input.value = "notes.md";
     document.querySelector<HTMLButtonElement>(".kn-modal .kn-btn.primary")!.click();
@@ -415,13 +420,13 @@ describe("document types and formatting", () => {
   it("Format document rewrites JSON in one undoable step; invalid JSON is left alone", async () => {
     const { app } = await start({ "/notes/data.json": '{"a":[1,2],"b":{"c":true}}' });
     await app.openFile("/notes/data.json");
-    app.formatDocument();
+    formatDocument(app);
     expect(app.view.state.doc.toString()).toBe('{\n    "a": [1, 2],\n    "b": {\n        "c": true\n    }\n}\n');
     const { undo } = await import("@codemirror/commands");
     undo(app.view);
     expect(app.view.state.doc.toString()).toBe('{"a":[1,2],"b":{"c":true}}');
     app.view.dispatch({ changes: { from: 0, to: app.view.state.doc.length, insert: '{"a": 1 "b": 2}' } });
-    app.formatDocument();
+    formatDocument(app);
     expect(app.view.state.doc.toString()).toBe('{"a": 1 "b": 2}');
     expect(document.querySelector(".kn-toast.error")?.textContent).toContain("line 1, column 9");
   });
@@ -454,7 +459,7 @@ describe("side views", () => {
     await app.openFile("/notes/c.txt");
     app.preview.toggle(); // nothing to show: a message, nothing turned on
     expect([...app.preview.open]).toEqual(["tree"]);
-    await (app as unknown as { saveSessionNow(): Promise<void> }).saveSessionNow();
+    await saveSessionNow(app);
     const session = [...disk.files.keys()].find((k) => k.startsWith("/config/session"))!;
     expect(JSON.parse(disk.text(session)!).preview).toEqual(["tree"]);
   });
@@ -467,12 +472,12 @@ describe("tasks stay in notes", () => {
       const doc = (await app.openFile(p))!;
       const before = doc.state.doc.toString();
       app.view.contentDOM.blur(); // (happy-dom: see the archive test above)
-      await app.cycleTasks();
+      await cycleTasks(app);
       expect(app.view.state.doc.toString(), p).toBe(before);
     }
     await app.openFile("/notes/n.txt");
     app.view.contentDOM.blur();
-    await app.cycleTasks();
+    await cycleTasks(app);
     expect(app.view.state.doc.toString()).toBe("- call Bob - todo\n");
   });
 });

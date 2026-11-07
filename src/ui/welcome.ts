@@ -5,6 +5,7 @@ import { shortcutFor } from "../core/commands";
 import { basename } from "../core/path";
 import kiloSvg from "../assets/kilo.svg?raw";
 import { h, icon } from "./dom";
+import { openCommandPalette, openQuickOpen } from "../app/pickers";
 
 // {command} is replaced with the command's current shortcut.
 const TIPS = [
@@ -54,9 +55,9 @@ export class Welcome {
           { class: "wl-actions" },
           action("New note", "newFile", "file.new", () => app.newDoc()),
           action(app.workspace ? "Go to file" : "Open folder", app.workspace ? "search" : "folder", app.workspace ? "palette.files" : "folder.open", () =>
-            app.workspace ? app.openQuickOpen() : app.openFolder()),
+            app.workspace ? openQuickOpen(app) : app.openFolder()),
           action("Ongoing tasks", "tasks", "view.tasks", () => app.sidebar.show("tasks")),
-          action("Commands", "command", "palette.commands", () => app.openCommandPalette()),
+          action("Commands", "command", "palette.commands", () => openCommandPalette(app)),
         ),
         recent.length
           ? h("div", { class: "wl-recent" }, h("div", { class: "wl-section" }, "Recent folders"),

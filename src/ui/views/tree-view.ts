@@ -9,6 +9,7 @@ import { setTreeHighlight } from "../../editor/setup";
 import { keySource, nodePath, parseTree, valueSource, xmlPath, type ParsedTree, type TreeFormat, type TreeNode } from "../../text/tree-parse";
 import { h, icon } from "../dom";
 import { showMenu, toast } from "../overlay";
+import { copyText } from "../../app/files";
 
 /** Children shown at first in a big array or object ("Show more" for the rest). */
 const PAGE = 200;
@@ -344,8 +345,8 @@ export class TreeView {
         { label: "Rename key", disabled: !n.keyEditable, shortcut: "F2", action: () => this.edit(i, "key") },
         { separator: true },
         { label: "Go to in the text", icon: "chevron", action: () => this.reveal(n.from, n.to, true) },
-        { label: "Copy path", icon: "files", disabled: !path, action: () => this.app.copyText(path, "Path copied") },
-        { label: "Copy value", icon: "files", action: () => this.app.copyText(src, "Value copied") },
+        { label: "Copy path", icon: "files", disabled: !path, action: () => copyText(path, "Path copied") },
+        { label: "Copy value", icon: "files", action: () => copyText(src, "Value copied") },
         ...(n.children ? [
           { separator: true } as const,
           { label: "Expand everything inside", icon: "expand", action: () => this.expandBelow(row) },

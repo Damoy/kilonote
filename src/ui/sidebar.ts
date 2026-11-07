@@ -9,6 +9,9 @@ import { fileKindFor } from "../editor/languages";
 import { dueState, findTags, findTasks, isDoneStatus, isOngoingStatus, todayISO, type FoundTask } from "../text/tasks";
 import { debounce, h, icon } from "./dom";
 import { confirm, showMenu, toast, type MenuItem } from "./overlay";
+import { copyText, createFileIn, createFolderIn, renamePath, trashPath } from "../app/files";
+import { replaceInFiles } from "../app/history";
+import { archiveLines, cycleTasks, generateReport } from "../app/tasks";
 
 export type Panel = "files" | "tasks" | "search";
 
@@ -100,7 +103,7 @@ export class Sidebar {
       "div",
       { class: "sb-panel" },
       h("div", { class: "sb-header" }, h("span", { class: "sb-title" }, "Tasks"), h("span", { class: "kn-spacer" }),
-        h("button", { class: "kn-icon-btn", title: "Activity report", onclick: () => app.generateReport() }, icon("chart")),
+        h("button", { class: "kn-icon-btn", title: "Activity report", onclick: () => generateReport(app) }, icon("chart")),
         h("button", { class: "kn-icon-btn", title: "Refresh", onclick: () => this.renderTasks() }, icon("refresh"))),
       filterBar,
       this.tasksList,
@@ -275,8 +278,8 @@ export class Sidebar {
     if (app.workspace) {
       const ws = app.workspace;
       this.filesHeader.append(
-        h("button", { class: "kn-icon-btn", title: "New note", onclick: () => app.createFileIn(ws) }, icon("newFile")),
-        h("button", { class: "kn-icon-btn", title: "New folder", onclick: () => app.createFolderIn(ws) }, icon("newFolder")),
+        h("button", { class: "kn-icon-btn", title: "New note", onclick: () => createFileIn(app, ws) }, icon("newFile")),
+        h("button", { class: "kn-icon-btn", title: "New folder", onclick: () => createFolderIn(app, ws) }, icon("newFolder")),
         h("button", { class: "kn-icon-btn", title: "Refresh", onclick: () => this.refreshTree() }, icon("refresh")),
         this.toggleAllBtn,
         h("button", { class: "kn-icon-btn", title: "Close folder", onclick: () => app.closeFolder() }, icon("x")),
@@ -465,11 +468,11 @@ export class Sidebar {
         { label: "Open", icon: "file", action: () => app.openFile(path) },
         { label: "Open in new window", icon: "newWindow", action: () => app.backend.openWindow([path]) },
         { separator: true },
-        { label: "Rename…", action: () => app.renamePath(path) },
-        { label: "Copy path", action: () => app.copyText(path) },
+        { label: "Rename…", action: () => renamePath(app, path) },
+        { label: "Copy path", action: () => copyText(path) },
         { label: "Reveal in file manager", icon: "folderOpen", action: () => app.backend.reveal(path) },
         { separator: true },
-        { label: "Move to trash", danger: true, action: () => app.trashPath(path) },
+        { label: "Move to trash", danger: true, action: () => trashPath(app, path) },
       ],
       x,
       y,
@@ -479,18 +482,18 @@ export class Sidebar {
   private showDirMenu(path: string, x: number, y: number, isRoot = false) {
     const app = this.app;
     const items: MenuItem[] = [
-      { label: "New note here…", icon: "newFile", action: () => { this.expanded.add(path); return app.createFileIn(path); } },
-      { label: "New folder…", icon: "newFolder", action: () => app.createFolderIn(path) },
+      { label: "New note here…", icon: "newFile", action: () => { this.expanded.add(path); return createFileIn(app, path); } },
+      { label: "New folder…", icon: "newFolder", action: () => createFolderIn(app, path) },
       { label: "Open folder in new window", icon: "newWindow", action: () => app.backend.openWindow([path]) },
       { separator: true },
       { label: "Expand all", icon: "expand", action: () => this.expandAll(path) },
       { label: "Collapse all", icon: "collapse", action: () => this.collapseAll(path) },
       { separator: true },
-      { label: "Copy path", action: () => app.copyText(path) },
+      { label: "Copy path", action: () => copyText(path) },
       { label: "Reveal in file manager", icon: "folderOpen", action: () => app.backend.reveal(path) },
     ];
     if (isRoot) items.push({ separator: true }, { label: "Refresh", icon: "refresh", action: () => this.refreshTree() }, { label: "Close folder", action: () => app.closeFolder() });
-    else items.push({ separator: true }, { label: "Rename…", action: () => app.renamePath(path) }, { label: "Move to trash", danger: true, action: () => app.trashPath(path) });
+    else items.push({ separator: true }, { label: "Rename…", action: () => renamePath(app, path) }, { label: "Move to trash", danger: true, action: () => trashPath(app, path) });
     showMenu(items, x, y);
   }
 
@@ -637,8 +640,8 @@ export class Sidebar {
       void this.renderTasks();
       return;
     }
-    if (action === "cycle") await app.cycleTasks(undefined, doc, [t.line]);
-    else await app.archiveLines(doc, [t.line]);
+    if (action === "cycle") await cycleTasks(app, undefined, doc, [t.line]);
+    else await archiveLines(app, doc, [t.line]);
     await app.save(doc);
     this.taskTexts.set(path, doc.state.doc.toString());
     if (!wasOpen && doc !== app.active) await app.closeDoc(doc, { force: true });
@@ -677,7 +680,7 @@ export class Sidebar {
       danger: true,
     });
     if (r !== "ok") return;
-    await this.app.replaceInFiles(files.map((f) => f.path), re, replacement, !this.searchRegex);
+    await replaceInFiles(this.app, files.map((f) => f.path), re, replacement, !this.searchRegex);
     await this.runSearch();
   }
 
