@@ -320,7 +320,8 @@ export function formatXml(text: string, indent = "  ", html = false): string {
           const open = top();
           throw new FormatError(`<${open.name}> opened at ${where(text, open.start)} is closed by </${close[1]}> at ${where(text, i)}.`, i);
         }
-        while (stack.length - 1 > at) stack.pop()!.close = null; // implicitly closed (HTML)
+        // Elements left open (HTML: <li>, <p>…) end where their parent closes.
+        while (stack.length - 1 > at) stack.pop()!.innerTo = i;
         const el = stack.pop()!;
         el.close = tag;
         el.innerTo = i;
@@ -352,6 +353,7 @@ export function formatXml(text: string, indent = "  ", html = false): string {
     const open = top();
     throw new FormatError(`<${open.name}> opened at ${where(text, open.start)} is never closed.`, open.start);
   }
+  for (const el of stack) el.innerTo = text.length;
 
   const lines: string[] = [];
   const pad = (d: number) => indent.repeat(d);
@@ -376,9 +378,8 @@ export function formatXml(text: string, indent = "  ", html = false): string {
     }
     const rawOnly = n.children.length === 1 && n.children[0].k === "other" && html && RAW.has(n.name);
     if (rawOnly) {
-      const inner = (n.children[0] as { v: string }).v;
-      if (!inner.includes("\n")) lines.push(pad(d) + n.open + inner + (n.close ?? ""));
-      else lines.push(pad(d) + n.open + inner + (n.close ?? ""));
+      // <script>, <style>, <pre>, <textarea>: the content stays exactly as written.
+      lines.push(pad(d) + n.open + (n.children[0] as { v: string }).v + (n.close ?? ""));
       return;
     }
     if (hasText(n)) {

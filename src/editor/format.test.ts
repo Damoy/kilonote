@@ -87,6 +87,24 @@ describe("formatXml", () => {
   });
 });
 
+describe("formatters never lose text", () => {
+  const squash = (s: string) => s.replace(/\s+/g, "");
+  it("HTML with tags left open, stray closing tags and comments", () => {
+    for (const src of [
+      "<ul><li>One<li>Two <b>bold</ul><p>Para<p>Other",
+      "<div><span>a</span></b>text<!-- c --><img src=x></div>",
+      "<html><body><pre>  keep\n   this  </pre><textarea> x </textarea></body></html>",
+    ]) expect(squash(formatXml(src, "  ", true))).toBe(squash(src));
+  });
+  it("JSON and CSS", () => {
+    const json = '{"a":[1,{"b":"x y"}],/* c */"d":null}';
+    expect(squash(formatJson(json))).toBe(squash(json));
+    const css = "a{b:c}@media x{d e{f:g;h:url(x;y)}}";
+    // (The formatter may only add the optional ";" before a "}".)
+    expect(squash(formatCss(css)).replace(/;/g, "")).toBe(squash(css).replace(/;/g, ""));
+  });
+});
+
 describe("formatCss", () => {
   it("puts one declaration per line", () => {
     expect(formatCss("a:hover,b{color:red;background:url(data:image/png;base64,xx)}/* c */\n@media (max-width:600px){a{margin:0}}")).toBe(
