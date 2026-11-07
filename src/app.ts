@@ -27,6 +27,7 @@ import { Sidebar } from "./ui/sidebar";
 import { StatusBar } from "./ui/statusbar";
 import { Welcome } from "./ui/welcome";
 import { Preview } from "./ui/preview";
+import { showSettingsView } from "./ui/settings-view";
 import { GUIDE } from "./guide";
 
 export interface Doc {
@@ -319,7 +320,12 @@ export class App {
       }
     }
     const next = setSettingInText(text, key, value);
-    (this.settings as unknown as Record<string, unknown>)[key] = value;
+    try {
+      // Through mergeSettings: values are checked and normalized like on startup.
+      this.settings = mergeSettings(parseJsonc<Partial<Settings>>(next));
+    } catch {
+      (this.settings as unknown as Record<string, unknown>)[key] = value;
+    }
     this.applySettings();
     if (open) {
       this.replaceDocContent(open, next);
@@ -333,7 +339,12 @@ export class App {
     }
   }
 
-  async openSettings() {
+  /** The settings screen, or the settings.json file itself. */
+  async openSettings(json = false) {
+    if (!json) {
+      showSettingsView(this);
+      return;
+    }
     const exists = await this.backend.stat(this.settingsPath);
     if (!exists) await this.backend.writeText(this.settingsPath, SETTINGS_TEMPLATE);
     await this.openFile(this.settingsPath);
@@ -1487,6 +1498,29 @@ export class App {
     return [...this.commandList].filter((c) => !c.hidden);
   }
 
+  listCommands(): Command[] {
+    return this.paletteCommands();
+  }
+
+  /** settings.json back to the template (the current file goes to the local history). */
+  async resetSettings() {
+    try {
+      const { text } = await this.backend.readText(this.settingsPath);
+      await this.backend.writeText(join(this.historyDir(), historyName(this.settingsPath, "disk")), text);
+    } catch {
+      /* no file yet */
+    }
+    const open = this.findDoc(this.settingsPath);
+    if (open) {
+      this.replaceDocContent(open, SETTINGS_TEMPLATE);
+      this.quietSettings = true;
+      await this.save(open).finally(() => (this.quietSettings = false));
+    } else await this.backend.writeText(this.settingsPath, SETTINGS_TEMPLATE);
+    this.settings = mergeSettings(null);
+    this.applySettings();
+    this.backend.broadcastSettingsChanged();
+  }
+
   openQuickOpen(prefix = "") {
     openPicker({
       placeholder: "File…   ( > commands   : line   @ headings and tasks )",
@@ -2061,6 +2095,7 @@ export class App {
       { id: "theme.accent", title: "Theme: Accent color…", run: () => this.selectAccent() },
       { id: "theme.mascot", title: "Theme: Kilo's color…", run: () => this.selectMascot() },
       { id: "settings.open", title: "Preferences: Settings", run: () => this.openSettings() },
+      { id: "settings.json", title: "Preferences: Open settings.json", run: () => this.openSettings(true) },
       { id: "task.cycle", title: "Task: Next status", run: () => this.cycleTasks() },
       { id: "task.archive", title: "Task: Archive line to _done", run: () => this.archiveSelection() },
       { id: "task.archiveDone", title: "Task: Archive all completed tasks", run: () => this.archiveAllDone() },

@@ -159,17 +159,115 @@ export function mergeSettings(user: Partial<Settings> | null | undefined): Setti
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, Number.isFinite(n) ? n : min));
 
 /**
- * Changes a single value in the settings file text while keeping its comments
- * (used by the theme picker, zoom…).
+ * Changes a single top-level value in the settings file text while keeping its
+ * comments and layout (used by the settings screen, the theme picker, zoom…).
+ * Keys inside comments or nested objects are never touched.
  */
 export function setSettingInText(text: string, key: string, value: unknown): string {
-  const json = JSON.stringify(value);
-  const re = new RegExp(`("${key}"\\s*:\\s*)(?:"(?:[^"\\\\]|\\\\.)*"|-?\\d+(?:\\.\\d+)?|true|false|null)`);
-  if (re.test(text)) return text.replace(re, (_m, p1: string) => p1 + json);
+  const span = findValueSpan(text, key);
+  const json = formatValue(value, span ? lineIndent(text, span.from) : "  ");
+  if (span) return text.slice(0, span.from) + json + text.slice(span.to);
   // Missing key: add it right after the opening brace.
-  const i = text.indexOf("{");
-  if (i < 0) return `{\n  "${key}": ${json}\n}\n`;
+  const i = topLevelBrace(text);
+  if (i < 0) return `{\n  "${key}": ${formatValue(value, "  ")}\n}\n`;
   const rest = text.slice(i + 1);
-  const needsComma = /^\s*"/.test(rest);
-  return `${text.slice(0, i + 1)}\n  "${key}": ${json}${needsComma ? "," : ""}${rest}`;
+  const needsComma = /^\s*(?:\/\/[^\n]*\n\s*|\/\*[\s\S]*?\*\/\s*)*"/.test(rest);
+  return `${text.slice(0, i + 1)}\n  "${key}": ${formatValue(value, "  ")}${needsComma ? "," : ""}${rest}`;
+}
+
+/** Indentation of the line that contains `pos`. */
+function lineIndent(text: string, pos: number): string {
+  const start = text.lastIndexOf("\n", pos - 1) + 1;
+  return /^[ \t]*/.exec(text.slice(start))![0];
+}
+
+/** Short arrays and objects stay on one line; longer ones get one entry per line. */
+function formatValue(value: unknown, indent: string): string {
+  const flat = flatJson(value);
+  if (value === null || typeof value !== "object" || flat.length <= 72) return flat;
+  return JSON.stringify(value, null, 2).replace(/\n/g, `\n${indent}`);
+}
+
+/** `["a", "b"]`, `{ "a": 1 }`: JSON on one line, spaced like the template. */
+function flatJson(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(flatJson).join(", ")}]`;
+  if (v && typeof v === "object") {
+    const entries = Object.entries(v);
+    return entries.length ? `{ ${entries.map(([k, x]) => `${JSON.stringify(k)}: ${flatJson(x)}`).join(", ")} }` : "{}";
+  }
+  return JSON.stringify(v);
+}
+
+/** Skips spaces and comments from `i`. */
+function skipBlank(text: string, i: number): number {
+  for (;;) {
+    while (i < text.length && /\s/.test(text[i])) i++;
+    if (text.startsWith("//", i)) {
+      const nl = text.indexOf("\n", i);
+      i = nl < 0 ? text.length : nl + 1;
+    } else if (text.startsWith("/*", i)) {
+      const end = text.indexOf("*/", i + 2);
+      i = end < 0 ? text.length : end + 2;
+    } else return i;
+  }
+}
+
+/** End of the string that starts at `i` (a quote). */
+function stringEnd(text: string, i: number): number {
+  for (let j = i + 1; j < text.length; j++) {
+    if (text[j] === "\\") j++;
+    else if (text[j] === '"') return j + 1;
+  }
+  return text.length;
+}
+
+/** End of the JSON value that starts at `i`. */
+function valueEnd(text: string, i: number): number {
+  if (text[i] === '"') return stringEnd(text, i);
+  if (text[i] === "{" || text[i] === "[") {
+    let depth = 0;
+    for (let j = i; j < text.length; ) {
+      j = skipBlank(text, j);
+      const c = text[j];
+      if (c === '"') {
+        j = stringEnd(text, j);
+        continue;
+      }
+      if (c === "{" || c === "[") depth++;
+      else if (c === "}" || c === "]") {
+        depth--;
+        if (depth === 0) return j + 1;
+      }
+      j++;
+    }
+    return text.length;
+  }
+  const m = /^[^,}\]\s/]*/.exec(text.slice(i))!;
+  return i + m[0].length;
+}
+
+function topLevelBrace(text: string): number {
+  const i = skipBlank(text, 0);
+  return text[i] === "{" ? i : -1;
+}
+
+/** Where the value of a top-level key is, or null. */
+function findValueSpan(text: string, key: string): { from: number; to: number } | null {
+  const open = topLevelBrace(text);
+  if (open < 0) return null;
+  let i = open + 1;
+  for (;;) {
+    i = skipBlank(text, i);
+    if (text[i] !== '"') return null;
+    const keyEnd = stringEnd(text, i);
+    const name = text.slice(i + 1, keyEnd - 1);
+    i = skipBlank(text, keyEnd);
+    if (text[i] !== ":") return null;
+    const from = skipBlank(text, i + 1);
+    const to = valueEnd(text, from);
+    if (name === key) return { from, to };
+    i = skipBlank(text, to);
+    if (text[i] !== ",") return null;
+    i++;
+  }
 }

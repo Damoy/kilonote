@@ -13,7 +13,7 @@ const TIPS = [
   "Right-click a tab for colors and tab groups.",
   "{palette.symbol} jumps to a heading or a task of the note.",
   "The command palette ({palette.commands}) gives access to everything.",
-  "Settings ({settings.open}) are a plain, commented JSON file.",
+  "Settings ({settings.open}): every option, also kept in a plain, commented JSON file.",
   "The activity report sums up your completed tasks by project and by month.",
   "{file.toggleDone} switches between a note and its _done archive.",
 ];

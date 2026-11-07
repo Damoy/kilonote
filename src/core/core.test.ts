@@ -55,6 +55,37 @@ describe("settings", () => {
     const added = setSettingInText('{\n  "a": 1\n}', "font_size", 16);
     expect(parseJsonc(added)).toEqual({ a: 1, font_size: 16 });
   });
+
+  it("replaces arrays and objects, never a key in a comment or a nested object", () => {
+    const text = [
+      "// settings",
+      "{",
+      '  // "theme": "old" (commented out)',
+      '  "keybindings": { "theme": "x" },',
+      '  "theme": "midnight", // mine',
+      '  "note_extensions": ["txt",',
+      '    "md"], /* trailing */',
+      '  "task_statuses": {',
+      '    "todo": "blue"',
+      "  }",
+      "}",
+    ].join("\n");
+    let out = setSettingInText(text, "theme", "paper");
+    expect(out).toContain('// "theme": "old" (commented out)');
+    expect(out).toContain('"keybindings": { "theme": "x" }');
+    expect(out).toContain('"theme": "paper", // mine');
+    out = setSettingInText(out, "note_extensions", ["txt", "md", "org"]);
+    expect(out).toContain('"note_extensions": ["txt", "md", "org"], /* trailing */');
+    const statuses = { todo: "blue", ongoing: "orange", blocked: "red", wait: "purple", done: "green", ok: "green" };
+    out = setSettingInText(out, "task_statuses", statuses);
+    expect(out).toContain('  "task_statuses": {\n    "todo": "blue",');
+    expect(parseJsonc(out)).toEqual({ keybindings: { theme: "x" }, theme: "paper", note_extensions: ["txt", "md", "org"], task_statuses: statuses });
+    // Every template key round-trips.
+    let tpl = SETTINGS_TEMPLATE;
+    for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) tpl = setSettingInText(tpl, k, v);
+    expect(parseJsonc(tpl)).toEqual(DEFAULT_SETTINGS);
+    expect(setSettingInText(SETTINGS_TEMPLATE, "task_cycle", ["todo", "done"])).toContain('"task_cycle": ["todo", "done"],');
+  });
 });
 
 describe("themes", () => {
