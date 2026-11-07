@@ -26,6 +26,7 @@ import { TabBar } from "./ui/tabbar";
 import { Sidebar } from "./ui/sidebar";
 import { StatusBar } from "./ui/statusbar";
 import { Welcome } from "./ui/welcome";
+import { Preview } from "./ui/preview";
 import { GUIDE } from "./guide";
 
 export interface Doc {
@@ -84,6 +85,7 @@ interface Session {
   untitled: number;
   sidebar: { visible: boolean; width: number; panel: string; expanded: string[] };
   zen?: boolean;
+  preview?: boolean;
 }
 
 type AppEvent = "docs" | "active" | "workspace" | "settings" | "saved" | "selection";
@@ -161,6 +163,7 @@ export class App {
   sidebar!: Sidebar;
   statusbar!: StatusBar;
   welcome!: Welcome;
+  preview!: Preview;
   configDir = "";
   settingsPath = "";
   sessionPath = "";
@@ -207,6 +210,8 @@ export class App {
     this.sidebar = new Sidebar(this, document.getElementById("sidebar")!, document.getElementById("sb-resizer")!);
     this.statusbar = new StatusBar(this, document.getElementById("statusbar")!);
     this.welcome = new Welcome(this, document.getElementById("welcome")!);
+    this.preview = new Preview(this);
+    this.preview.attach();
 
     setFocusRestorer(() => this.focusEditor());
     setPaletteFocusRestorer(() => this.focusEditor());
@@ -1764,6 +1769,7 @@ export class App {
       untitled: this.untitledCounter,
       sidebar: this.sidebar.sessionState(),
       zen: this.zen,
+      preview: this.preview.visible,
     };
   }
 
@@ -1846,6 +1852,7 @@ export class App {
       const activeTab = s.tabs?.[s.active];
       const target = activeTab ? this.docs.find((d) => (activeTab.path ? d.path === activeTab.path : d.title === activeTab.title)) : this.docs[0];
       if (s.zen) this.setZen(true);
+      this.preview.visible = !!s.preview;
       this.activate(target ?? this.docs[0] ?? null);
       for (const d of conflicts) this.flagConflict(d);
     }
@@ -1933,6 +1940,10 @@ export class App {
     void this.updateSetting("font_size", size);
   }
 
+  toastInfo(message: string) {
+    toast(message);
+  }
+
   showAbout() {
     void confirm({
       title: `KiloNote ${__APP_VERSION__}`,
@@ -1983,6 +1994,7 @@ export class App {
       F11: "view.fullscreen",
       "Shift+F11": "view.zen",
       "Alt+Z": "view.wrap",
+      "Mod+Shift+V": "view.preview",
     };
     if (this.backend.platform !== "macos") keys["Mod+H"] = "edit.replace";
     for (let i = 1; i <= 9; i++) keys[`Mod+${i}`] = `tab.goto.${i}`;
@@ -2043,6 +2055,7 @@ export class App {
       { id: "view.zoomOut", title: "View: Decrease text size", run: () => this.zoom(-1) },
       { id: "view.zoomReset", title: "View: Reset text size", run: () => this.zoom(null) },
       { id: "view.wrap", title: "View: Toggle word wrap", run: () => this.updateSetting("word_wrap", !this.settings.word_wrap) },
+      { id: "view.preview", title: "View: Toggle Markdown preview", run: () => this.preview.toggle() },
       { id: "view.lineNumbers", title: "View: Toggle line numbers", run: () => this.updateSetting("line_numbers", !this.settings.line_numbers) },
       { id: "theme.select", title: "Theme: Select…", run: () => this.selectTheme() },
       { id: "theme.accent", title: "Theme: Accent color…", run: () => this.selectAccent() },

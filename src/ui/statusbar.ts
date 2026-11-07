@@ -26,6 +26,7 @@ export class StatusBar {
   private eol = h("button", { class: "st-item", title: "Line endings" });
   private lang = h("button", { class: "st-item", title: "Document type" });
   private save = h("button", { class: "st-item st-save" });
+  private previewBtn = h("button", { class: "st-item st-icon st-preview", title: titleWithKey("Markdown preview", "view.preview") }, icon("eye"));
   private counted: unknown = null;
 
   constructor(private app: App, el: HTMLElement) {
@@ -33,7 +34,8 @@ export class StatusBar {
     const themeBtn = h("button", { class: "st-item st-icon", title: "Theme", onclick: () => app.selectTheme() }, icon("palette"));
     const settingsBtn = h("button", { class: "st-item st-icon", title: titleWithKey("Settings", "settings.open"), onclick: () => app.openSettings() }, icon("gear"));
     this.left.append(sidebarBtn, this.tasks);
-    this.right.append(this.pos, this.words, this.encoding, this.eol, this.lang, this.save, themeBtn, settingsBtn);
+    this.right.append(this.pos, this.words, this.encoding, this.eol, this.lang, this.previewBtn, this.save, themeBtn, settingsBtn);
+    this.previewBtn.addEventListener("click", () => app.preview.toggle());
     el.append(this.left, this.right);
 
     this.pos.addEventListener("click", () => app.openQuickOpen(":"));
@@ -119,6 +121,8 @@ export class StatusBar {
     const doc = this.app.active;
     const show = !!doc;
     for (const el of [this.encoding, this.eol, this.lang, this.save]) el.hidden = !show;
+    this.previewBtn.hidden = doc?.lang !== "markdown";
+    this.previewBtn.classList.toggle("active", !!this.app.preview?.visible);
     if (!doc) return;
     this.encoding.textContent = doc.encoding;
     this.eol.textContent = doc.eol === "\r\n" ? "CRLF" : "LF";

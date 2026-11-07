@@ -35,7 +35,7 @@ export class Welcome {
     const app = this.app;
     const visible = !app.active;
     this.el.hidden = !visible;
-    document.getElementById("editor-host")!.hidden = visible;
+    (document.getElementById("editor-area") ?? document.getElementById("editor-host")!).hidden = visible;
     if (!visible) return;
     const key = (id: string) => shortcutFor(id);
     const action = (label: string, ic: string, id: string, run: () => unknown) =>
