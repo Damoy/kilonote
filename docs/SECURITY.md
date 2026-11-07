@@ -34,7 +34,7 @@ workstation. Every point can be checked in the source code.
 | Location | Content |
 |---|---|
 | `%LOCALAPPDATA%\KiloNote\` | program (`kilonote.exe`, `uninstall.exe`) |
-| `%APPDATA%\dev.damoy.kilonote\` | settings (`settings.json`), sessions (open tabs, one file per window), window positions |
+| `%APPDATA%\dev.damoy.kilonote\` | settings (`settings.json`), sessions (open tabs, one file per window), window positions, local history (`history\`: copies of versions KiloNote replaced, the 300 newest are kept) |
 | `%LOCALAPPDATA%\dev.damoy.kilonote\` | WebView2 engine cache |
 | `HKCU\…\Uninstall\KiloNote` | "Apps & features" entry |
 | `HKCU\Software\Classes\KiloNote.Document`, `…\Applications\kilonote.exe`, `…\.<ext>\OpenWithProgids` | "Open with" entries for `.txt .text .md .markdown .note .todo .log` (installer only; default apps are never changed; removed on uninstall) |
@@ -57,9 +57,16 @@ workstation. Every point can be checked in the source code.
   there is no permission to open or execute files, and no shell or process plugin.
 - Automated tests enforce this (`src/security.test.ts`, `src/security.behavior.test.ts`):
   they fail if a launch capability is added, and they check with a recording backend that
-  opening executables from every entry point never does more than read.
+  opening executables from every entry point never does more than read. The end-to-end
+  tests (`e2e/app.e2e.mjs`, run in CI on the real app) put executables in a notes folder,
+  open them every possible way, check that none ran, and check that the window is denied
+  the system's "open file" call.
 - Note content is never interpreted as HTML (it is displayed by a text editor), which
-  rules out script injection through an opened file.
+  rules out script injection through an opened file. The Markdown preview builds its
+  output element by element: raw HTML is shown as text, images and other remote content
+  are never loaded, and only http(s)/mailto links can be opened (in the browser).
+- "Replace in files" only rewrites the files of the folder the user opened, after a
+  confirmation, keeps a copy of each in the local history and can be undone.
 - Browser developer tools are disabled in the distributed build.
 
 ## Points of attention

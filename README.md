@@ -52,32 +52,43 @@ On macOS, use ⌘ instead of Ctrl.
 **Editor**
 - Fast even on large files (CodeMirror 6), multiple cursors (Ctrl+D, Alt+click), column selection
 - Note highlighting: `#` headings, bullets, clickable links (Ctrl+click), dates, `#tags`, `@mentions`
-- Markdown and JSON highlighting; UTF-8, Windows-1252 and UTF-16 files are read correctly, LF/CRLF line endings are kept
+- Markdown and JSON highlighting, and a live **Markdown preview** next to the editor (Ctrl+Shift+V)
+- Files keep their encoding (UTF-8, UTF-8 with BOM, UTF-16, Windows-1252) and their LF/CRLF line endings;
+  the status bar converts them on demand
 - Autosave, atomic writes, unsaved tabs kept between sessions
 - Notes changed by another program are reloaded automatically (or you choose, if you have unsaved edits)
+- **Local history**: whenever a version is about to be thrown away (overwriting a file changed
+  elsewhere, reloading over unsaved edits, replacing in files), a copy is kept: *File: Local history*
+- Large files ask before opening (over 20 MB); binary files are never opened as text
 
 **Tasks**
 - A task is a line ending with ` - <status>`: `- call colleague X - todo`
 - **Ctrl+Enter** cycles the status: `todo` → `ongoing` → `done` (on one or several lines)
 - **Click a status** to pick another one or archive the task
 - **Ctrl+Shift+Enter** archives the task to `<project>_done.txt`, with the date: `- call colleague X - done [2026-11-02]`
-- **Tasks view**: the tasks of all your notes in one place, ongoing ones first
-- **Activity report**: a summary of the year by project and by month, ready for your yearly review
+- **Due dates**: `- send the report @2026-11-14 - todo`, or **Ctrl+Shift+U** (today, tomorrow,
+  next Monday, `14/11`, `+3`, `2w`…); overdue tasks turn red
+- **Tasks view**: the tasks of all your notes in one place, ongoing ones first; filters
+  *Open*, *Ongoing*, *Due* and by `#tag`; the badge counts overdue tasks
+- **Activity report**: a summary by project and by month, for this or last week, month or year,
+  the last 12 months or all time, optionally limited to one `#tag` (a client, a topic…)
 
 **Organization**
-- **Several windows** (Ctrl+Shift+N), each with its own tabs and folder; move a tab to a new
-  window; every window comes back at the next launch
-- Colored tabs and **tab groups** with a name and a color, collapsible; drag and drop
+- **Several windows** (Ctrl+Shift+N), each with its own tabs and folder; drag a tab onto another
+  window (or out of the window to open a new one); every window comes back at the next launch
+- Colored tabs and **tab groups** with a name and a color, collapsible; drag and drop; a list of
+  all tabs when they no longer fit
 - Sidebar and folder can be closed from their own buttons (or Ctrl+B)
-- File explorer, fuzzy file search (Ctrl+P), search in all files (Ctrl+Shift+F)
+- File explorer, fuzzy file search (Ctrl+P), search and **replace in all files** (Ctrl+Shift+F, with undo)
 - Command palette (Ctrl+Shift+P), go to a heading or task (Ctrl+R), go to a line (Ctrl+G)
 
 **Customization**
 - 15 themes: Midnight, Forest, Ocean, Retro, Dusk, Slate, Abyss, Neon, Ember (dark);
   Paper, Sand, Mint, Sakura, Latte, Frost (light); or automatic based on the system
 - Kilo, the mascot, takes the theme's accent color, or one of the [logo pack](#logo-pack) colors
-- Accent color, any theme color, font, size, line height
-- Task statuses and their colors, the status cycle, the archive suffix, keyboard shortcuts: all in a commented `settings.json`
+- A **settings screen** (Ctrl+,): theme, accent color, fonts and sizes, editor, files, task
+  statuses and their colors, archive options, shortcuts
+- Everything is also in a commented `settings.json` (any theme color, custom shortcuts…)
 - Zen mode (Shift+F11), full screen (F11)
 
 ## Daily task tracking
@@ -94,7 +105,9 @@ work.txt                                     work_done.txt
 2. When you start working on it: **Ctrl+Enter** → `ongoing`.
 3. When it is done: **Ctrl+Shift+Enter** → the line moves to `work_done.txt`, stamped with today's date.
    **Ctrl+Shift+D** switches between `work.txt` and `work_done.txt`.
-4. At the end of the year: command palette → **Report: Generate activity report**.
+4. Give it a deadline if needed: **Ctrl+Shift+U** → `@2026-11-14`; it turns red once overdue.
+5. At the end of the week or the year: command palette → **Report: Generate activity report**
+   (or **Report for a #tag** to sum up one client or topic).
 
 The statuses `todo`, `ongoing`, `blocked`, `wait`, `done` and `ok` are recognized out of the box,
 in any case. Your existing files work as they are.
@@ -109,8 +122,18 @@ publishes `SHA256SUMS.txt`, the checksums of every file.
 
 Run `KiloNote_<version>_x64-setup.exe`. It installs **without administrator rights**, into
 `%LOCALAPPDATA%\KiloNote`, with Start menu and Desktop shortcuts. Open KiloNote, then
-right-click its taskbar icon → **Pin to taskbar**. The `KiloNote.exe` produced by the build
-scripts is also a portable version (nothing to install).
+right-click its taskbar icon → **Pin to taskbar**. `KiloNote_<version>_x64-portable.exe` is a
+portable version (a single file, nothing to install).
+
+With [Scoop](https://scoop.sh) (portable version, per-user, with a Start menu shortcut):
+
+```powershell
+scoop install https://raw.githubusercontent.com/Damoy/kilonote/main/packaging/scoop/kilonote.json
+```
+
+`scoop update kilonote` then brings new versions. Manifests for
+[winget](https://learn.microsoft.com/windows/package-manager/) are in
+[`packaging/winget`](packaging/winget) (per-user installer, silent install supported).
 
 The installer also adds KiloNote to Explorer's **Open with** menu for `.txt`, `.md`,
 `.markdown`, `.text`, `.note`, `.todo` and `.log` files, without changing your default
@@ -124,7 +147,8 @@ The app is not code-signed yet, so SmartScreen may warn you the first time:
 
 Open `KiloNote_<version>_universal.dmg` (Intel and Apple Silicon) and drag KiloNote to
 Applications. The app is not signed: the first time, right-click KiloNote → *Open*
-(or run `xattr -cr /Applications/KiloNote.app`).
+(or run `xattr -cr /Applications/KiloNote.app`). KiloNote then appears in the Finder's
+**Open with** menu for text and Markdown files, without becoming the default app.
 
 ### Linux
 
@@ -166,7 +190,9 @@ On macOS, Ctrl becomes ⌘.
 | Go to heading or task | Ctrl+R |
 | Go to line | Ctrl+G |
 | Find / replace | Ctrl+F / Ctrl+H |
-| Search in folder | Ctrl+Shift+F |
+| Search (and replace) in folder | Ctrl+Shift+F |
+| Task: set due date | Ctrl+Shift+U |
+| Markdown preview | Ctrl+Shift+V |
 | New note / open file / open folder | Ctrl+N / Ctrl+O / Ctrl+Shift+O |
 | New window | Ctrl+Shift+N |
 | Save / save as | Ctrl+S / Ctrl+Shift+S |
@@ -190,8 +216,10 @@ Every shortcut can be changed in `settings.json`:
 
 ## Customization
 
-**Ctrl+,** opens `settings.json`. Every option is documented in it, and saving applies the
-changes immediately. For example:
+**Ctrl+,** opens the settings screen; every change applies at once. Everything is stored in
+`settings.json` (*Open settings.json* in the settings screen, or *Preferences: Open
+settings.json* in the command palette), where every option is documented and saving applies
+the changes immediately. For example:
 
 ```jsonc
 {
@@ -201,6 +229,8 @@ changes immediately. For example:
   "font_family": "Cascadia Code, monospace",
   "task_statuses": { "todo": "blue", "ongoing": "orange", "waiting": "purple", "done": "green", "ok": "green" },
   "task_cycle": ["todo", "ongoing", "done"],
+  "task_ongoing_statuses": ["ongoing"],
+  "task_blocked_statuses": ["blocked", "waiting"],
   "archive_suffix": "_done",
   "archive_status": "ok",
   "archive_date": true
@@ -223,7 +253,8 @@ system dependencies of [Tauri](https://tauri.app/start/prerequisites/) for your 
 | `npm run install:windows` | same, then updates the installed KiloNote (from WSL, see below) |
 | `scripts\build-windows.ps1 [-Install]` | same, directly on Windows (PowerShell) |
 | `npm run dev` | the interface alone in a browser, with demo notes |
-| `npm test` | unit tests |
+| `npm test` | unit and behavior tests (the whole interface on an in-memory disk) |
+| `npm run test:e2e` | end-to-end tests of the real app through WebDriver (run in CI on Linux, see `e2e/`) |
 | `npm run icons` | regenerates every icon and the logo pack from the pixel art in `scripts/generate-icons.py` |
 
 ### Linux
@@ -290,19 +321,23 @@ The script checks that everything is committed, bumps the version everywhere, ru
 creates the `Version X.Y.Z` commit and the `vX.Y.Z` tag, then pushes to GitHub. GitHub
 Actions then builds the installers for the three systems and publishes them, with their
 checksums, in the release. With `--local`, the Windows installer is built on your machine and
-published right away with the [GitHub CLI](https://cli.github.com).
+published right away with the [GitHub CLI](https://cli.github.com). Once the checksums are
+online, the workflow also updates the Scoop and winget manifests in `packaging/`
+(`scripts/update-packaging.sh`).
 
 ## Development
 
 ```
 src/
   core/         backend (Tauri or browser demo), paths, settings, themes, commands
-  editor/       CodeMirror: tasks (pure logic), note highlighting, setup
-  ui/           tabs and tab groups, sidebar, palette, menus, status bar, welcome screen
+  editor/       CodeMirror: tasks (pure logic), note highlighting, setup, Markdown preview rendering
+  ui/           tabs and tab groups, sidebar, palette, menus, status bar, settings screen, preview
   app.ts        controller: documents, saving, session, commands
   report.ts     activity report
 src-tauri/      native Rust backend: atomic reads/writes, archives, trash, single instance
-scripts/        Windows builds (WSL or PowerShell), releases, pixel art icon generation
+scripts/        Windows builds (WSL or PowerShell), releases, packaging manifests, pixel art icons
+packaging/      Scoop and winget manifests
+e2e/            end-to-end tests of the real app (WebDriver)
 docs/           security sheet, screenshots
 ```
 
