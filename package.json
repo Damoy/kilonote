@@ -1,7 +1,7 @@
 {
   "name": "kilonote",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Light, keyboard-driven note-taking app with built-in todo / ongoing / done task tracking, archives and yearly activity reports.",
   "license": "MIT",
   "author": "Damoy",
