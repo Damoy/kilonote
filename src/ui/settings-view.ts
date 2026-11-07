@@ -6,7 +6,9 @@ import { shortcutFor } from "../core/commands";
 import type { Settings } from "../core/settings";
 import { findTheme, MASCOT_VARIANTS, PALETTE_LABELS, PALETTE_NAMES, resolveColor, THEMES } from "../core/themes";
 import { h, icon } from "./dom";
+import { ICON_PACKS } from "./icons";
 import { confirm, showMenu } from "./overlay";
+import { showCheatSheet } from "./cheatsheet";
 
 type Section = "appearance" | "editor" | "files" | "tasks" | "shortcuts";
 const SECTIONS: [Section, string, string][] = [
@@ -235,6 +237,8 @@ class SettingsView {
       this.select("theme", "Theme", themeOptions),
       this.row("Accent color", swatches),
       this.select("mascot", "Kilo's color", mascotOptions, "The mascot of the welcome screen"),
+      this.heading("Icons"),
+      this.iconPacks(),
       this.heading("Text"),
       this.text("font_family", "Editor font", "A list of fonts, the first one installed is used"),
       this.number("font_size", "Editor text size", { min: 8, max: 40, unit: "px" }),
@@ -243,6 +247,33 @@ class SettingsView {
       h("p", { class: "kn-set-note" }, "Tip: Ctrl+wheel or Ctrl+= / Ctrl+- also change the editor text size. Every theme color can be overridden in settings.json (\"colors\")."),
       h("button", { class: "kn-btn subtle kn-set-link", onclick: () => app.selectTheme() }, icon("palette"), "Preview the themes one by one…"),
     ];
+  }
+
+  /** The icon packs, each previewed with a few of its icons. */
+  private iconPacks(): HTMLElement {
+    const wrap = h("div", { class: "kn-set-packs", role: "radiogroup", "aria-label": "Icon pack" });
+    const sample: [string, string][] = [["folder", "ft-dir"], ["fileMd", "ft-markdown"], ["fileJson", "ft-json"], ["fileCode", "ft-code"], ["search", ""], ["gear", ""]];
+    const render = () => {
+      wrap.replaceChildren(
+        ...ICON_PACKS.map((p) =>
+          h("button", {
+            class: `kn-set-pack${this.s.icon_pack === p.id ? " selected" : ""}`,
+            role: "radio",
+            "aria-checked": String(this.s.icon_pack === p.id),
+            "data-pack": p.id,
+            onclick: async () => {
+              await this.set("icon_pack", p.id);
+              render();
+            },
+          },
+          h("span", { class: "kn-set-pack-icons" }, ...sample.map(([n, cls]) => icon(n, cls, p.id))),
+          h("span", { class: "kn-set-pack-name" }, p.label),
+          h("small", {}, p.hint)),
+        ),
+      );
+    };
+    render();
+    return wrap;
   }
 
   private tasks(): HTMLElement[] {
@@ -308,6 +339,9 @@ class SettingsView {
       .map((c) => ({ title: c.title, key: shortcutFor(c.id), id: c.id }))
       .sort((a, b) => a.title.localeCompare(b.title));
     return [
+      this.toggle("show_shortcuts_at_startup", "Show the cheat sheet at startup", "The main shortcuts, on one screen"),
+      h("button", { class: "kn-btn subtle kn-set-link", onclick: () => { this.close(); showCheatSheet(this.app); } }, icon("keyboard"), "Open the cheat sheet"),
+      this.heading("All commands"),
       h("p", { class: "kn-set-note" }, 'To change a shortcut, add it to "keybindings" in settings.json, e.g. { "Ctrl+Alt+T": "task.cycle" }; an empty command id disables a shortcut.'),
       h("div", { class: "kn-set-keys" },
         ...rows.map((r) => h("div", { class: "kn-set-key", title: r.id }, h("span", {}, r.title), r.key ? h("kbd", {}, r.key) : h("small", {}, "—")))),

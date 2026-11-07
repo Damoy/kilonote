@@ -3,6 +3,7 @@
 // it is copied as is the first time the settings are opened.
 
 import { parseJsonc } from "./jsonc";
+import { ICON_PACKS } from "../ui/icons";
 
 export interface Settings {
   theme: string;
@@ -34,6 +35,8 @@ export interface Settings {
   auto_archive: boolean;
   tab_colors: string[];
   mascot: string;
+  icon_pack: string;
+  show_shortcuts_at_startup: boolean;
   keybindings: Record<string, string>;
 }
 
@@ -49,6 +52,11 @@ export const SETTINGS_TEMPLATE = `// KiloNote settings
   // Kilo's color on the welcome screen: "theme" (follows the accent color) or one of
   // "classic", "mint", "ocean", "ember", "sakura", "retro", "slate", "ink"
   "mascot": "theme",
+  // Icons: "line" (thin outlines), "bold", "duotone" (soft fills, file types
+  // in color) or "pixel" (pixel art, like Kilo)
+  "icon_pack": "line",
+  // Show the keyboard shortcuts cheat sheet when KiloNote starts
+  "show_shortcuts_at_startup": true,
   // Custom accent color (e.g. "#ff8a65"), or null to use the theme's
   "accent": null,
   // Override any theme color. Available keys:
@@ -151,6 +159,7 @@ export function mergeSettings(user: Partial<Settings> | null | undefined): Setti
     .filter((e): e is string => typeof e === "string")
     .map((e) => e.trim().replace(/^\.+/, "").toLowerCase())
     .filter(Boolean);
+  if (!ICON_PACKS.some((p) => p.id === out.icon_pack)) out.icon_pack = DEFAULT_SETTINGS.icon_pack;
   // Without a suffix, a note would be its own archive.
   if (typeof out.archive_suffix !== "string" || !out.archive_suffix.trim()) out.archive_suffix = DEFAULT_SETTINGS.archive_suffix;
   return out;

@@ -356,3 +356,73 @@ describe("tasks", () => {
     expect(app.settings.archive_suffix).toBe("_done");
   });
 });
+
+describe("cheat sheet", () => {
+  it("shows at startup until 'Don't show at startup' is ticked", async () => {
+    const { app, disk } = await start({});
+    const sheet = document.querySelector(".kn-cheatsheet");
+    expect(sheet).not.toBeNull();
+    const box = sheet!.querySelector<HTMLInputElement>(".cs-check input")!;
+    box.checked = true;
+    box.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(app.settings.show_shortcuts_at_startup).toBe(false);
+    expect(disk.text("/config/settings.json")).toContain('"show_shortcuts_at_startup": false');
+
+    document.getElementById("overlay-root")!.replaceChildren();
+    const again = new App(app.backend);
+    await again.init();
+    expect(document.querySelector(".kn-cheatsheet")).toBeNull();
+  });
+});
+
+describe("tab groups", () => {
+  it("a collapsed group keeps showing the tab being edited, and never switches tab", async () => {
+    const { app } = await start({ "/notes/a.txt": "a", "/notes/b.txt": "b", "/notes/c.txt": "c" });
+    for (const p of ["/notes/a.txt", "/notes/b.txt", "/notes/c.txt"]) await app.openFile(p);
+    const group = { id: "g", name: "Work", color: "blue", collapsed: false };
+    app.groups.push(group);
+    app.docs[0].groupId = app.docs[1].groupId = "g";
+    app.activate(app.docs[1]);
+    app.toggleGroup(group);
+    expect(group.collapsed).toBe(true);
+    expect(app.active?.path).toBe("/notes/b.txt");
+    expect([...document.querySelectorAll(".kn-tab-name")].map((e) => e.textContent)).toEqual(["b.txt", "c.txt"]);
+    // Going to another tab of the group keeps it collapsed.
+    app.activate(app.docs[0]);
+    expect(group.collapsed).toBe(true);
+    expect([...document.querySelectorAll(".kn-tab-name")].map((e) => e.textContent)).toEqual(["a.txt", "c.txt"]);
+    app.setAllGroupsCollapsed(false);
+    expect(document.querySelectorAll(".kn-tab").length).toBe(3);
+  });
+});
+
+describe("document types and formatting", () => {
+  it("code files get their language, and renaming a note follows the new extension", async () => {
+    const { app } = await start({ "/notes/run.py": "print(1)\n", "/notes/notes.txt": "- x - todo\n" });
+    expect((await app.openFile("/notes/run.py"))?.lang).toBe("python");
+    const doc = (await app.openFile("/notes/notes.txt"))!;
+    expect(doc.lang).toBe("text");
+    const renaming = app.renamePath("/notes/notes.txt");
+    const input = document.querySelector<HTMLInputElement>(".kn-modal input")!;
+    input.value = "notes.md";
+    document.querySelector<HTMLButtonElement>(".kn-modal .kn-btn.primary")!.click();
+    await renaming;
+    expect(doc.path).toBe("/notes/notes.md");
+    expect(doc.lang).toBe("markdown");
+  });
+
+  it("Format document rewrites JSON in one undoable step; invalid JSON is left alone", async () => {
+    const { app } = await start({ "/notes/data.json": '{"a":[1,2],"b":{"c":true}}' });
+    await app.openFile("/notes/data.json");
+    app.formatDocument();
+    expect(app.view.state.doc.toString()).toBe('{\n    "a": [1, 2],\n    "b": {\n        "c": true\n    }\n}\n');
+    const { undo } = await import("@codemirror/commands");
+    undo(app.view);
+    expect(app.view.state.doc.toString()).toBe('{"a":[1,2],"b":{"c":true}}');
+    app.view.dispatch({ changes: { from: 0, to: app.view.state.doc.length, insert: '{"a": 1 "b": 2}' } });
+    app.formatDocument();
+    expect(app.view.state.doc.toString()).toBe('{"a": 1 "b": 2}');
+    expect(document.querySelector(".kn-toast.error")?.textContent).toContain("line 1, column 9");
+  });
+});

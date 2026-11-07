@@ -3,8 +3,9 @@
 import type { App } from "../app";
 import { shortcutFor, titleWithKey } from "../core/commands";
 import type { Entry } from "../core/backend";
-import { basename, dirname, extname, isDoneFile, projectName, relative, samePath } from "../core/path";
+import { basename, dirname, isDoneFile, isInside, projectName, relative, samePath } from "../core/path";
 import { resolveColor } from "../core/themes";
+import { fileKindFor } from "../editor/languages";
 import { dueState, findTags, findTasks, isDoneStatus, isOngoingStatus, todayISO, type FoundTask } from "../editor/tasks";
 import { debounce, h, icon } from "./dom";
 import { confirm, showMenu, toast, type MenuItem } from "./overlay";
@@ -19,11 +20,25 @@ function shortDate(iso: string): string {
 }
 type TaskFilter = "open" | "ongoing" | "due" | "all";
 
+/** Icon of a file in the explorer, and its type class (colored by some icon packs). */
+export function fileIcon(path: string, archiveSuffix: string): [string, string] {
+  if (isDoneFile(path, archiveSuffix)) return ["fileDone", "ft-done"];
+  const kind = fileKindFor(path);
+  const name = { markdown: "fileMd", json: "fileJson", code: "fileCode", config: "fileCode", markup: "fileCode", image: "fileImage", binary: "fileBin", text: "file" }[kind];
+  return [name, `ft-${kind}`];
+}
+
+/** "Expand all" stops after this many folders (huge trees stay usable). */
+const EXPAND_LIMIT = 300;
+
 export class Sidebar {
   visible = true;
   width = 260;
   panel: Panel = "files";
   private expanded = new Set<string>();
+  /** The folder last clicked in the explorer: the target of "Expand / collapse all". */
+  private selectedDir: string | null = null;
+  private toggleAllBtn = h("button", { class: "kn-icon-btn sb-toggle-all" });
   private cache = new Map<string, Entry[]>();
   private panels: Record<Panel, HTMLElement>;
   private switchBtns: Record<Panel, HTMLElement>;
@@ -64,6 +79,13 @@ export class Sidebar {
       e.preventDefault();
       this.showDirMenu(app.workspace, e.clientX, e.clientY, true);
     });
+    // A click in the empty space below the files: no folder selected anymore.
+    this.treeEl.addEventListener("click", (e) => {
+      if (e.target !== this.treeEl || !this.selectedDir) return;
+      this.selectedDir = null;
+      this.markActive();
+    });
+    this.toggleAllBtn.addEventListener("click", () => void this.toggleAll());
 
     const filterBar = h("div", { class: "sb-chips" });
     const filters: [TaskFilter, string][] = [["open", "Open"], ["ongoing", "Ongoing"], ["due", "Due"], ["all", "All"]];
@@ -264,7 +286,7 @@ export class Sidebar {
         h("button", { class: "kn-icon-btn", title: "New note", onclick: () => app.createFileIn(ws) }, icon("newFile")),
         h("button", { class: "kn-icon-btn", title: "New folder", onclick: () => app.createFolderIn(ws) }, icon("newFolder")),
         h("button", { class: "kn-icon-btn", title: "Refresh", onclick: () => this.refreshTree() }, icon("refresh")),
-        h("button", { class: "kn-icon-btn", title: "Collapse all", onclick: () => { this.expanded.clear(); void this.renderTree(); } }, icon("collapse")),
+        this.toggleAllBtn,
         h("button", { class: "kn-icon-btn", title: "Close folder", onclick: () => app.closeFolder() }, icon("x")),
       );
     }
@@ -322,21 +344,29 @@ export class Sidebar {
     for (const e of entries) {
       const open = e.isDir && this.expanded.has(e.path);
       const done = !e.isDir && isDoneFile(e.path, suffix);
-      const ext = extname(e.path);
+      const [ic, kind] = e.isDir ? [open ? "folderOpen" : "folder", "ft-dir"] : fileIcon(e.path, suffix);
       const row = h(
         "div",
         { class: `sb-row${e.isDir ? " dir" : ""}${done ? " done" : ""}`, style: { paddingLeft: `${10 + depth * 14}px` }, title: e.path, "data-path": e.path },
         e.isDir ? icon("chevron", `sb-chevron${open ? " open" : ""}`) : h("span", { class: "sb-chevron-space" }),
-        icon(e.isDir ? "folder" : done ? "fileDone" : ext === "md" || ext === "markdown" ? "fileMd" : "file", "sb-file-icon"),
+        icon(ic, `sb-file-icon ${kind}`),
         h("span", { class: "sb-name" }, e.name),
       );
-      row.addEventListener("click", () => {
+      row.addEventListener("click", (ev) => {
         if (e.isDir) {
-          if (open) this.expanded.delete(e.path);
-          else this.expanded.add(e.path);
-          void this.renderTree();
-          this.app.emit("workspace");
-        } else void this.app.openFile(e.path);
+          this.selectedDir = e.path;
+          // Alt+click: the folder and everything inside it.
+          if (ev.altKey) void (open ? this.collapseAll(e.path) : this.expandAll(e.path));
+          else {
+            if (open) this.expanded.delete(e.path);
+            else this.expanded.add(e.path);
+            void this.renderTree();
+            this.app.emit("workspace");
+          }
+        } else {
+          this.selectedDir = null;
+          void this.app.openFile(e.path);
+        }
       });
       row.addEventListener("contextmenu", (ev) => {
         ev.preventDefault();
@@ -350,9 +380,92 @@ export class Sidebar {
 
   private markActive() {
     const p = this.app.active?.path;
+    const sel = this.selectedDir;
+    let found = false;
     this.treeEl.querySelectorAll<HTMLElement>(".sb-row").forEach((r) => {
       r.classList.toggle("active", !!p && samePath(r.dataset.path!, p));
+      const selected = !!sel && samePath(r.dataset.path!, sel);
+      r.classList.toggle("selected", selected);
+      found ||= selected;
     });
+    // Renamed, deleted, or hidden in a collapsed folder: nothing is selected.
+    if (sel && !found) this.selectedDir = null;
+    this.updateToggleAll();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Expand / collapse all
+
+  /** The folder the button acts on: the selected one, otherwise the whole tree. */
+  private toggleTarget(): string | null {
+    const ws = this.app.workspace;
+    if (!ws) return null;
+    if (this.selectedDir && (isInside(this.selectedDir, ws) || samePath(this.selectedDir, ws))) return this.selectedDir;
+    return ws;
+  }
+
+  /** "Expand all" while a folder of the target is still closed, "Collapse all" once everything is open. */
+  private canExpandMore(target: string): boolean {
+    const isRoot = !!this.app.workspace && samePath(target, this.app.workspace);
+    if (!isRoot && !this.expanded.has(target)) return true;
+    for (const r of this.treeEl.querySelectorAll<HTMLElement>(".sb-row.dir")) {
+      const p = r.dataset.path!;
+      if (isInside(p, target) && !this.expanded.has(p)) return true;
+    }
+    return false;
+  }
+
+  private updateToggleAll() {
+    const target = this.toggleTarget();
+    if (!target) return;
+    const expand = this.canExpandMore(target);
+    const isRoot = samePath(target, this.app.workspace!);
+    const what = isRoot ? "all folders" : `"${basename(target)}"`;
+    this.toggleAllBtn.title = `${expand ? "Expand" : "Collapse"} ${what}${isRoot ? "" : " and its subfolders"} (Alt+click a folder does the same)`;
+    if (this.toggleAllBtn.dataset.mode !== (expand ? "expand" : "collapse")) {
+      this.toggleAllBtn.dataset.mode = expand ? "expand" : "collapse";
+      this.toggleAllBtn.replaceChildren(icon(expand ? "expand" : "collapse"));
+    }
+  }
+
+  async toggleAll() {
+    const target = this.toggleTarget();
+    if (!target) return;
+    if (this.canExpandMore(target)) await this.expandAll(target);
+    else this.collapseAll(target);
+  }
+
+  /** Opens a folder and all its subfolders (up to EXPAND_LIMIT folders). */
+  async expandAll(dir: string) {
+    const ws = this.app.workspace;
+    if (!ws) return;
+    let level = [dir];
+    let count = 0;
+    if (!samePath(dir, ws)) this.expanded.add(dir);
+    while (level.length && count < EXPAND_LIMIT) {
+      const lists = await Promise.all(level.map((d) => this.list(d)));
+      const next: string[] = [];
+      for (const entries of lists) {
+        for (const e of entries) {
+          if (!e.isDir || count >= EXPAND_LIMIT) continue;
+          this.expanded.add(e.path);
+          next.push(e.path);
+          count++;
+        }
+      }
+      level = next;
+    }
+    if (count >= EXPAND_LIMIT) toast(`Only the first ${EXPAND_LIMIT} folders were expanded.`);
+    await this.renderTree();
+    this.app.emit("workspace");
+  }
+
+  collapseAll(dir: string) {
+    const ws = this.app.workspace;
+    if (ws && samePath(dir, ws)) this.expanded.clear();
+    else for (const p of [...this.expanded]) if (samePath(p, dir) || isInside(p, dir)) this.expanded.delete(p);
+    void this.renderTree();
+    this.app.emit("workspace");
   }
 
   private showFileMenu(path: string, x: number, y: number) {
@@ -379,6 +492,9 @@ export class Sidebar {
       { label: "New note here…", icon: "newFile", action: () => { this.expanded.add(path); return app.createFileIn(path); } },
       { label: "New folder…", icon: "newFolder", action: () => app.createFolderIn(path) },
       { label: "Open folder in new window", icon: "newWindow", action: () => app.backend.openWindow([path]) },
+      { separator: true },
+      { label: "Expand all", icon: "expand", action: () => this.expandAll(path) },
+      { label: "Collapse all", icon: "collapse", action: () => this.collapseAll(path) },
       { separator: true },
       { label: "Copy path", action: () => app.copyText(path) },
       { label: "Reveal in file manager", icon: "folderOpen", action: () => app.backend.reveal(path) },

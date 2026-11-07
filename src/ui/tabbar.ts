@@ -6,6 +6,7 @@ import { shortcutFor, titleWithKey } from "../core/commands";
 import { isDoneFile, relative } from "../core/path";
 import { resolveColor } from "../core/themes";
 import { h, icon } from "./dom";
+import { fileIcon } from "./sidebar";
 import { showMenu, type MenuItem } from "./overlay";
 
 export class TabBar {
@@ -14,6 +15,7 @@ export class TabBar {
     doc: Doc; el: HTMLElement; startX: number; offset: number; active: boolean; pointerId: number; outside: boolean;
   } | null = null;
   private marker = h("div", { class: "kn-tab-marker" });
+  private wasCollapsed = new Set<string>();
   private listBtn: HTMLElement;
 
   constructor(private app: App, private el: HTMLElement) {
@@ -50,6 +52,9 @@ export class TabBar {
     const app = this.app;
     this.scroller.replaceChildren();
     const seenGroups = new Set<string>();
+    // Groups expanded since the last render: their tabs slide in.
+    const opened = new Set(app.groups.filter((g) => !g.collapsed && this.wasCollapsed.has(g.id)).map((g) => g.id));
+    this.wasCollapsed = new Set(app.groups.filter((g) => g.collapsed).map((g) => g.id));
     for (const doc of app.docs) {
       const group = doc.groupId ? app.groups.find((g) => g.id === doc.groupId) : undefined;
       if (group && !seenGroups.has(group.id)) {
@@ -57,7 +62,9 @@ export class TabBar {
         this.scroller.append(this.renderGroupChip(group));
       }
       if (group?.collapsed && doc !== app.active) continue;
-      this.scroller.append(this.renderTab(doc, group));
+      const tab = this.renderTab(doc, group);
+      if (group && opened.has(group.id) && doc !== app.active) tab.classList.add("appearing");
+      this.scroller.append(tab);
     }
     const activeEl = this.scroller.querySelector<HTMLElement>(".kn-tab.active");
     activeEl?.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -83,7 +90,7 @@ export class TabBar {
       items.push({
         label: `${doc.dirty ? "● " : ""}${app.docName(doc)}`,
         color: doc.color ?? undefined,
-        icon: doc.path && isDoneFile(doc.path, app.settings.archive_suffix) ? "fileDone" : "file",
+        icon: doc.path ? fileIcon(doc.path, app.settings.archive_suffix)[0] : "file",
         checked: doc === app.active,
         action: () => app.activate(doc),
       });
@@ -100,8 +107,11 @@ export class TabBar {
       {
         class: `kn-group-chip${group.collapsed ? " collapsed" : ""}`,
         style: { "--g": resolveColor(group.color) },
-        title: `${group.name || "Group"} — click to ${group.collapsed ? "expand" : "collapse"}`,
+        title: `${group.name || "Group"} · ${count} tab${count > 1 ? "s" : ""} — click to ${group.collapsed ? "expand" : "collapse"}`,
+        role: "button",
+        "aria-expanded": String(!group.collapsed),
       },
+      icon("chevron", "kn-group-arrow"),
       h("span", { class: "kn-group-name" }, group.name || " "),
       group.collapsed ? h("span", { class: "kn-group-count" }, String(count)) : null,
     );
@@ -290,7 +300,11 @@ export class TabBar {
         { header: group.name || "Group" },
         { label: "Rename / color…", icon: "palette", action: () => app.editGroup(group) },
         { colors: app.settings.tab_colors, selected: group.color, onPick: (c) => { if (c) group.color = c; app.emit("docs"); } },
-        { label: group.collapsed ? "Expand" : "Collapse", icon: group.collapsed ? "chevronDown" : "collapse", action: () => app.toggleGroup(group) },
+        { label: group.collapsed ? "Expand" : "Collapse", icon: group.collapsed ? "expand" : "collapse", action: () => app.toggleGroup(group) },
+        { label: "Collapse the other groups", icon: "collapse", disabled: app.groups.length < 2, action: () => {
+          for (const g of app.groups) g.collapsed = g !== group;
+          app.emit("docs");
+        } },
         { label: "New note in this group", icon: "plus", action: () => app.newDoc({ groupId: group.id }) },
         { separator: true },
         { label: "Ungroup", action: () => app.ungroup(group) },

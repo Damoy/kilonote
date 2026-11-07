@@ -53,6 +53,11 @@ On macOS, use ⌘ instead of Ctrl.
 - Fast even on large files (CodeMirror 6), multiple cursors (Ctrl+D, Alt+click), column selection
 - Note highlighting: `#` headings, bullets, clickable links (Ctrl+click), dates, `#tags`, `@mentions`
 - Markdown and JSON highlighting, and a live **Markdown preview** next to the editor (Ctrl+Shift+V)
+- **Syntax coloring** for about 40 languages and config formats (Python, JavaScript, TypeScript,
+  C#, Java, C/C++, Go, Rust, SQL, PowerShell, Batch, Shell, YAML, TOML, INI, XML, HTML, CSS…),
+  loaded only when such a file is opened; the status bar changes the document type
+- **Format document** (Shift+Alt+F): JSON (comments and blank lines kept), XML, HTML, CSS and
+  Markdown tables, or just the selection (some JSON pasted in a note); *Edit: Minify JSON*
 - Files keep their encoding (UTF-8, UTF-8 with BOM, UTF-16, Windows-1252) and their LF/CRLF line endings;
   the status bar converts them on demand
 - Autosave, atomic writes, unsaved tabs kept between sessions
@@ -76,16 +81,22 @@ On macOS, use ⌘ instead of Ctrl.
 **Organization**
 - **Several windows** (Ctrl+Shift+N), each with its own tabs and folder; drag a tab onto another
   window (or out of the window to open a new one); every window comes back at the next launch
-- Colored tabs and **tab groups** with a name and a color, collapsible; drag and drop; a list of
-  all tabs when they no longer fit
+- Colored tabs and **tab groups** with a name and a color; click a group to collapse it into a
+  compact stack (only the tab being edited stays visible), click again to expand it; drag and
+  drop; a list of all tabs when they no longer fit
 - Sidebar and folder can be closed from their own buttons (or Ctrl+B)
-- File explorer, fuzzy file search (Ctrl+P), search and **replace in all files** (Ctrl+Shift+F, with undo)
+- File explorer with file type icons; one button expands or collapses every folder, or only the
+  selected one (Alt+click a folder does the same)
+- Fuzzy file search (Ctrl+P), search and **replace in all files** (Ctrl+Shift+F, with undo)
 - Command palette (Ctrl+Shift+P), go to a heading or task (Ctrl+R), go to a line (Ctrl+G)
 
 **Customization**
 - 15 themes: Midnight, Forest, Ocean, Retro, Dusk, Slate, Abyss, Neon, Ember (dark);
   Paper, Sand, Mint, Sakura, Latte, Frost (light); or automatic based on the system
 - Kilo, the mascot, takes the theme's accent color, or one of the [logo pack](#logo-pack) colors
+- Four **icon packs**: Line, Bold, Duotone (file types in color) and Pixel (pixel art, like Kilo)
+- A **cheat sheet** of the shortcuts at startup (until you tick *Don't show at startup*), and
+  any time from the keyboard button of the status bar or Ctrl+?
 - A **settings screen** (Ctrl+,): theme, accent color, fonts and sizes, editor, files, task
   statuses and their colors, archive options, shortcuts
 - Everything is also in a commented `settings.json` (any theme color, custom shortcuts…)
@@ -193,6 +204,8 @@ On macOS, Ctrl becomes ⌘.
 | Search (and replace) in folder | Ctrl+Shift+F |
 | Task: set due date | Ctrl+Shift+U |
 | Markdown preview | Ctrl+Shift+V |
+| Format document (JSON, XML, HTML, CSS, tables) | Shift+Alt+F |
+| Shortcuts cheat sheet | Ctrl+? |
 | New note / open file / open folder | Ctrl+N / Ctrl+O / Ctrl+Shift+O |
 | New window | Ctrl+Shift+N |
 | Save / save as | Ctrl+S / Ctrl+Shift+S |
@@ -225,6 +238,7 @@ the changes immediately. For example:
 {
   "theme": "paper",
   "accent": "#e8590c",
+  "icon_pack": "pixel",
   "colors": { "bg": "#fffdf8" },
   "font_family": "Cascadia Code, monospace",
   "task_statuses": { "todo": "blue", "ongoing": "orange", "waiting": "purple", "done": "green", "ok": "green" },
@@ -330,8 +344,10 @@ online, the workflow also updates the Scoop and winget manifests in `packaging/`
 ```
 src/
   core/         backend (Tauri or browser demo), paths, settings, themes, commands
-  editor/       CodeMirror: tasks (pure logic), note highlighting, setup, Markdown preview rendering
-  ui/           tabs and tab groups, sidebar, palette, menus, status bar, settings screen, preview
+  editor/       CodeMirror: tasks (pure logic), note highlighting, languages, formatters, setup,
+                Markdown preview rendering
+  ui/           tabs and tab groups, sidebar, palette, menus, status bar, settings screen, preview,
+                icon packs, shortcuts cheat sheet
   app.ts        controller: documents, saving, session, commands
   report.ts     activity report
 src-tauri/      native Rust backend: atomic reads/writes, archives, trash, single instance
@@ -347,7 +363,8 @@ no UI framework.
 
 ## Credits
 
-- [Tauri](https://tauri.app) (MIT / Apache-2.0) and [CodeMirror](https://codemirror.net) (MIT)
+- [Tauri](https://tauri.app) (MIT / Apache-2.0) and [CodeMirror](https://codemirror.net) (MIT),
+  including its legacy language modes for the syntax coloring
 - [JetBrains Mono](https://www.jetbrains.com/lp/mono/) font (SIL Open Font License 1.1), bundled through [Fontsource](https://fontsource.org)
 
 ## License

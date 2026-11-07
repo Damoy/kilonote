@@ -13,7 +13,9 @@ import { mergeSettings, setSettingInText, SETTINGS_TEMPLATE, type Settings } fro
 import { applyMascot, applyTheme, findTheme, MASCOT_VARIANTS, PALETTE_LABELS, THEMES } from "./core/themes";
 import { fuzzyFilter } from "./core/fuzzy";
 import { editorHooks } from "./editor/decorations";
-import { createEditorState, langForPath, reconfigureLanguage, settingsCompartment, settingsExtensions, type LangId } from "./editor/setup";
+import { createEditorState, langForPath, languageReady, loadLanguage, reconfigureLanguage, settingsCompartment, settingsExtensions, type LangId } from "./editor/setup";
+import { isLangId, LANGUAGES, languageLabel } from "./editor/languages";
+import { FormatError, formatKindFor, formatText, minifyJson } from "./editor/format";
 import {
   archivedLine, cycleLine, findTags, findTasks, isDoneStatus, makeTaskConfig, parseDateInput, parseTask, setDueInLine, todayISO,
   type TaskConfig,
@@ -28,6 +30,8 @@ import { StatusBar } from "./ui/statusbar";
 import { Welcome } from "./ui/welcome";
 import { Preview } from "./ui/preview";
 import { showSettingsView } from "./ui/settings-view";
+import { showCheatSheet } from "./ui/cheatsheet";
+import { setIconPack, type IconPack } from "./ui/icons";
 import { GUIDE } from "./guide";
 
 export interface Doc {
@@ -242,7 +246,11 @@ export class App {
       if (startup.length && !this.workspace) await this.openFolder(startup[0]);
     } else if (startup.length) await this.openPaths(startup);
     this.renderAll();
-    if (this.backend.windowLabel === "main") void this.restoreOtherWindows();
+    if (this.backend.windowLabel === "main") {
+      void this.restoreOtherWindows();
+      // Once per launch, in the first window, until "Don't show at startup" is ticked.
+      if (this.settings.show_shortcuts_at_startup) showCheatSheet(this, { startup: true });
+    }
   }
 
   private blankState() {
@@ -290,6 +298,7 @@ export class App {
     const theme = findTheme(s.theme, this.systemDark.matches);
     applyTheme(theme, s.accent, s.colors);
     applyMascot(s.mascot);
+    setIconPack(s.icon_pack as IconPack);
     this.backend.setDark(theme.dark);
     const root = document.documentElement.style;
     root.setProperty("--kn-font", s.font_family);
@@ -407,7 +416,101 @@ export class App {
     const saved = init.savedText ?? (init.path ? init.text : "");
     doc.savedText = saved === init.text ? state.doc : Text.of(saved.split(/\r\n|\r|\n/));
     doc.dirty = !state.doc.eq(doc.savedText);
+    this.ensureLanguage(doc);
     return doc;
+  }
+
+  /** Sets the document type of a tab: its coloring and the note features. */
+  setLang(doc: Doc, lang: LangId) {
+    doc.lang = lang;
+    this.applyToDoc(doc, { effects: [reconfigureLanguage(lang), settingsCompartment.reconfigure(settingsExtensions(this.settings, this.taskCfg, lang))] });
+    this.ensureLanguage(doc);
+    this.emit("docs");
+  }
+
+  /** Code languages are loaded on first use: the coloring appears once ready. */
+  private ensureLanguage(doc: Doc) {
+    const lang = doc.lang;
+    if (languageReady(lang)) return;
+    void loadLanguage(lang).then((ok) => {
+      if (ok && doc.lang === lang) this.applyToDoc(doc, { effects: reconfigureLanguage(lang) });
+    });
+  }
+
+  /**
+   * Formats the selection, or the whole document: JSON (comments kept), XML,
+   * HTML, CSS, Markdown tables. One undo step; the cursor stays close.
+   */
+  formatDocument(mode: "format" | "minify" = "format") {
+    const doc = this.active;
+    if (!doc) return;
+    const st = this.view.state;
+    const sel = st.selection.main;
+    const whole = sel.empty;
+    const from = whole ? 0 : sel.from;
+    const to = whole ? st.doc.length : sel.to;
+    const text = st.sliceDoc(from, to);
+    if (!text.trim()) return;
+    // A selection is recognized by its content first (some JSON in a note).
+    const kind = mode === "minify" ? "json" : whole ? formatKindFor(doc.lang, text) : (formatKindFor("text", text) ?? formatKindFor(doc.lang, text));
+    if (!kind) {
+      this.toastInfo(`Nothing to format in ${languageLabel(doc.lang)}: KiloNote formats JSON, XML, HTML, CSS and Markdown tables (select some JSON or XML to format just that).`);
+      return;
+    }
+    let out: string;
+    try {
+      const indent = this.settings.indent_with_tabs ? "\t" : " ".repeat(this.settings.tab_size);
+      out = mode === "minify" ? minifyJson(text) : formatText(kind, text, indent);
+    } catch (e) {
+      if (!(e instanceof FormatError)) throw e;
+      const pos = from + Math.min(e.pos, text.length);
+      const goto = () => {
+        if (doc !== this.active) this.activate(doc);
+        const line = this.view.state.doc.lineAt(Math.min(pos, this.view.state.doc.length));
+        this.reveal(doc, line.number, [pos - line.from, pos - line.from]);
+      };
+      toast(e.message, { kind: "error", action: { label: "Go to the error", run: goto } });
+      return;
+    }
+    if (!whole && !text.endsWith("\n")) out = out.replace(/\n$/, "");
+    if (whole && mode === "minify" && text.endsWith("\n")) out += "\n";
+    if (out === text) {
+      this.toastInfo(mode === "minify" ? "Already minified." : "Already formatted.");
+      return;
+    }
+    // Only the part that differs is replaced: the cursor and the scroll stay put.
+    let a = 0;
+    while (a < text.length && a < out.length && text[a] === out[a]) a++;
+    let b = 0;
+    while (b < text.length - a && b < out.length - a && text[text.length - 1 - b] === out[out.length - 1 - b]) b++;
+    this.view.dispatch({
+      changes: { from: from + a, to: to - b, insert: out.slice(a, out.length - b) },
+      userEvent: "input.format",
+      ...(whole ? {} : { selection: { anchor: from, head: from + out.length } }),
+    });
+    this.focusEditor();
+  }
+
+  /** Picker of the document types (status bar, palette). */
+  selectLanguage(doc = this.active) {
+    if (!doc) return;
+    const items = LANGUAGES.map((l) => ({ id: l.id, label: l.label, detail: l.exts.slice(0, 5).map((e) => `.${e}`).join("  ") }));
+    openPicker({
+      placeholder: "Document type",
+      initial: Math.max(0, items.findIndex((l) => l.id === doc.lang)),
+      provide: (q) => ({
+        items: fuzzyFilter(q, items, (l) => `${l.label} ${l.detail}`).map(({ item, result }) => ({
+          label: item.label,
+          detail: item.detail,
+          icon: item.id === "text" ? "file" : item.id === "markdown" ? "fileMd" : item.id === "jsonc" ? "fileJson" : "fileCode",
+          positions: result.positions.filter((i) => i < item.label.length),
+          value: item.id,
+          hint: item.id === doc.lang ? "current" : undefined,
+        })),
+        empty: "No such document type",
+      }),
+      pick: (it) => this.setLang(doc, it.value as LangId),
+    });
   }
 
   private defaultEol(): "\n" | "\r\n" {
@@ -522,8 +625,6 @@ export class App {
     }
     this.active = doc;
     if (doc) {
-      const group = doc.groupId ? this.groups.find((g) => g.id === doc.groupId) : null;
-      if (group?.collapsed) group.collapsed = false;
       this.view.setState(doc.state);
       if (doc.scroll) this.view.dispatch({ effects: doc.scroll });
       else if (doc.pendingScrollTop) {
@@ -716,10 +817,7 @@ export class App {
     const other = this.docs.find((d) => d !== doc && d.path && samePath(d.path, target));
     if (other) await this.closeDoc(other, { force: true });
     const lang = langForPath(target, doc.lang);
-    if (lang !== doc.lang) {
-      doc.lang = lang;
-      this.applyToDoc(doc, { effects: [reconfigureLanguage(lang), settingsCompartment.reconfigure(settingsExtensions(this.settings, this.taskCfg, lang))] });
-    }
+    if (lang !== doc.lang) this.setLang(doc, lang);
     this.emit("docs");
     this.refreshWorkspaceFilesSoon();
     return true;
@@ -1067,13 +1165,32 @@ export class App {
     this.emit("docs");
   }
 
-  toggleGroup(group: TabGroup) {
-    group.collapsed = !group.collapsed;
-    if (group.collapsed && this.active?.groupId === group.id) {
-      const next = this.docs.find((d) => !this.isHidden(d));
-      if (next) this.activate(next);
-      else group.collapsed = false;
+  /**
+   * Collapses or expands a group. A collapsed group shows only its chip, plus
+   * its tab that is being edited (like a compact tab stack).
+   */
+  toggleGroup(group: TabGroup, collapsed = !group.collapsed) {
+    if (group.collapsed === collapsed) return;
+    group.collapsed = collapsed;
+    this.emit("docs");
+  }
+
+  /** The group of the current tab (palette command). */
+  toggleActiveGroup() {
+    const group = this.active?.groupId ? this.groups.find((g) => g.id === this.active!.groupId) : null;
+    if (!group) {
+      this.toastInfo("This tab is not in a group: right-click a tab to create one.");
+      return;
     }
+    this.toggleGroup(group);
+  }
+
+  setAllGroupsCollapsed(collapsed: boolean) {
+    if (!this.groups.length) {
+      this.toastInfo("No tab group yet: right-click a tab to create one.");
+      return;
+    }
+    for (const g of this.groups) g.collapsed = collapsed;
     this.emit("docs");
   }
 
@@ -1733,6 +1850,9 @@ export class App {
       else if (isInside(d.path, path)) d.path = target + d.path.slice(path.length);
       else continue;
       d.title = basename(d.path);
+      // "notes.txt" renamed "notes.md": the coloring follows.
+      const lang = langForPath(d.path);
+      if (lang !== d.lang) this.setLang(d, lang);
       const st = await this.backend.stat(d.path);
       if (st) d.mtime = st.mtime;
     }
@@ -1858,7 +1978,7 @@ export class App {
       const docs = await Promise.all(
         (s.tabs ?? []).map(async (t) => {
           if (!t.path) {
-            return this.createDoc({ path: null, text: t.content ?? "", savedText: "", title: t.title, lang: t.lang, color: t.color, groupId: t.group, cursor: t.cursor, scrollTop: t.scrollTop, eol: t.eol });
+            return this.createDoc({ path: null, text: t.content ?? "", savedText: "", title: t.title, lang: isLangId(t.lang) ? t.lang : undefined, color: t.color, groupId: t.group, cursor: t.cursor, scrollTop: t.scrollTop, eol: t.eol });
           }
           try {
             const ft = await this.backend.readText(t.path);
@@ -2029,6 +2149,8 @@ export class App {
       "Shift+F11": "view.zen",
       "Alt+Z": "view.wrap",
       "Mod+Shift+V": "view.preview",
+      "Shift+Alt+F": "edit.format",
+      "Mod+?": "help.shortcuts",
     };
     if (this.backend.platform !== "macos") keys["Mod+H"] = "edit.replace";
     for (let i = 1; i <= 9; i++) keys[`Mod+${i}`] = `tab.goto.${i}`;
@@ -2073,12 +2195,17 @@ export class App {
       { id: "tab.color", title: "Tab: Color…", run: () => this.active && this.tabbar.showColorMenu(this.active) },
       { id: "tab.group", title: "Tab: Add to new group…", run: () => this.active && this.createGroup([this.active]) },
       { id: "tab.ungroup", title: "Tab: Remove from group", run: () => this.active && this.addToGroup(this.active, null) },
+      { id: "tab.toggleGroup", title: "Tab: Collapse or expand its group", run: () => this.toggleActiveGroup() },
+      { id: "tab.collapseGroups", title: "Tab: Collapse all groups", run: () => this.setAllGroupsCollapsed(true) },
+      { id: "tab.expandGroups", title: "Tab: Expand all groups", run: () => this.setAllGroupsCollapsed(false) },
       { id: "palette.commands", title: "Command palette", run: () => this.openCommandPalette() },
       { id: "palette.files", title: "Go to file…", run: () => this.openQuickOpen() },
       { id: "palette.line", title: "Go to line…", run: () => this.openQuickOpen(":") },
       { id: "palette.symbol", title: "Go to heading or task…", run: () => this.openQuickOpen("@") },
       { id: "edit.find", title: "Edit: Find", run: () => this.active && openSearchPanel(this.view) },
       { id: "edit.replace", title: "Edit: Find and replace", run: () => this.active && openSearchPanel(this.view) },
+      { id: "edit.format", title: "Edit: Format document (JSON, XML, HTML, CSS, Markdown tables)", run: () => this.formatDocument() },
+      { id: "edit.minify", title: "Edit: Minify JSON", run: () => this.formatDocument("minify") },
       { id: "view.sidebar", title: "View: Toggle sidebar", run: () => this.sidebar.toggle() },
       { id: "view.files", title: "View: File explorer", run: () => this.sidebar.show("files") },
       { id: "view.tasks", title: "View: Folder tasks", run: () => this.sidebar.show("tasks") },
@@ -2090,6 +2217,7 @@ export class App {
       { id: "view.zoomReset", title: "View: Reset text size", run: () => this.zoom(null) },
       { id: "view.wrap", title: "View: Toggle word wrap", run: () => this.updateSetting("word_wrap", !this.settings.word_wrap) },
       { id: "view.preview", title: "View: Toggle Markdown preview", run: () => this.preview.toggle() },
+      { id: "view.language", title: "View: Document type (syntax coloring)…", run: () => this.selectLanguage() },
       { id: "view.lineNumbers", title: "View: Toggle line numbers", run: () => this.updateSetting("line_numbers", !this.settings.line_numbers) },
       { id: "theme.select", title: "Theme: Select…", run: () => this.selectTheme() },
       { id: "theme.accent", title: "Theme: Accent color…", run: () => this.selectAccent() },
@@ -2102,6 +2230,7 @@ export class App {
       { id: "report.generate", title: "Report: Generate activity report…", run: () => this.generateReport() },
       { id: "report.tag", title: "Report: Generate activity report for a #tag…", run: () => this.generateTagReport() },
       { id: "task.due", title: "Task: Set due date…", run: () => this.setDueDate() },
+      { id: "help.shortcuts", title: "Help: Keyboard shortcuts (cheat sheet)", run: () => showCheatSheet(this) },
       { id: "help.guide", title: "Help: KiloNote guide", run: () => this.newDoc({ text: GUIDE, title: "KiloNote guide.md", lang: "markdown" }) },
       { id: "help.about", title: "Help: About", run: () => this.showAbout() },
     ];

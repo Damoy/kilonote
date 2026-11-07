@@ -3,10 +3,11 @@
 import type { App } from "../app";
 import { titleWithKey } from "../core/commands";
 import { resolveColor } from "../core/themes";
-import { LANG_LABELS, type LangId, reconfigureLanguage, settingsCompartment, settingsExtensions } from "../editor/setup";
+import { isCodeLang, languageLabel } from "../editor/languages";
 import { findTasks } from "../editor/tasks";
 import { debounce, h, icon } from "./dom";
 import { showMenu } from "./overlay";
+import { showCheatSheet } from "./cheatsheet";
 
 const ENCODINGS: [string, string][] = [
   ["UTF-8", "UTF-8"],
@@ -24,7 +25,7 @@ export class StatusBar {
   private tasks = h("button", { class: "st-item st-tasks", title: titleWithKey("Headings and tasks of this note", "palette.symbol") });
   private encoding = h("button", { class: "st-item st-dim", title: "Encoding: click to convert" });
   private eol = h("button", { class: "st-item", title: "Line endings" });
-  private lang = h("button", { class: "st-item", title: "Document type" });
+  private lang = h("button", { class: "st-item", title: titleWithKey("Document type (syntax coloring)", "view.language") });
   private save = h("button", { class: "st-item st-save" });
   private previewBtn = h("button", { class: "st-item st-icon st-preview", title: titleWithKey("Markdown preview", "view.preview") }, icon("eye"));
   private counted: unknown = null;
@@ -33,8 +34,9 @@ export class StatusBar {
     const sidebarBtn = h("button", { class: "st-item st-icon", title: titleWithKey("Sidebar", "view.sidebar"), onclick: () => app.sidebar.toggle() }, icon("sidebar"));
     const themeBtn = h("button", { class: "st-item st-icon", title: "Theme", onclick: () => app.selectTheme() }, icon("palette"));
     const settingsBtn = h("button", { class: "st-item st-icon", title: titleWithKey("Settings", "settings.open"), onclick: () => app.openSettings() }, icon("gear"));
+    const keysBtn = h("button", { class: "st-item st-icon", title: titleWithKey("Keyboard shortcuts", "help.shortcuts"), onclick: () => showCheatSheet(app) }, icon("keyboard"));
     this.left.append(sidebarBtn, this.tasks);
-    this.right.append(this.pos, this.words, this.encoding, this.eol, this.lang, this.previewBtn, this.save, themeBtn, settingsBtn);
+    this.right.append(this.pos, this.words, this.encoding, this.eol, this.lang, this.previewBtn, this.save, themeBtn, keysBtn, settingsBtn);
     this.previewBtn.addEventListener("click", () => app.preview.toggle());
     el.append(this.left, this.right);
 
@@ -42,7 +44,7 @@ export class StatusBar {
     this.tasks.addEventListener("click", () => app.openQuickOpen("@"));
     this.eol.addEventListener("click", (e) => this.eolMenu(e));
     this.encoding.addEventListener("click", (e) => this.encodingMenu(e));
-    this.lang.addEventListener("click", (e) => this.langMenu(e));
+    this.lang.addEventListener("click", () => app.selectLanguage());
     this.save.addEventListener("click", (e) => {
       const doc = app.active;
       if (!doc?.conflict) return;
@@ -106,7 +108,7 @@ export class StatusBar {
     const text = this.app.view.state.doc.toString();
     const words = text.length > 2_000_000 ? null : (text.match(/[\p{L}\p{N}][\p{L}\p{N}'’_-]*/gu)?.length ?? 0);
     this.words.textContent = words == null ? "" : `${words} word${words === 1 ? "" : "s"}`;
-    if (text.length > 2_000_000 || doc.lang === "jsonc") return;
+    if (text.length > 2_000_000 || isCodeLang(doc.lang)) return;
     const cfg = this.app.taskCfg;
     const counts = new Map<string, number>();
     for (const t of findTasks(text, cfg)) counts.set(t.task.key, (counts.get(t.task.key) ?? 0) + 1);
@@ -126,7 +128,7 @@ export class StatusBar {
     if (!doc) return;
     this.encoding.textContent = doc.encoding;
     this.eol.textContent = doc.eol === "\r\n" ? "CRLF" : "LF";
-    this.lang.textContent = LANG_LABELS[doc.lang];
+    this.lang.textContent = languageLabel(doc.lang);
     this.save.replaceChildren();
     this.save.title = "";
     if (doc.conflict) {
@@ -182,23 +184,6 @@ export class StatusBar {
         { header: "Save with encoding" },
         ...ENCODINGS.map(([id, label]) => ({ label, checked: doc.encoding === id, action: () => set(id) })),
       ],
-      e.clientX,
-      (e.currentTarget as HTMLElement).getBoundingClientRect().top - 4,
-    );
-  }
-
-  private langMenu(e: MouseEvent) {
-    const doc = this.app.active;
-    if (!doc) return;
-    const set = (lang: LangId) => {
-      doc.lang = lang;
-      this.app.applyToDoc(doc, {
-        effects: [reconfigureLanguage(lang), settingsCompartment.reconfigure(settingsExtensions(this.app.settings, this.app.taskCfg, lang))],
-      });
-      this.updateMeta();
-    };
-    showMenu(
-      [{ header: "Document type" }, ...(Object.keys(LANG_LABELS) as LangId[]).map((l) => ({ label: LANG_LABELS[l], checked: doc.lang === l, action: () => set(l) }))],
       e.clientX,
       (e.currentTarget as HTMLElement).getBoundingClientRect().top - 4,
     );

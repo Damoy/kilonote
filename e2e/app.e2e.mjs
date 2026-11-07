@@ -24,6 +24,8 @@ mkdirSync(config);
 // --- The notes folder ----------------------------------------------------------
 writeFileSync(join(notes, "work.txt"), "# Work\n- call colleague X - todo\n- review the spec - todo\n");
 writeFileSync(join(notes, "old.txt"), Buffer.from("caf\xe9 - todo\n", "latin1")); // Windows-1252
+writeFileSync(join(notes, "data.json"), '{"name":"kilo","tags":["a","b"]}');
+writeFileSync(join(notes, "build.py"), "import os\n\ndef main():\n    return 1  # done\n");
 // Programs placed in the notes folder: KiloNote must never run them.
 writeFileSync(join(notes, "evil.exe"), `#!/bin/sh\ntouch "${marker}"\n`);
 chmodSync(join(notes, "evil.exe"), 0o755);
@@ -62,7 +64,7 @@ async function run(code, ...args) {
   if (r?.err) throw new Error(r.err);
   return r?.ok;
 }
-const KEYS = { Control: "", Shift: "", Enter: "", Escape: "" };
+const KEYS = { Control: "", Shift: "", Alt: "", Enter: "", Escape: "" };
 /** A key chord, e.g. press("Control", "Enter"). */
 async function press(...keys) {
   const codes = keys.map((k) => KEYS[k] ?? k);
@@ -118,6 +120,12 @@ try {
     expect(await run("return !document.getElementById('welcome').hidden;"), true, "welcome visible");
   });
 
+  await test("the shortcuts cheat sheet shows at the first start and closes with Escape", async () => {
+    expect(await run("return !!document.querySelector('.kn-cheatsheet');"), true, "cheat sheet");
+    await press("Escape");
+    expect(await run("return document.querySelector('.kn-cheatsheet') === null;"), true, "closed");
+  });
+
   await test("a folder and a note open, Ctrl+Enter cycles a status, Ctrl+S saves", async () => {
     await run("await app.openFolder(args[0]); await app.openFile(args[1]); app.reveal(app.active, 2);", notes, join(notes, "work.txt"));
     await press("Control", "Enter");
@@ -162,8 +170,18 @@ try {
     expect(existsSync(marker), false, "a program ran");
   });
 
-  await test("a second window opens and closes", async () => {
-    await run("await app.backend.openWindow([]);");
+  await test("code files are colored, and Shift+Alt+F formats JSON", async () => {
+    await run("await app.openFile(args[0]);", join(notes, "build.py"));
+    expect(await run("return app.active.lang;"), "python", "language");
+    await until(() => run("return document.querySelectorAll('.cm-content span').length > 2;"), "the Python coloring");
+    await run("await app.openFile(args[0]); app.focusEditor();", join(notes, "data.json"));
+    await press("Shift", "Alt", "f");
+    expect(await run("return app.view.state.doc.toString();"), '{\n    "name": "kilo",\n    "tags": ["a", "b"]\n}\n', "formatted");
+  });
+
+  await test("Ctrl+Shift+N opens a second window", async () => {
+    await run("app.focusEditor();");
+    await press("Control", "Shift", "n");
     await until(() => run("return (await app.backend.windowCount()) === 2;"), "two windows");
     expect((await wd("GET", `/session/${session}/window/handles`)).length >= 1, true, "handles");
   });

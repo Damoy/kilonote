@@ -17,6 +17,11 @@ export const plainNotesFacet = Facet.define<boolean, boolean>({
   combine: (values) => values[values.length - 1] ?? true,
 });
 
+/** true for code and data files: only links are highlighted there. */
+export const codeDocFacet = Facet.define<boolean, boolean>({
+  combine: (values) => values[values.length - 1] ?? false,
+});
+
 /** Hooks provided by the application (status menu, opening links). */
 export const editorHooks = {
   onStatusClick: (_view: EditorView, _line: number, _x: number, _y: number) => {},
@@ -153,13 +158,17 @@ function decorateLine(from: number, text: string, cfg: TaskConfig, plain: boolea
 function build(view: EditorView): DecorationSet {
   const cfg = view.state.facet(taskConfigFacet);
   const plain = view.state.facet(plainNotesFacet);
+  const code = view.state.facet(codeDocFacet);
   const today = todayISO();
   const out: Range<Decoration>[] = [];
   const doc = view.state.doc;
   for (const { from, to } of view.visibleRanges) {
     for (let pos = from; pos <= to; ) {
       const line = doc.lineAt(pos);
-      decorateLine(line.from, line.text, cfg, plain, today, out);
+      if (code) {
+        const text = line.text;
+        if (text.includes("://")) eachMatch(URL_RE, text, (m) => out.push(M.url.range(line.from + m.index, line.from + m.index + m[0].length)));
+      } else decorateLine(line.from, line.text, cfg, plain, today, out);
       pos = line.to + 1;
     }
   }
@@ -177,7 +186,8 @@ export const notesHighlighter = ViewPlugin.fromClass(
         u.docChanged ||
         u.viewportChanged ||
         u.startState.facet(taskConfigFacet) !== u.state.facet(taskConfigFacet) ||
-        u.startState.facet(plainNotesFacet) !== u.state.facet(plainNotesFacet)
+        u.startState.facet(plainNotesFacet) !== u.state.facet(plainNotesFacet) ||
+        u.startState.facet(codeDocFacet) !== u.state.facet(codeDocFacet)
       ) {
         this.decorations = build(u.view);
       }

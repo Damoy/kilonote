@@ -45,8 +45,9 @@ it to the tasks of one tag (a client, a topic…).
 ## Tabs and tab groups
 
 - Right-click a tab: color, group, close others…
-- **Tab groups** have a name and a color; click the label to collapse or expand
-  the group. Drag a tab to move it.
+- **Tab groups** have a name and a color; click the label to collapse the group into
+  a compact stack (only the tab you are editing stays visible), click again to expand
+  it. Command palette → "Tab: Collapse all groups". Drag a tab to move it.
 - Ctrl+1…9: go to tab number N. Ctrl+Tab: next tab.
 - Ctrl+Shift+T: reopen the last closed tab.
 - When the tabs no longer fit, the list button at the right shows them all.
@@ -70,6 +71,18 @@ it to the tasks of one tag (a client, a topic…).
 - **Ctrl+F** / **Ctrl+H**: find / replace in the note.
 - **Ctrl+D**: select the next occurrence (multiple cursors), **Alt+click**: add a cursor.
 - **Alt+↑ / Alt+↓**: move the line. **Ctrl+Shift+K**: delete the line.
+- **Shift+Alt+F**: format the document or the selection (JSON, XML, HTML, CSS,
+  Markdown tables). Command palette → "Edit: Minify JSON".
+- The explorer button with two arrows expands or collapses every folder, or only
+  the one you clicked last. Alt+click a folder does the same for that folder.
+- **Ctrl+?**: the shortcuts cheat sheet (also the keyboard button of the status bar).
+
+## Code and config files
+
+Python, JavaScript, TypeScript, C#, Java, C/C++, Go, Rust, SQL, PowerShell, Batch,
+Shell, YAML, TOML, INI, XML, HTML, CSS and more are colored. Click the document
+type in the status bar to change it. Task, tag and mention highlighting stays off
+in those files.
 
 ## Customization
 
@@ -80,6 +93,7 @@ it lives in \`settings.json\` (with comments), one click away from the settings 
 - 15 themes (Midnight, Paper, Forest, Ocean, Sand, Retro, Dusk, Slate, Abyss, Neon, Ember,
   Mint, Sakura, Latte, Frost), or automatic. Kilo, the mascot, takes the theme's color.
 - Command palette → "Theme: Accent color…" to change the main color.
+- Four icon packs (Settings → Appearance): Line, Bold, Duotone and Pixel.
 - Ctrl+= / Ctrl+-: text size. Shift+F11: zen mode. Ctrl+B: sidebar.
 
 ## Your notes are safe

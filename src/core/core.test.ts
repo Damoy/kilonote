@@ -119,3 +119,32 @@ describe("shortcuts", () => {
     expect(normalizeCombo("Mod+,")).toBe("Meta+,");
   });
 });
+
+describe("languages", () => {
+  it("are found by file name, then by extension", async () => {
+    const { languageForPath, isCodeLang, fileKindFor } = await import("../editor/languages");
+    expect(languageForPath("/x/Dockerfile")).toBe("dockerfile");
+    expect(languageForPath("C:\\work\\CMakeLists.txt")).toBe("cmake");
+    expect(languageForPath("/x/.env")).toBe("ini");
+    expect(languageForPath("/x/build.PS1")).toBe("powershell");
+    expect(languageForPath("/x/notes.txt")).toBe("text");
+    expect(languageForPath("/x/notes")).toBe("text");
+    expect(isCodeLang("python")).toBe(true);
+    expect(isCodeLang("markdown")).toBe(false);
+    expect(fileKindFor("/x/a.png")).toBe("image");
+    expect(fileKindFor("/x/a.exe")).toBe("binary");
+    expect(fileKindFor("/x/a.yml")).toBe("config");
+  });
+
+  it("every language loads", async () => {
+    const { LANGUAGES } = await import("../editor/languages");
+    for (const l of LANGUAGES) if (l.load) expect(typeof (await l.load()).token, l.id).toBe("function");
+  });
+});
+
+describe("icon pack setting", () => {
+  it("falls back to the default for an unknown pack", () => {
+    expect(mergeSettings({ icon_pack: "nope" }).icon_pack).toBe("line");
+    expect(mergeSettings({ icon_pack: "pixel" }).icon_pack).toBe("pixel");
+  });
+});

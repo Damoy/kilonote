@@ -12,24 +12,19 @@ import { defineLanguageFacet, HighlightStyle, indentUnit, Language, StreamLangua
 import { GFM, parser as markdownParser } from "@lezer/markdown";
 import { tags as t } from "@lezer/highlight";
 import type { Settings } from "../core/settings";
-import { extname } from "../core/path";
-import { notesClickHandler, notesHighlighter, plainNotesFacet, taskConfigFacet } from "./decorations";
+import { codeDocFacet, notesClickHandler, notesHighlighter, plainNotesFacet, taskConfigFacet } from "./decorations";
+import { isCodeLang, languageForPath, languageInfo } from "./languages";
 import type { TaskConfig } from "./tasks";
 
-export type LangId = "text" | "markdown" | "jsonc";
+/** A document type id of LANGUAGES ("text", "markdown", "jsonc", "python"…). */
+export type LangId = string;
 
 export const settingsCompartment = new Compartment();
 export const languageCompartment = new Compartment();
 
 export function langForPath(path: string | null, fallback: LangId = "text"): LangId {
-  if (!path) return fallback;
-  const ext = extname(path);
-  if (ext === "md" || ext === "markdown" || ext === "mdx") return "markdown";
-  if (ext === "json" || ext === "jsonc") return "jsonc";
-  return "text";
+  return path ? languageForPath(path) : fallback;
 }
-
-export const LANG_LABELS: Record<LangId, string> = { text: "Text", markdown: "Markdown", jsonc: "JSON" };
 
 const jsonc = StreamLanguage.define<{ inComment: boolean }>({
   name: "jsonc",
@@ -69,10 +64,41 @@ const markdownLanguage = new Language(
   "markdown",
 );
 
+/** Code languages already loaded (their module is fetched on first use). */
+const loaded = new Map<string, Extension>();
+const loading = new Map<string, Promise<boolean>>();
+
 function languageExtension(lang: LangId): Extension {
   if (lang === "markdown") return markdownLanguage;
   if (lang === "jsonc") return jsonc;
-  return [];
+  return loaded.get(lang) ?? [];
+}
+
+/** True once the coloring of `lang` is available (no loading needed). */
+export function languageReady(lang: LangId): boolean {
+  return !languageInfo(lang).load || loaded.has(lang);
+}
+
+/** Loads the coloring of a code language; resolves to false if it failed. */
+export function loadLanguage(lang: LangId): Promise<boolean> {
+  const info = languageInfo(lang);
+  if (!info.load || loaded.has(lang)) return Promise.resolve(true);
+  let p = loading.get(lang);
+  if (!p) {
+    p = info.load().then(
+      (parser) => {
+        loaded.set(lang, StreamLanguage.define(parser));
+        return true;
+      },
+      (e) => {
+        console.error(`Language ${lang}:`, e);
+        loading.delete(lang);
+        return false;
+      },
+    );
+    loading.set(lang, p);
+  }
+  return p;
 }
 
 const highlight = HighlightStyle.define([
@@ -90,8 +116,23 @@ const highlight = HighlightStyle.define([
   { tag: t.propertyName, color: "var(--kn-blue)" },
   { tag: t.string, color: "var(--kn-green)" },
   { tag: t.number, color: "var(--kn-orange)" },
-  { tag: [t.bool, t.null, t.keyword], color: "var(--kn-purple)" },
+  { tag: [t.bool, t.null, t.keyword, t.controlKeyword, t.definitionKeyword, t.moduleKeyword, t.operatorKeyword, t.modifier], color: "var(--kn-purple)" },
   { tag: t.punctuation, color: "var(--kn-fg-muted)" },
+  // Code languages
+  { tag: [t.typeName, t.className, t.namespace], color: "var(--kn-yellow)" },
+  { tag: [t.function(t.variableName), t.function(t.propertyName), t.definition(t.variableName), t.definition(t.propertyName)], color: "var(--kn-blue)" },
+  { tag: [t.standard(t.variableName), t.special(t.variableName), t.self], color: "var(--kn-cyan)" },
+  { tag: [t.atom, t.unit, t.color, t.constant(t.variableName)], color: "var(--kn-orange)" },
+  { tag: [t.regexp, t.special(t.string), t.escape], color: "var(--kn-cyan)" },
+  { tag: [t.tagName, t.angleBracket], color: "var(--kn-red)" },
+  { tag: t.attributeName, color: "var(--kn-orange)" },
+  { tag: t.attributeValue, color: "var(--kn-green)" },
+  { tag: [t.meta, t.annotation, t.macroName, t.processingInstruction], color: "var(--kn-pink)" },
+  { tag: t.operator, color: "var(--kn-cyan)" },
+  { tag: t.inserted, color: "var(--kn-green)" },
+  { tag: t.deleted, color: "var(--kn-red)" },
+  { tag: t.changed, color: "var(--kn-orange)" },
+  { tag: t.invalid, color: "var(--kn-red)", textDecoration: "underline wavy" },
 ]);
 
 const theme = EditorView.theme({
@@ -149,6 +190,7 @@ export function settingsExtensions(s: Settings, taskCfg: TaskConfig, lang: LangI
     indentUnit.of(s.indent_with_tabs ? "\t" : " ".repeat(s.tab_size)),
     taskConfigFacet.of(taskCfg),
     plainNotesFacet.of(lang === "text"),
+    codeDocFacet.of(isCodeLang(lang)),
   ];
 }
 

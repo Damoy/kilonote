@@ -210,6 +210,10 @@ body.zen .cm-gutters { display: none !important; }
 .kn-group-chip:hover { filter: brightness(1.1); }
 .kn-group-chip:active { transform: scale(0.97); }
 .kn-group-chip.collapsed { opacity: 0.85; }
+.kn-group-arrow { width: 12px; height: 12px; margin-left: -3px; transition: transform 140ms var(--ease); transform: rotate(90deg); }
+.kn-group-chip.collapsed .kn-group-arrow { transform: none; }
+.kn-tab.appearing { animation: tab-in 160ms var(--ease); }
+@keyframes tab-in { from { opacity: 0; transform: translateX(-8px); } }
 .kn-group-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 6px; }
 .kn-group-count { font-size: 0.85em; background: color-mix(in srgb, var(--kn-bg) 25%, transparent); padding: 0 5px; border-radius: 6px; }
 
@@ -259,6 +263,17 @@ body.zen .cm-gutters { display: none !important; }
 .sb-file-icon { width: 15px; height: 15px; color: var(--kn-fg-faint); }
 .sb-row.dir .sb-file-icon { color: var(--kn-accent); opacity: 0.85; }
 .sb-row.done .sb-file-icon { color: var(--kn-green); }
+/* The folder that "Expand / collapse all" acts on. */
+.sb-row.selected { box-shadow: inset 2px 0 0 var(--kn-accent); }
+.sb-row.selected:not(.active) { background: color-mix(in srgb, var(--kn-hover) 80%, transparent); }
+/* File types in color (Duotone and Pixel icon packs). */
+:root[data-icons="duotone"] .sb-file-icon.ft-markdown, :root[data-icons="pixel"] .sb-file-icon.ft-markdown { color: var(--kn-blue); }
+:root[data-icons="duotone"] .sb-file-icon.ft-json, :root[data-icons="pixel"] .sb-file-icon.ft-json { color: var(--kn-yellow); }
+:root[data-icons="duotone"] .sb-file-icon.ft-code, :root[data-icons="pixel"] .sb-file-icon.ft-code { color: var(--kn-purple); }
+:root[data-icons="duotone"] .sb-file-icon.ft-config, :root[data-icons="pixel"] .sb-file-icon.ft-config { color: var(--kn-orange); }
+:root[data-icons="duotone"] .sb-file-icon.ft-markup, :root[data-icons="pixel"] .sb-file-icon.ft-markup { color: var(--kn-red); }
+:root[data-icons="duotone"] .sb-file-icon.ft-image, :root[data-icons="pixel"] .sb-file-icon.ft-image { color: var(--kn-pink); }
+:root[data-icons="duotone"] .sb-file-icon.ft-text, :root[data-icons="pixel"] .sb-file-icon.ft-text { color: var(--kn-fg-muted); }
 .sb-name { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .sb-dim { color: var(--kn-fg-faint); font-size: 0.9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .sb-count { color: var(--kn-fg-faint); font-size: 11px; background: var(--kn-hover); padding: 0 6px; border-radius: 8px; }
@@ -645,3 +660,59 @@ button.st-item:hover { background: var(--kn-hover); color: var(--kn-fg); }
   .kn-set-row { flex-wrap: wrap; }
   .kn-set-row > .kn-input, .kn-set-row > .kn-select { width: 100%; }
 }
+
+/* Icon packs (settings) */
+.kn-set-packs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 6px 0 4px; }
+.kn-set-pack {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 10px 12px; text-align: left;
+  border: 1px solid var(--kn-border); border-radius: 9px; background: var(--kn-bg); color: var(--kn-fg);
+  transition: border-color 80ms, background 80ms;
+}
+.kn-set-pack:hover { border-color: color-mix(in srgb, var(--kn-accent) 50%, var(--kn-border)); }
+.kn-set-pack.selected { border-color: var(--kn-accent); background: var(--kn-accent-soft); }
+.kn-set-pack:focus-visible { outline: 2px solid var(--kn-accent); outline-offset: 2px; }
+.kn-set-pack-icons { display: flex; gap: 7px; margin-bottom: 5px; color: var(--kn-fg-muted); }
+.kn-set-pack-icons .kn-icon { width: 17px; height: 17px; }
+.kn-set-pack-icons .ft-dir { color: var(--kn-accent); }
+.kn-set-pack[data-pack="duotone"] .ft-markdown, .kn-set-pack[data-pack="pixel"] .ft-markdown { color: var(--kn-blue); }
+.kn-set-pack[data-pack="duotone"] .ft-json, .kn-set-pack[data-pack="pixel"] .ft-json { color: var(--kn-yellow); }
+.kn-set-pack[data-pack="duotone"] .ft-code, .kn-set-pack[data-pack="pixel"] .ft-code { color: var(--kn-purple); }
+.kn-set-pack-name { font-weight: 600; }
+.kn-set-pack small { color: var(--kn-fg-faint); font-size: 11.5px; }
+
+/* Keyboard shortcuts cheat sheet */
+.kn-cheatsheet-backdrop { padding-top: 5vh; }
+.kn-cheatsheet {
+  width: min(900px, 95vw); max-height: 88vh; display: flex; flex-direction: column;
+  background: var(--kn-bg-alt); border: 1px solid var(--kn-border); border-radius: 14px;
+  box-shadow: var(--shadow); animation: pop 160ms var(--ease); overflow: hidden;
+}
+.cs-head { display: flex; align-items: center; gap: 14px; padding: 16px 14px 10px 20px; }
+.cs-head .kn-modal-title { margin: 0 0 4px; font-size: 17px; }
+.cs-kilo { width: 46px; height: 46px; flex: none; }
+.cs-sub { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--kn-fg-muted); font-size: 12.5px; }
+.cs-grid {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 6px 20px 16px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(255px, 1fr)); gap: 6px 26px; align-content: start;
+}
+.cs-section h3 {
+  display: flex; align-items: center; gap: 7px; margin: 12px 0 4px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--kn-accent);
+}
+.cs-section h3 .kn-icon { width: 14px; height: 14px; }
+.cs-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 28px;
+  border-bottom: 1px dashed color-mix(in srgb, var(--kn-border) 70%, transparent);
+}
+.cs-label { color: var(--kn-fg); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-keys { display: inline-flex; align-items: center; gap: 3px; flex: none; }
+.cs-keys kbd {
+  min-width: 20px; padding: 1px 6px; border-radius: 5px; text-align: center; font-size: 11.5px; line-height: 17px;
+  background: var(--kn-bg); color: var(--kn-fg-muted); border: 1px solid var(--kn-border);
+  box-shadow: inset 0 -1.5px 0 var(--kn-border);
+}
+.cs-or { color: var(--kn-fg-faint); padding: 0 2px; font-size: 11px; }
+.cs-foot { display: flex; align-items: center; gap: 8px; padding: 10px 14px 10px 20px; border-top: 1px solid var(--kn-border); }
+.cs-foot .kn-btn { display: inline-flex; align-items: center; gap: 6px; }
+.cs-check { display: inline-flex; align-items: center; gap: 8px; color: var(--kn-fg-muted); cursor: pointer; user-select: none; }
+.cs-check input { accent-color: var(--kn-accent); width: 15px; height: 15px; }
