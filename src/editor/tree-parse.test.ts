@@ -1,0 +1,80 @@
+import { describe, expect, it } from "vitest";
+import { keySource, nodePath, parseJsonTree, parseTree, valueSource, type TreeNode } from "./tree-parse";
+
+const find = (n: TreeNode, ...keys: (string | number)[]): TreeNode => keys.reduce((cur, k) => cur.children!.find((c) => c.key === k)!, n);
+const edit = (src: string, n: TreeNode, text: string, key = false) => src.slice(0, key ? n.keyFrom! : n.from) + text + src.slice(key ? n.keyTo! : n.to);
+
+describe("JSON tree", () => {
+  const src = `{
+  // comment
+  "name": "kilo", 'single': 'x', bare: 1,
+  "list": [1, {"a": null}, true],
+}`;
+  it("keeps the position of every key and value", () => {
+    const root = parseJsonTree(src);
+    expect(root.type).toBe("object");
+    expect(root.children!.map((c) => [c.key, c.type])).toEqual([["name", "string"], ["single", "string"], ["bare", "number"], ["list", "array"]]);
+    const name = find(root, "name");
+    expect(src.slice(name.from, name.to)).toBe('"kilo"');
+    expect(src.slice(name.keyFrom, name.keyTo)).toBe('"name"');
+    expect(find(root, "list", 1, "a").type).toBe("null");
+    expect(nodePath([root, find(root, "list"), find(root, "list", 1), find(root, "list", 1, "a")])).toBe("list[1].a");
+  });
+
+  it("edits a value or a key without touching the rest", () => {
+    const root = parseJsonTree(src);
+    let out = edit(src, find(root, "name"), valueSource(find(root, "name"), 'Ki"lo', "json"));
+    expect(out).toContain('"name": "Ki\\"lo", \'single\'');
+    expect(out).toContain("// comment");
+    out = edit(src, find(root, "single"), valueSource(find(root, "single"), "it's", "json"));
+    expect(out).toContain("'single': 'it\\'s'");
+    // A number can become true, null, or a string.
+    expect(valueSource(find(root, "bare"), "42", "json")).toBe("42");
+    expect(valueSource(find(root, "bare"), "true", "json")).toBe("true");
+    expect(valueSource(find(root, "bare"), "hello", "json")).toBe('"hello"');
+    // A string stays a string.
+    expect(valueSource(find(root, "name"), "42", "json")).toBe('"42"');
+    expect(keySource(find(root, "bare"), "renamed", "json")).toBe("renamed");
+    expect(keySource(find(root, "bare"), "with space", "json")).toBe('"with space"');
+    expect(keySource(find(root, "name"), "title", "json")).toBe('"title"');
+  });
+
+  it("reports errors with their position", async () => {
+    const t = await parseTree('{"a": 1,, }', "json");
+    expect(t.roots).toEqual([]);
+    expect(t.error?.message).toContain("line 1, column 9");
+  });
+});
+
+describe("YAML tree", () => {
+  const src = "# config\nname: kilo\nport: 8080\nempty:\nlist:\n  - a\n  - 'b c'\ntext: |\n  multi\n  line\n---\nsecond: true\n";
+  it("reads every document with positions; block scalars are not edited in place", async () => {
+    const t = await parseTree(src, "yaml");
+    expect(t.error).toBeNull();
+    expect(t.roots.map((r) => r.key)).toEqual(["Document 1", "Document 2"]);
+    const d1 = t.roots[0];
+    expect(find(d1, "port").type).toBe("number");
+    expect(src.slice(find(d1, "name").from, find(d1, "name").to)).toBe("kilo");
+    expect(find(d1, "list", 1).text).toBe("b c");
+    expect(find(d1, "text").editable).toBe(false);
+    expect(nodePath([d1, find(d1, "list"), find(d1, "list", 0)])).toBe("list[0]");
+  });
+
+  it("writes values that keep their type and quoting", async () => {
+    const t = await parseTree(src, "yaml");
+    const d1 = t.roots[0];
+    expect(valueSource(find(d1, "name"), "kilo note", "yaml")).toBe("kilo note");
+    expect(valueSource(find(d1, "name"), "123", "yaml")).toBe('"123"'); // stays a string
+    expect(valueSource(find(d1, "name"), "a: b", "yaml")).toBe('"a: b"');
+    expect(valueSource(find(d1, "list", 1), "it's", "yaml")).toBe("'it''s'");
+    expect(valueSource(find(d1, "port"), "9090", "yaml")).toBe("9090");
+    const empty = find(d1, "empty");
+    expect(edit(src, empty, valueSource(empty, "now set", "yaml"))).toContain("empty: now set\n");
+    expect(keySource(find(d1, "port"), "listen port", "yaml")).toBe("listen port");
+  });
+
+  it("reports syntax errors", async () => {
+    const t = await parseTree("a: [1, 2\nb: 3\n", "yaml");
+    expect(t.error).not.toBeNull();
+  });
+});

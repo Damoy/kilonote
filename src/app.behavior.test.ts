@@ -442,3 +442,20 @@ describe("untitled notes", () => {
     expect(app.newDoc().title).toBe("Untitled 4");
   });
 });
+
+describe("side views", () => {
+  it("each kind of view is turned on on its own and kept with the session", async () => {
+    const { app, disk } = await start({ "/notes/a.json": '{"a": 1}', "/notes/b.md": "# B", "/notes/c.txt": "c" });
+    await app.openFile("/notes/a.json");
+    app.preview.toggle();
+    expect(app.preview.visible).toBe(true);
+    await app.openFile("/notes/b.md");
+    expect(app.preview.visible).toBe(false); // the Markdown preview was not turned on
+    await app.openFile("/notes/c.txt");
+    app.preview.toggle(); // nothing to show: a message, nothing turned on
+    expect([...app.preview.open]).toEqual(["tree"]);
+    await (app as unknown as { saveSessionNow(): Promise<void> }).saveSessionNow();
+    const session = [...disk.files.keys()].find((k) => k.startsWith("/config/session"))!;
+    expect(JSON.parse(disk.text(session)!).preview).toEqual(["tree"]);
+  });
+});

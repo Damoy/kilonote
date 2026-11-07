@@ -19,7 +19,7 @@ export function where(text: string, pos: number): string {
 // ---------------------------------------------------------------------------
 // JSON (and JSONC / JSON5-ish: comments, trailing commas, single quotes)
 
-type JTok = {
+export type JTok = {
   t: "{" | "}" | "[" | "]" | ":" | "," | "str" | "num" | "lit" | "comment";
   v: string;
   pos: number;
@@ -31,7 +31,7 @@ type JTok = {
   trail: JTok[];
 };
 
-function jsonTokens(text: string): { toks: JTok[]; end: JTok[] } {
+export function jsonTokens(text: string): { toks: JTok[]; end: JTok[] } {
   const raw: JTok[] = [];
   let i = 0;
   let nl = 0;

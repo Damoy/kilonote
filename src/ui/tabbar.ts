@@ -7,6 +7,7 @@ import { isDoneFile, relative } from "../core/path";
 import { resolveColor } from "../core/themes";
 import { h, icon } from "./dom";
 import { fileIcon } from "./sidebar";
+import { SIDE_LABELS, sideKindFor } from "./preview";
 import { showMenu, type MenuItem } from "./overlay";
 
 export class TabBar {
@@ -17,13 +18,17 @@ export class TabBar {
   private marker = h("div", { class: "kn-tab-marker" });
   private wasCollapsed = new Set<string>();
   private listBtn: HTMLElement;
+  /** Preview / tree view of the active document (only when it has one). */
+  private sideBtn = h("button", { class: "kn-side-btn" });
 
   constructor(private app: App, private el: HTMLElement) {
     this.scroller = h("div", { class: "kn-tabs" });
     this.listBtn = h("button", { class: "kn-icon-btn kn-tab-list", title: titleWithKey("All tabs", "tab.list"), onclick: (e: MouseEvent) => this.showTabList(e) }, icon("list"));
+    this.sideBtn.addEventListener("click", () => app.preview.toggle());
     const actions = h(
       "div",
       { class: "kn-tabbar-actions" },
+      this.sideBtn,
       this.listBtn,
       h("button", { class: "kn-icon-btn", title: titleWithKey("New note", "file.new"), onclick: () => app.newDoc() }, icon("plus")),
       h("button", { class: "kn-icon-btn", title: titleWithKey("Command palette", "palette.commands"), onclick: () => app.openCommandPalette() }, icon("more")),
@@ -45,6 +50,22 @@ export class TabBar {
     app.on("docs", () => this.render());
     app.on("active", () => this.render());
     app.on("settings", () => this.render());
+    app.on("workspace", () => this.updateSideBtn());
+  }
+
+  private updateSideBtn() {
+    const kind = sideKindFor(this.app.active);
+    this.sideBtn.hidden = !kind;
+    if (!kind) return;
+    const { label, icon: ic, title } = SIDE_LABELS[kind];
+    const on = this.app.preview?.visible ?? false;
+    this.sideBtn.classList.toggle("active", on);
+    this.sideBtn.title = titleWithKey(`${on ? "Hide" : "Show"} the ${title.toLowerCase()}`, "view.preview");
+    this.sideBtn.setAttribute("aria-pressed", String(on));
+    if (this.sideBtn.dataset.kind !== kind) {
+      this.sideBtn.dataset.kind = kind;
+      this.sideBtn.replaceChildren(icon(ic), h("span", {}, label));
+    }
   }
 
   render() {
@@ -66,6 +87,7 @@ export class TabBar {
       if (group && opened.has(group.id) && doc !== app.active) tab.classList.add("appearing");
       this.scroller.append(tab);
     }
+    this.updateSideBtn();
     const activeEl = this.scroller.querySelector<HTMLElement>(".kn-tab.active");
     activeEl?.scrollIntoView({ block: "nearest", inline: "nearest" });
     this.updateOverflow();

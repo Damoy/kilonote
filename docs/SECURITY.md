@@ -65,6 +65,17 @@ workstation. Every point can be checked in the source code.
   rules out script injection through an opened file. The Markdown preview builds its
   output element by element: raw HTML is shown as text, images and other remote content
   are never loaded, and only http(s)/mailto links can be opened (in the browser).
+- The HTML and SVG preview shows the page in a sandboxed frame that is not allowed to run
+  scripts, submit forms, open windows or navigate; the frame's own policy only allows
+  inline styles and embedded (data:) images and fonts, so nothing is loaded from the
+  network or the disk. The page is also cleaned before it is shown (scripts, frames,
+  plugins, `<base>`, `<link>`, refresh, event attributes and remote sources removed), and
+  its links only open http(s)/mailto addresses in the browser. An SVG file is shown as an
+  image, which never runs scripts. The end-to-end tests check that a page's script does
+  not run.
+- The JSON and YAML tree view only reads the text and, when a value is edited, replaces
+  that value in the editor (one undo step); YAML is parsed by the `yaml` package, without
+  custom tags.
 - "Replace in files" only rewrites the files of the folder the user opened, after a
   confirmation, keeps a copy of each in the local history and can be undone.
 - Browser developer tools are disabled in the distributed build.

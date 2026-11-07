@@ -25,6 +25,7 @@ mkdirSync(config);
 writeFileSync(join(notes, "work.txt"), "# Work\n- call colleague X - todo\n- review the spec - todo\n");
 writeFileSync(join(notes, "old.txt"), Buffer.from("caf\xe9 - todo\n", "latin1")); // Windows-1252
 writeFileSync(join(notes, "data.json"), '{"name":"kilo","tags":["a","b"]}');
+writeFileSync(join(notes, "page.html"), '<h1>Page</h1><script>window.parent.PWNED = 1</script><img src="https://example.com/x.png" onerror="window.parent.PWNED = 2">');
 writeFileSync(join(notes, "build.py"), "import os\n\ndef main():\n    return 1  # done\n");
 // Programs placed in the notes folder: KiloNote must never run them.
 writeFileSync(join(notes, "evil.exe"), `#!/bin/sh\ntouch "${marker}"\n`);
@@ -177,6 +178,22 @@ try {
     await run("await app.openFile(args[0]); app.focusEditor();", join(notes, "data.json"));
     await press("Shift", "Alt", "f");
     expect(await run("return app.view.state.doc.toString();"), '{\n    "name": "kilo",\n    "tags": ["a", "b"]\n}\n', "formatted");
+  });
+
+  await test("an HTML page is previewed without running its scripts; JSON gets an editable tree", async () => {
+    await run("await app.openFile(args[0]); app.preview.open.clear(); app.preview.toggle();", join(notes, "page.html"));
+    await until(() => run("return document.querySelector('.pv-frame')?.contentDocument?.querySelector('h1')?.textContent === 'Page';"), "the page preview");
+    await sleep(500);
+    expect(await run("return window.PWNED ?? null;"), null, "a script of the page ran");
+    await run("await app.openFile(args[0]); app.preview.toggle();", join(notes, "data.json"));
+    await until(() => run("return document.querySelectorAll('.tv-row').length > 2;"), "the tree");
+    await run(`const row = [...document.querySelectorAll('.tv-row')].find((r) => r.textContent.startsWith('name'));
+      row.querySelector('.tv-val').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      const input = document.querySelector('.tv-edit');
+      input.value = 'note';
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));`);
+    expect(await run("return app.view.state.doc.toString().includes('\"name\": \"note\"');"), true, "value edited from the tree");
+    await run("app.preview.toggle();");
   });
 
   await test("Ctrl+Shift+N opens a second window", async () => {

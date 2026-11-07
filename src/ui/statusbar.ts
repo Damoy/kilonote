@@ -8,6 +8,7 @@ import { findTasks } from "../editor/tasks";
 import { debounce, h, icon } from "./dom";
 import { showMenu } from "./overlay";
 import { showCheatSheet } from "./cheatsheet";
+import { SIDE_LABELS, sideKindFor } from "./preview";
 
 const ENCODINGS: [string, string][] = [
   ["UTF-8", "UTF-8"],
@@ -27,7 +28,7 @@ export class StatusBar {
   private eol = h("button", { class: "st-item", title: "Line endings" });
   private lang = h("button", { class: "st-item", title: titleWithKey("Document type (syntax coloring)", "view.language") });
   private save = h("button", { class: "st-item st-save" });
-  private previewBtn = h("button", { class: "st-item st-icon st-preview", title: titleWithKey("Markdown preview", "view.preview") }, icon("eye"));
+  private previewBtn = h("button", { class: "st-item st-icon st-preview" });
   private counted: unknown = null;
 
   constructor(private app: App, el: HTMLElement) {
@@ -67,6 +68,7 @@ export class StatusBar {
     app.on("active", () => this.update());
     app.on("docs", () => this.updateMeta());
     app.on("settings", () => this.update());
+    app.on("workspace", () => this.updateMeta());
   }
 
   private update() {
@@ -123,7 +125,16 @@ export class StatusBar {
     const doc = this.app.active;
     const show = !!doc;
     for (const el of [this.encoding, this.eol, this.lang, this.save]) el.hidden = !show;
-    this.previewBtn.hidden = doc?.lang !== "markdown";
+    const side = sideKindFor(doc);
+    this.previewBtn.hidden = !side;
+    if (side) {
+      const { icon: ic, title } = SIDE_LABELS[side];
+      if (this.previewBtn.dataset.kind !== side) {
+        this.previewBtn.dataset.kind = side;
+        this.previewBtn.replaceChildren(icon(ic));
+      }
+      this.previewBtn.title = titleWithKey(title, "view.preview");
+    }
     this.previewBtn.classList.toggle("active", !!this.app.preview?.visible);
     if (!doc) return;
     this.encoding.textContent = doc.encoding;

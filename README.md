@@ -52,7 +52,11 @@ On macOS, use ⌘ instead of Ctrl.
 **Editor**
 - Fast even on large files (CodeMirror 6), multiple cursors (Ctrl+D, Alt+click), column selection
 - Note highlighting: `#` headings, bullets, clickable links (Ctrl+click), dates, `#tags`, `@mentions`
-- Markdown and JSON highlighting, and a live **Markdown preview** next to the editor (Ctrl+Shift+V)
+- A second view next to the editor (Ctrl+Shift+V, or the *Preview* / *Tree* button that shows
+  up at the right of the tabs): live **Markdown preview**; **HTML and SVG preview**, in a
+  sandbox (no script runs, nothing is loaded from the network); and for **JSON and YAML** an
+  editable **tree view** (hover a node to see it in the text, double-click a value or a key to
+  change it, the tree follows the cursor)
 - **Syntax coloring** for about 40 languages and config formats (Python, JavaScript, TypeScript,
   C#, Java, C/C++, Go, Rust, SQL, PowerShell, Batch, Shell, YAML, TOML, INI, XML, HTML, CSS…),
   loaded only when such a file is opened; the status bar changes the document type
@@ -85,8 +89,9 @@ On macOS, use ⌘ instead of Ctrl.
   compact stack (only the tab being edited stays visible), click again to expand it; drag and
   drop; a list of all tabs when they no longer fit
 - Sidebar and folder can be closed from their own buttons (or Ctrl+B)
-- File explorer with file type icons; one button expands or collapses every folder, or only the
-  selected one (Alt+click a folder does the same)
+- File explorer with file type icons; the header button collapses every folder (or expands
+  them all when none is open), and the button that appears over a folder expands or collapses
+  everything inside it (Alt+click a folder does the same)
 - Fuzzy file search (Ctrl+P), search and **replace in all files** (Ctrl+Shift+F, with undo)
 - Command palette (Ctrl+Shift+P), go to a heading or task (Ctrl+R), go to a line (Ctrl+G)
 
@@ -203,7 +208,7 @@ On macOS, Ctrl becomes ⌘.
 | Find / replace | Ctrl+F / Ctrl+H |
 | Search (and replace) in folder | Ctrl+Shift+F |
 | Task: set due date | Ctrl+Shift+U |
-| Markdown preview | Ctrl+Shift+V |
+| Preview (Markdown, HTML, SVG) / tree view (JSON, YAML) | Ctrl+Shift+V |
 | Format document (JSON, XML, HTML, CSS, tables) | Shift+Alt+F |
 | Shortcuts cheat sheet | Ctrl+? |
 | New note / open file / open folder | Ctrl+N / Ctrl+O / Ctrl+Shift+O |
@@ -365,6 +370,7 @@ no UI framework.
 
 - [Tauri](https://tauri.app) (MIT / Apache-2.0) and [CodeMirror](https://codemirror.net) (MIT),
   including its legacy language modes for the syntax coloring
+- [yaml](https://eemeli.org/yaml/) (ISC) for the YAML tree view
 - [JetBrains Mono](https://www.jetbrains.com/lp/mono/) font (SIL Open Font License 1.1), bundled through [Fontsource](https://fontsource.org)
 
 ## License

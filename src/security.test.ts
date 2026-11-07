@@ -43,3 +43,16 @@ describe("no program execution", () => {
     expect(isProbablyBinary("notes.txt")).toBe(false);
   });
 });
+
+describe("previews never run the content", () => {
+  it("the page preview frame is sandboxed without scripts, under a strict policy", () => {
+    const src = read("src/ui/html-preview.ts");
+    expect(src).toMatch(/setAttribute\("sandbox", "allow-same-origin"\)/);
+    expect(src).toMatch(/FRAME_CSP = "default-src 'none';/);
+    // (The code only: the comments explain what is not allowed.)
+    const code = (f: string) => read(f).split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+    for (const f of ["src/ui/html-preview.ts", "src/ui/preview.ts", "src/ui/tree-view.ts", "src/editor/markdown-render.ts"]) {
+      expect(code(f), f).not.toMatch(/allow-scripts|allow-top-navigation|allow-popups|allow-forms|allow-modals/);
+    }
+  });
+});

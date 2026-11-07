@@ -36,8 +36,6 @@ export class Sidebar {
   width = 260;
   panel: Panel = "files";
   private expanded = new Set<string>();
-  /** The folder last clicked in the explorer: the target of "Expand / collapse all". */
-  private selectedDir: string | null = null;
   private toggleAllBtn = h("button", { class: "kn-icon-btn sb-toggle-all" });
   private cache = new Map<string, Entry[]>();
   private panels: Record<Panel, HTMLElement>;
@@ -78,12 +76,6 @@ export class Sidebar {
       if (e.target !== this.treeEl || !app.workspace) return;
       e.preventDefault();
       this.showDirMenu(app.workspace, e.clientX, e.clientY, true);
-    });
-    // A click in the empty space below the files: no folder selected anymore.
-    this.treeEl.addEventListener("click", (e) => {
-      if (e.target !== this.treeEl || !this.selectedDir) return;
-      this.selectedDir = null;
-      this.markActive();
     });
     this.toggleAllBtn.addEventListener("click", () => void this.toggleAll());
 
@@ -352,21 +344,31 @@ export class Sidebar {
         icon(ic, `sb-file-icon ${kind}`),
         h("span", { class: "sb-name" }, e.name),
       );
+      if (e.isDir) {
+        // Shown on hover: everything inside this folder, expanded or collapsed.
+        const all = h("button", { class: "kn-icon-btn sb-row-action", tabindex: "-1" });
+        row.append(all);
+        row.addEventListener("mouseenter", () => {
+          const expand = this.canExpandMore(e.path);
+          all.title = expand ? "Expand everything inside (Alt+click)" : "Collapse this folder";
+          all.replaceChildren(icon(expand ? "expand" : "collapse"));
+        });
+        all.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          void (this.canExpandMore(e.path) ? this.expandAll(e.path) : this.collapseAll(e.path));
+        });
+      }
       row.addEventListener("click", (ev) => {
         if (e.isDir) {
-          this.selectedDir = e.path;
           // Alt+click: the folder and everything inside it.
-          if (ev.altKey) void (open ? this.collapseAll(e.path) : this.expandAll(e.path));
+          if (ev.altKey) void (this.canExpandMore(e.path) ? this.expandAll(e.path) : this.collapseAll(e.path));
           else {
             if (open) this.expanded.delete(e.path);
             else this.expanded.add(e.path);
             void this.renderTree();
             this.app.emit("workspace");
           }
-        } else {
-          this.selectedDir = null;
-          void this.app.openFile(e.path);
-        }
+        } else void this.app.openFile(e.path);
       });
       row.addEventListener("contextmenu", (ev) => {
         ev.preventDefault();
@@ -380,59 +382,47 @@ export class Sidebar {
 
   private markActive() {
     const p = this.app.active?.path;
-    const sel = this.selectedDir;
-    let found = false;
     this.treeEl.querySelectorAll<HTMLElement>(".sb-row").forEach((r) => {
       r.classList.toggle("active", !!p && samePath(r.dataset.path!, p));
-      const selected = !!sel && samePath(r.dataset.path!, sel);
-      r.classList.toggle("selected", selected);
-      found ||= selected;
     });
-    // Renamed, deleted, or hidden in a collapsed folder: nothing is selected.
-    if (sel && !found) this.selectedDir = null;
     this.updateToggleAll();
   }
 
   // ---------------------------------------------------------------------------
   // Expand / collapse all
 
-  /** The folder the button acts on: the selected one, otherwise the whole tree. */
-  private toggleTarget(): string | null {
-    const ws = this.app.workspace;
-    if (!ws) return null;
-    if (this.selectedDir && (isInside(this.selectedDir, ws) || samePath(this.selectedDir, ws))) return this.selectedDir;
-    return ws;
-  }
-
-  /** "Expand all" while a folder of the target is still closed, "Collapse all" once everything is open. */
-  private canExpandMore(target: string): boolean {
-    const isRoot = !!this.app.workspace && samePath(target, this.app.workspace);
-    if (!isRoot && !this.expanded.has(target)) return true;
+  /** A folder (or one inside it) is still closed. */
+  private canExpandMore(dir: string): boolean {
+    const isRoot = !!this.app.workspace && samePath(dir, this.app.workspace);
+    if (!isRoot && !this.expanded.has(dir)) return true;
     for (const r of this.treeEl.querySelectorAll<HTMLElement>(".sb-row.dir")) {
       const p = r.dataset.path!;
-      if (isInside(p, target) && !this.expanded.has(p)) return true;
+      if (isInside(p, dir) && !this.expanded.has(p)) return true;
     }
     return false;
   }
 
+  /** Some folder of the tree is open. */
+  private anyOpen(): boolean {
+    for (const r of this.treeEl.querySelectorAll<HTMLElement>(".sb-row.dir")) if (this.expanded.has(r.dataset.path!)) return true;
+    return false;
+  }
+
+  /** The header button: "Collapse all" as soon as a folder is open, otherwise "Expand all". */
   private updateToggleAll() {
-    const target = this.toggleTarget();
-    if (!target) return;
-    const expand = this.canExpandMore(target);
-    const isRoot = samePath(target, this.app.workspace!);
-    const what = isRoot ? "all folders" : `"${basename(target)}"`;
-    this.toggleAllBtn.title = `${expand ? "Expand" : "Collapse"} ${what}${isRoot ? "" : " and its subfolders"} (Alt+click a folder does the same)`;
-    if (this.toggleAllBtn.dataset.mode !== (expand ? "expand" : "collapse")) {
-      this.toggleAllBtn.dataset.mode = expand ? "expand" : "collapse";
-      this.toggleAllBtn.replaceChildren(icon(expand ? "expand" : "collapse"));
+    const collapse = this.anyOpen();
+    this.toggleAllBtn.title = collapse ? "Collapse all folders" : "Expand all folders";
+    if (this.toggleAllBtn.dataset.mode !== (collapse ? "collapse" : "expand")) {
+      this.toggleAllBtn.dataset.mode = collapse ? "collapse" : "expand";
+      this.toggleAllBtn.replaceChildren(icon(collapse ? "collapse" : "expand"));
     }
   }
 
   async toggleAll() {
-    const target = this.toggleTarget();
-    if (!target) return;
-    if (this.canExpandMore(target)) await this.expandAll(target);
-    else this.collapseAll(target);
+    const ws = this.app.workspace;
+    if (!ws) return;
+    if (this.anyOpen()) this.collapseAll(ws);
+    else await this.expandAll(ws);
   }
 
   /** Opens a folder and all its subfolders (up to EXPAND_LIMIT folders). */

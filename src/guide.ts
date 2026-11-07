@@ -67,14 +67,17 @@ it to the tasks of one tag (a client, a topic…).
   - \`:42\` goes to line 42, \`@\` lists headings and tasks, \`>\` runs commands.
 - **Ctrl+Shift+P**: command palette.
 - **Ctrl+Shift+F**: search in all files; the ⇄ button adds a replace field (with undo).
-- **Ctrl+Shift+V**: Markdown preview next to a \`.md\` note.
+- **Ctrl+Shift+V** (or the *Preview* / *Tree* button at the right of the tabs): a second
+  view next to the editor. Markdown, HTML and SVG files get a preview (pages run no
+  script and load nothing from the network); JSON and YAML files get a tree: hover a
+  node to see it in the text, double-click a value or a key to change it.
 - **Ctrl+F** / **Ctrl+H**: find / replace in the note.
 - **Ctrl+D**: select the next occurrence (multiple cursors), **Alt+click**: add a cursor.
 - **Alt+↑ / Alt+↓**: move the line. **Ctrl+Shift+K**: delete the line.
 - **Shift+Alt+F**: format the document or the selection (JSON, XML, HTML, CSS,
   Markdown tables). Command palette → "Edit: Minify JSON".
-- The explorer button with two arrows expands or collapses every folder, or only
-  the one you clicked last. Alt+click a folder does the same for that folder.
+- The explorer button with two arrows collapses every folder (or expands them all).
+  Hover a folder for its own button: everything inside it. Alt+click does the same.
 - **Ctrl+?**: the shortcuts cheat sheet (also the keyboard button of the status bar).
 
 ## Code and config files

@@ -1,9 +1,9 @@
 // CodeMirror 6 editor setup: a single view, one state per tab
 // (each tab keeps its own undo history).
 
-import { Compartment, EditorState, type Extension } from "@codemirror/state";
+import { Compartment, EditorState, StateEffect, StateField, type Extension } from "@codemirror/state";
 import {
-  crosshairCursor, drawSelection, dropCursor, EditorView, highlightActiveLine, highlightActiveLineGutter,
+  crosshairCursor, Decoration, type DecorationSet, drawSelection, dropCursor, EditorView, highlightActiveLine, highlightActiveLineGutter,
   highlightSpecialChars, keymap, lineNumbers, rectangularSelection, scrollPastEnd, type ViewUpdate,
 } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
@@ -155,6 +155,23 @@ const theme = EditorView.theme({
   ".cm-tooltip": { backgroundColor: "var(--kn-bg-alt)", border: "1px solid var(--kn-border)", color: "var(--kn-fg)" },
 });
 
+/** The text of the node hovered in the tree view (null: none). */
+export const setTreeHighlight = StateEffect.define<{ from: number; to: number } | null>();
+const treeMark = Decoration.mark({ class: "kn-tree-hl" });
+const treeHighlight = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    deco = deco.map(tr.changes);
+    for (const e of tr.effects) {
+      if (!e.is(setTreeHighlight)) continue;
+      const r = e.value;
+      deco = r && r.to > r.from && r.to <= tr.state.doc.length ? Decoration.set([treeMark.range(r.from, r.to)]) : Decoration.none;
+    }
+    return deco;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
 /** Enter on a bullet line continues the list (and removes an empty bullet). */
 function continueList(view: EditorView): boolean {
   const { state } = view;
@@ -219,6 +236,7 @@ export function createEditorState(
       settingsCompartment.of(settingsExtensions(s, taskCfg, lang)),
       notesHighlighter,
       notesClickHandler,
+      treeHighlight,
       syntaxHighlighting(highlight),
       theme,
       EditorView.contentAttributes.of({ spellcheck: "false", autocorrect: "off", autocapitalize: "off" }),

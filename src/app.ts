@@ -28,7 +28,7 @@ import { TabBar } from "./ui/tabbar";
 import { Sidebar } from "./ui/sidebar";
 import { StatusBar } from "./ui/statusbar";
 import { Welcome } from "./ui/welcome";
-import { Preview } from "./ui/preview";
+import { Preview, type SideKind } from "./ui/preview";
 import { showSettingsView } from "./ui/settings-view";
 import { showCheatSheet } from "./ui/cheatsheet";
 import { setIconPack, type IconPack } from "./ui/icons";
@@ -91,7 +91,8 @@ interface Session {
   untitled?: number;
   sidebar: { visible: boolean; width: number; panel: string; expanded: string[] };
   zen?: boolean;
-  preview?: boolean;
+  /** The side views turned on (older sessions: true for the Markdown preview). */
+  preview?: SideKind[] | boolean;
 }
 
 type AppEvent = "docs" | "active" | "workspace" | "settings" | "saved" | "selection";
@@ -1934,7 +1935,7 @@ export class App {
       groups: this.groups,
       sidebar: this.sidebar.sessionState(),
       zen: this.zen,
-      preview: this.preview.visible,
+      preview: [...this.preview.open],
     };
   }
 
@@ -2016,7 +2017,8 @@ export class App {
       const activeTab = s.tabs?.[s.active];
       const target = activeTab ? this.docs.find((d) => (activeTab.path ? d.path === activeTab.path : d.title === activeTab.title)) : this.docs[0];
       if (s.zen) this.setZen(true);
-      this.preview.visible = !!s.preview;
+      const views: unknown[] = Array.isArray(s.preview) ? s.preview : s.preview ? ["markdown"] : [];
+      this.preview.open = new Set(views.filter((v): v is SideKind => v === "markdown" || v === "html" || v === "tree"));
       this.activate(target ?? this.docs[0] ?? null);
       for (const d of conflicts) this.flagConflict(d);
     }
@@ -2226,7 +2228,7 @@ export class App {
       { id: "view.zoomOut", title: "View: Decrease text size", run: () => this.zoom(-1) },
       { id: "view.zoomReset", title: "View: Reset text size", run: () => this.zoom(null) },
       { id: "view.wrap", title: "View: Toggle word wrap", run: () => this.updateSetting("word_wrap", !this.settings.word_wrap) },
-      { id: "view.preview", title: "View: Toggle Markdown preview", run: () => this.preview.toggle() },
+      { id: "view.preview", title: "View: Toggle preview or tree view (Markdown, HTML, SVG, JSON, YAML)", run: () => this.preview.toggle() },
       { id: "view.language", title: "View: Document type (syntax coloring)…", run: () => this.selectLanguage() },
       { id: "view.lineNumbers", title: "View: Toggle line numbers", run: () => this.updateSetting("line_numbers", !this.settings.line_numbers) },
       { id: "theme.select", title: "Theme: Select…", run: () => this.selectTheme() },
