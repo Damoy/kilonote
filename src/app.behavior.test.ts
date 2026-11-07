@@ -16,6 +16,8 @@ interface Disk {
   appendDelay: number;
   /** Reported size of some files (to simulate huge files). */
   sizes: Map<string, number>;
+  /** Encoding of the last write of each file. */
+  encodings: Map<string, string>;
   clock: number;
   /** Simulates another program changing a file. */
   external(path: string, text: string): void;
@@ -29,6 +31,7 @@ function memoryBackend(init: Record<string, string> = {}, opts: { savePath?: str
     failWrites: new Set(),
     appendDelay: 0,
     sizes: new Map(),
+    encodings: new Map(),
     clock: 1_000,
     external(path, text) {
       disk.clock += 5_000;
@@ -57,9 +60,14 @@ function memoryBackend(init: Record<string, string> = {}, opts: { savePath?: str
       if (!f) throw new Error(`not found: ${p}`);
       if (f.text.includes("\u0000")) throw new Error("not a text file"); // like the native backend
       const bom = f.text.startsWith("﻿");
-      return { text: bom ? f.text.slice(1) : f.text, encoding: bom ? "UTF-8 BOM" : f.text.includes("é") ? "Windows-1252" : "UTF-8", mtime: f.mtime };
+      return { text: bom ? f.text.slice(1) : f.text, encoding: disk.encodings.get(p) ?? (bom ? "UTF-8 BOM" : f.text.includes("\u00e9") ? "Windows-1252" : "UTF-8"), mtime: f.mtime };
     },
-    writeText: async (p, text, bom) => write(p, (bom ? "﻿" : "") + text),
+    async writeText(p, text, encoding) {
+      // Like the native backend: Windows-1252 cannot hold every character.
+      const used = encoding === "Windows-1252" && /[^\u0000-\u00ff\u20ac]/.test(text) ? "UTF-8" : (encoding ?? "UTF-8");
+      disk.encodings.set(p, used);
+      return { mtime: write(p, (used === "UTF-8 BOM" ? "\uFEFF" : "") + text).mtime, encoding: used };
+    },
     async appendLines(p, lines) {
       if (disk.appendDelay) await new Promise((r) => setTimeout(r, disk.appendDelay));
       const prev = disk.files.get(p)?.text ?? "";
@@ -131,13 +139,17 @@ describe("saving", () => {
     expect(disk.text("/notes/a.txt")).toBe("hello world");
   });
 
-  it("after saving, the status bar shows the encoding actually written", async () => {
-    const { app } = await start({ "/notes/old.txt": "café" });
+  it("a file keeps its encoding when saved, unless it cannot hold a new character", async () => {
+    const { app, disk } = await start({ "/notes/old.txt": "caf\u00e9" });
     const doc = (await app.openFile("/notes/old.txt"))!;
     expect(doc.encoding).toBe("Windows-1252");
     type(app, "!");
     await app.save(doc);
+    expect(disk.encodings.get("/notes/old.txt")).toBe("Windows-1252");
+    type(app, " \u2713");
+    await app.save(doc);
     expect(doc.encoding).toBe("UTF-8");
+    expect(document.querySelector(".kn-toast-msg")?.textContent).toContain("saved as UTF-8");
   });
 
   it("reloading a file follows its new line endings", async () => {

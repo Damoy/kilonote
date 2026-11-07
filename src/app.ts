@@ -35,7 +35,7 @@ export interface Doc {
   savedText: Text;
   dirty: boolean;
   eol: "\n" | "\r\n";
-  bom: boolean;
+  /** Encoding of the file, kept when saving: UTF-8, UTF-8 BOM, UTF-16 LE/BE or Windows-1252. */
   encoding: string;
   mtime: number;
   lang: LangId;
@@ -327,7 +327,7 @@ export class App {
   // Documents
 
   private createDoc(init: {
-    path: string | null; text: string; savedText?: string; eol?: "\n" | "\r\n"; bom?: boolean; encoding?: string;
+    path: string | null; text: string; savedText?: string; eol?: "\n" | "\r\n"; encoding?: string;
     mtime?: number; title?: string; lang?: LangId; color?: string | null; groupId?: string | null; cursor?: number; scrollTop?: number;
   }): Doc {
     const lang = init.lang ?? langForPath(init.path);
@@ -339,7 +339,6 @@ export class App {
       savedText: Text.empty,
       dirty: false,
       eol: init.eol ?? this.defaultEol(),
-      bom: init.bom ?? false,
       encoding: init.encoding ?? "UTF-8",
       mtime: init.mtime ?? 0,
       lang,
@@ -433,7 +432,7 @@ export class App {
         if (!doc) {
           doc = this.createDoc({
             path, text: ft.text, eol: ft.text.includes("\r\n") ? "\r\n" : ft.text.includes("\n") ? "\n" : this.defaultEol(),
-            bom: ft.encoding === "UTF-8 BOM", encoding: ft.encoding, mtime: ft.mtime,
+            encoding: ft.encoding, mtime: ft.mtime,
           });
           if (!activate) this.docs.push(doc);
           else this.insertDoc(doc);
@@ -616,15 +615,17 @@ export class App {
       }
       try {
         const text = snapshot.sliceString(0, snapshot.length, doc.eol);
-        const written = await this.backend.writeText(path, text, doc.bom);
+        const written = await this.backend.writeText(path, text, doc.encoding);
         doc.mtime = written.mtime;
         doc.savedText = snapshot;
         doc.missing = false;
         doc.conflict = false;
-        // Files are always written as UTF-8 (Windows-1252 and UTF-16 files are converted).
-        const encoding = doc.bom ? "UTF-8 BOM" : "UTF-8";
-        const converted = doc.encoding !== encoding;
-        doc.encoding = encoding;
+        // The file keeps its encoding, unless Windows-1252 cannot hold a new character.
+        const converted = written.encoding !== doc.encoding;
+        if (converted) {
+          toast(`"${basename(path)}" now contains characters that ${doc.encoding} cannot hold: it was saved as ${written.encoding}.`);
+        }
+        doc.encoding = written.encoding;
         const wasDirty = doc.dirty;
         doc.dirty = !doc.state.doc.eq(snapshot);
         if (wasDirty !== doc.dirty || converted) this.emit("docs");
@@ -686,9 +687,8 @@ export class App {
       doc.dirty = false;
       doc.mtime = ft.mtime;
       doc.encoding = ft.encoding;
-      // The other program may have changed the line endings or the BOM: keep them.
+      // The other program may have changed the line endings: keep them.
       if (ft.text.includes("\n")) doc.eol = ft.text.includes("\r\n") ? "\r\n" : "\n";
-      doc.bom = ft.encoding === "UTF-8 BOM";
       doc.missing = false;
       doc.conflict = false;
       clearTimeout(doc.timer);
@@ -1578,7 +1578,7 @@ export class App {
           try {
             const ft = await this.backend.readText(t.path);
             const d = this.createDoc({
-              path: t.path, text: t.content ?? ft.text, savedText: ft.text, eol: t.eol, bom: ft.encoding === "UTF-8 BOM",
+              path: t.path, text: t.content ?? ft.text, savedText: ft.text, eol: t.eol,
               encoding: ft.encoding, mtime: ft.mtime, color: t.color, groupId: t.group, cursor: t.cursor, scrollTop: t.scrollTop,
             });
             // A draft restored on top of a file that changed since (or was already in

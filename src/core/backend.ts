@@ -8,6 +8,11 @@ export interface FileText {
   encoding: string;
   mtime: number;
 }
+/** Result of a write: the encoding actually used (Windows-1252 may fall back to UTF-8). */
+export interface Written {
+  mtime: number;
+  encoding: string;
+}
 export interface Meta {
   mtime: number;
   size: number;
@@ -26,7 +31,8 @@ export interface Backend {
   /** "main" for the first window, "kn-…" for the others. */
   readonly windowLabel: string;
   readText(path: string): Promise<FileText>;
-  writeText(path: string, text: string, bom?: boolean): Promise<Meta>;
+  /** Writes in the given encoding ("UTF-8", "UTF-8 BOM", "UTF-16 LE", "UTF-16 BE", "Windows-1252"). */
+  writeText(path: string, text: string, encoding?: string): Promise<Written>;
   appendLines(path: string, lines: string[]): Promise<Meta>;
   stat(path: string): Promise<Meta | null>;
   listDir(path: string, showHidden: boolean): Promise<Entry[]>;
@@ -89,7 +95,7 @@ export async function createTauriBackend(): Promise<Backend> {
     kind: "tauri",
     platform: detectPlatform(),
     readText: (path) => invoke<FileText>("read_text", { path }),
-    writeText: (path, text, bom) => invoke<Meta>("write_text", { path, text, bom: !!bom }),
+    writeText: (path, text, encoding) => invoke<Written>("write_text", { path, text, encoding: encoding ?? null }),
     appendLines: (path, lines) => invoke<Meta>("append_lines", { path, lines }),
     stat: (path) => invoke<Meta | null>("stat", { path }),
     listDir: (path, showHidden) => invoke<Entry[]>("list_dir", { path, showHidden }),
@@ -257,7 +263,7 @@ export function createWebBackend(): Backend {
       return { text: f.text, encoding: "UTF-8", mtime: f.mtime };
     },
     async writeText(path, text) {
-      return write(path, text);
+      return { mtime: write(path, text).mtime, encoding: "UTF-8" };
     },
     async appendLines(path, lines) {
       const prev = files.get(path)?.text ?? "";

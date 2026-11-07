@@ -6,7 +6,7 @@
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -73,19 +73,61 @@ fn meta_of(p: &Path) -> Option<Meta> {
 
 /// Windows-1252: bytes 0x80–0x9F have specific mappings, the rest matches
 /// Latin-1. Common for old Notepad files.
+const CP1252_HIGH: [char; 32] = [
+    '€', '\u{81}', '‚', 'ƒ', '„', '…', '†', '‡', 'ˆ', '‰', 'Š', '‹', 'Œ', '\u{8D}', 'Ž', '\u{8F}',
+    '\u{90}', '‘', '’', '“', '”', '•', '–', '—', '˜', '™', 'š', '›', 'œ', '\u{9D}', 'ž', 'Ÿ',
+];
+
 fn decode_cp1252(bytes: &[u8]) -> String {
-    const HIGH: [char; 32] = [
-        '€', '\u{81}', '‚', 'ƒ', '„', '…', '†', '‡', 'ˆ', '‰', 'Š', '‹', 'Œ', '\u{8D}', 'Ž',
-        '\u{8F}', '\u{90}', '‘', '’', '“', '”', '•', '–', '—', '˜', '™', 'š', '›', 'œ', '\u{9D}',
-        'ž', 'Ÿ',
-    ];
     bytes
         .iter()
         .map(|&b| match b {
-            0x80..=0x9F => HIGH[(b - 0x80) as usize],
+            0x80..=0x9F => CP1252_HIGH[(b - 0x80) as usize],
             _ => b as char,
         })
         .collect()
+}
+
+/// None when a character does not exist in Windows-1252.
+fn encode_cp1252(text: &str) -> Option<Vec<u8>> {
+    text.chars()
+        .map(|c| match c as u32 {
+            0..=0x7F | 0xA0..=0xFF => Some(c as u32 as u8),
+            _ => CP1252_HIGH
+                .iter()
+                .position(|&h| h == c)
+                .map(|i| 0x80 + i as u8),
+        })
+        .collect()
+}
+
+/// Encodes text in one of the encodings `decode` recognizes. A character that
+/// Windows-1252 cannot represent makes the file UTF-8. Returns the encoding used.
+fn encode(text: &str, encoding: &str, with_bom: bool) -> (Vec<u8>, &'static str) {
+    let utf16 = |le: bool| {
+        let mut out = Vec::with_capacity(text.len() * 2 + 2);
+        if with_bom {
+            out.extend_from_slice(if le { &[0xFF, 0xFE] } else { &[0xFE, 0xFF] });
+        }
+        for u in text.encode_utf16() {
+            out.extend_from_slice(&if le { u.to_le_bytes() } else { u.to_be_bytes() });
+        }
+        out
+    };
+    match encoding {
+        "UTF-8 BOM" => {
+            let mut out = if with_bom { BOM.to_vec() } else { Vec::new() };
+            out.extend_from_slice(text.as_bytes());
+            (out, "UTF-8 BOM")
+        }
+        "UTF-16 LE" => (utf16(true), "UTF-16 LE"),
+        "UTF-16 BE" => (utf16(false), "UTF-16 BE"),
+        "Windows-1252" => match encode_cp1252(text) {
+            Some(bytes) => (bytes, "Windows-1252"),
+            None => (text.as_bytes().to_vec(), "UTF-8"),
+        },
+        _ => (text.as_bytes().to_vec(), "UTF-8"),
+    }
 }
 
 fn decode_utf16(bytes: &[u8], little_endian: bool) -> String {
@@ -159,20 +201,39 @@ async fn read_text(path: String) -> Result<FileText, String> {
 
 /// Atomic write: write a sibling temporary file, then rename it over the target.
 /// If renaming fails (file locked on Windows…), write the file directly.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Written {
+    mtime: f64,
+    /// The encoding actually written (Windows-1252 falls back to UTF-8 when needed).
+    encoding: String,
+}
+
+/// Writes text in the file's encoding (UTF-8 when none is given).
 #[tauri::command]
-async fn write_text(path: String, text: String, bom: Option<bool>) -> Result<Meta, String> {
+async fn write_text(
+    path: String,
+    text: String,
+    encoding: Option<String>,
+) -> Result<Written, String> {
     let target = PathBuf::from(&path);
+    let (payload, used) = encode(&text, encoding.as_deref().unwrap_or("UTF-8"), true);
+    write_bytes(&target, &payload)?;
+    let mtime = meta_of(&target)
+        .ok_or("file not found after writing")?
+        .mtime;
+    Ok(Written {
+        mtime,
+        encoding: used.into(),
+    })
+}
+
+fn write_bytes(target: &Path, payload: &[u8]) -> Result<(), String> {
     if let Some(parent) = target.parent() {
         if !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent).map_err(err)?;
         }
     }
-    let mut payload = Vec::with_capacity(text.len() + 3);
-    if bom.unwrap_or(false) {
-        payload.extend_from_slice(BOM);
-    }
-    payload.extend_from_slice(text.as_bytes());
-
     let file_name = target
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -180,61 +241,62 @@ async fn write_text(path: String, text: String, bom: Option<bool>) -> Result<Met
     let tmp = target.with_file_name(format!(".{file_name}.kilonote-tmp"));
     let atomic = (|| -> std::io::Result<()> {
         let mut f = File::create(&tmp)?;
-        f.write_all(&payload)?;
+        f.write_all(payload)?;
         f.sync_all()?;
         drop(f);
-        if let Ok(m) = fs::metadata(&target) {
+        if let Ok(m) = fs::metadata(target) {
             let _ = fs::set_permissions(&tmp, m.permissions());
         }
-        fs::rename(&tmp, &target)
+        fs::rename(&tmp, target)
     })();
     if atomic.is_err() {
         let _ = fs::remove_file(&tmp);
-        fs::write(&target, &payload).map_err(err)?;
+        fs::write(target, payload).map_err(err)?;
     }
-    meta_of(&target).ok_or_else(|| "file not found after writing".into())
+    Ok(())
 }
 
-/// Appends lines at the end of a file (created when needed), using the line
-/// ending the file already uses (LF or CRLF).
+/// Appends lines at the end of a file (created when needed), in the encoding and
+/// with the line ending (LF or CRLF) the file already uses.
 #[tauri::command]
 async fn append_lines(path: String, lines: Vec<String>) -> Result<Meta, String> {
     let p = PathBuf::from(&path);
-    let mut eol = if cfg!(windows) { "\r\n" } else { "\n" };
-    let mut needs_newline = false;
-    if let Ok(mut f) = File::open(&p) {
-        let mut head = vec![0u8; 8192];
-        let n = f.read(&mut head).map_err(err)?;
-        if n > 0 {
-            eol = if head[..n].windows(2).any(|w| w == b"\r\n") {
-                "\r\n"
-            } else if head[..n].contains(&b'\n') {
-                "\n"
-            } else {
-                eol
-            };
-            let len = f.metadata().map_err(err)?.len();
-            f.seek(SeekFrom::Start(len - 1)).map_err(err)?;
-            let mut last = [0u8; 1];
-            f.read_exact(&mut last).map_err(err)?;
-            needs_newline = last[0] != b'\n';
-        }
-    }
-    let mut out = String::new();
-    if needs_newline {
-        out.push_str(eol);
+    let (text, encoding) = match fs::read(&p) {
+        Ok(bytes) if looks_binary(&bytes) => return Err(NOT_TEXT.into()),
+        Ok(bytes) if !bytes.is_empty() => decode(bytes),
+        Ok(_) => (String::new(), "UTF-8"),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => (String::new(), "UTF-8"),
+        Err(e) => return Err(err(e)),
+    };
+    let eol = if text.contains("\r\n") {
+        "\r\n"
+    } else if text.contains('\n') || !cfg!(windows) {
+        "\n"
+    } else {
+        "\r\n"
+    };
+    let mut addition = String::new();
+    if !text.is_empty() && !text.ends_with('\n') {
+        addition.push_str(eol);
     }
     for line in &lines {
-        out.push_str(line);
-        out.push_str(eol);
+        addition.push_str(line);
+        addition.push_str(eol);
     }
-    let mut f = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&p)
-        .map_err(err)?;
-    f.write_all(out.as_bytes()).map_err(err)?;
-    f.sync_all().map_err(err)?;
+    let (bytes, used) = encode(&addition, encoding, false);
+    if used == encoding {
+        let mut f = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&p)
+            .map_err(err)?;
+        f.write_all(&bytes).map_err(err)?;
+        f.sync_all().map_err(err)?;
+    } else {
+        // A Windows-1252 archive receiving characters it cannot hold: the whole
+        // file becomes UTF-8 rather than mixing two encodings.
+        write_bytes(&p, format!("{text}{addition}").as_bytes())?;
+    }
     meta_of(&p).ok_or_else(|| "file not found after writing".into())
 }
 
@@ -587,6 +649,76 @@ mod tests {
             decode(vec![b'c', b'a', b'f', 0xE9, 0x80]),
             ("caf\u{e9}\u{20ac}".to_string(), "Windows-1252")
         );
+    }
+
+    #[test]
+    fn encodings_round_trip() {
+        let text = "caf\u{e9} \u{20ac} - todo\r\n";
+        for enc in [
+            "UTF-8",
+            "UTF-8 BOM",
+            "UTF-16 LE",
+            "UTF-16 BE",
+            "Windows-1252",
+        ] {
+            let (bytes, used) = encode(text, enc, true);
+            assert_eq!(used, enc);
+            assert_eq!(decode(bytes), (text.to_string(), enc));
+        }
+        // Not representable in Windows-1252: written as UTF-8.
+        let (bytes, used) = encode("\u{2713} done", "Windows-1252", true);
+        assert_eq!(used, "UTF-8");
+        assert_eq!(bytes, "\u{2713} done".as_bytes());
+        // Appending: no second BOM.
+        assert_eq!(encode("x", "UTF-16 LE", false).0, vec![b'x', 0]);
+    }
+
+    #[test]
+    fn appends_keep_the_file_encoding() {
+        let dir = std::env::temp_dir().join(format!("kilonote-test-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let run =
+            |mut f: std::pin::Pin<Box<dyn std::future::Future<Output = Result<Meta, String>>>>| {
+                // The commands are async but never actually wait: poll them once.
+                let waker = std::task::Waker::noop();
+                match f.as_mut().poll(&mut std::task::Context::from_waker(waker)) {
+                    std::task::Poll::Ready(r) => r,
+                    std::task::Poll::Pending => panic!("pending"),
+                }
+            };
+        let cp = dir.join("old_done.txt");
+        fs::write(&cp, b"- caf\xe9 - done\r\n").unwrap();
+        run(Box::pin(append_lines(
+            cp.to_string_lossy().into(),
+            vec!["- th\u{e9} - done".into()],
+        )))
+        .unwrap();
+        assert_eq!(
+            fs::read(&cp).unwrap(),
+            b"- caf\xe9 - done\r\n- th\xe9 - done\r\n"
+        );
+        // A character Windows-1252 lacks: the file becomes UTF-8 as a whole.
+        run(Box::pin(append_lines(
+            cp.to_string_lossy().into(),
+            vec!["- \u{2713} - ok".into()],
+        )))
+        .unwrap();
+        assert_eq!(
+            fs::read_to_string(&cp).unwrap(),
+            "- caf\u{e9} - done\r\n- th\u{e9} - done\r\n- \u{2713} - ok\r\n"
+        );
+        let u16 = dir.join("u16_done.txt");
+        fs::write(&u16, encode("- a - done\n", "UTF-16 LE", true).0).unwrap();
+        run(Box::pin(append_lines(
+            u16.to_string_lossy().into(),
+            vec!["- b - done".into()],
+        )))
+        .unwrap();
+        assert_eq!(
+            decode(fs::read(&u16).unwrap()),
+            ("- a - done\n- b - done\n".to_string(), "UTF-16 LE")
+        );
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

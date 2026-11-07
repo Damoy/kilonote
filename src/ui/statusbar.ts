@@ -8,13 +8,21 @@ import { findTasks } from "../editor/tasks";
 import { debounce, h, icon } from "./dom";
 import { showMenu } from "./overlay";
 
+const ENCODINGS: [string, string][] = [
+  ["UTF-8", "UTF-8"],
+  ["UTF-8 BOM", "UTF-8 with BOM"],
+  ["UTF-16 LE", "UTF-16 LE"],
+  ["UTF-16 BE", "UTF-16 BE"],
+  ["Windows-1252", "Windows-1252 (Western)"],
+];
+
 export class StatusBar {
   private left = h("div", { class: "st-left" });
   private right = h("div", { class: "st-right" });
   private pos = h("button", { class: "st-item", title: titleWithKey("Go to line", "palette.line") });
   private words = h("span", { class: "st-item st-dim" });
   private tasks = h("button", { class: "st-item st-tasks", title: titleWithKey("Headings and tasks of this note", "palette.symbol") });
-  private encoding = h("span", { class: "st-item st-dim" });
+  private encoding = h("button", { class: "st-item st-dim", title: "Encoding: click to convert" });
   private eol = h("button", { class: "st-item", title: "Line endings" });
   private lang = h("button", { class: "st-item", title: "Document type" });
   private save = h("button", { class: "st-item st-save" });
@@ -31,6 +39,7 @@ export class StatusBar {
     this.pos.addEventListener("click", () => app.openQuickOpen(":"));
     this.tasks.addEventListener("click", () => app.openQuickOpen("@"));
     this.eol.addEventListener("click", (e) => this.eolMenu(e));
+    this.encoding.addEventListener("click", (e) => this.encodingMenu(e));
     this.lang.addEventListener("click", (e) => this.langMenu(e));
     this.save.addEventListener("click", (e) => {
       const doc = app.active;
@@ -111,9 +120,7 @@ export class StatusBar {
     const show = !!doc;
     for (const el of [this.encoding, this.eol, this.lang, this.save]) el.hidden = !show;
     if (!doc) return;
-    const converted = doc.encoding !== "UTF-8" && doc.encoding !== "UTF-8 BOM";
     this.encoding.textContent = doc.encoding;
-    this.encoding.title = converted ? "Will be saved as UTF-8" : "Encoding";
     this.eol.textContent = doc.eol === "\r\n" ? "CRLF" : "LF";
     this.lang.textContent = LANG_LABELS[doc.lang];
     this.save.replaceChildren();
@@ -151,6 +158,25 @@ export class StatusBar {
         { header: "Line endings" },
         { label: "LF (Linux, macOS)", checked: doc.eol === "\n", action: () => set("\n") },
         { label: "CRLF (Windows)", checked: doc.eol === "\r\n", action: () => set("\r\n") },
+      ],
+      e.clientX,
+      (e.currentTarget as HTMLElement).getBoundingClientRect().top - 4,
+    );
+  }
+
+  private encodingMenu(e: MouseEvent) {
+    const doc = this.app.active;
+    if (!doc) return;
+    const set = (encoding: string) => {
+      if (doc.encoding === encoding) return;
+      doc.encoding = encoding;
+      if (doc.path) void this.app.save(doc);
+      this.updateMeta();
+    };
+    showMenu(
+      [
+        { header: "Save with encoding" },
+        ...ENCODINGS.map(([id, label]) => ({ label, checked: doc.encoding === id, action: () => set(id) })),
       ],
       e.clientX,
       (e.currentTarget as HTMLElement).getBoundingClientRect().top - 4,
