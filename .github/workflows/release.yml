@@ -58,7 +58,7 @@ jobs:
 
             | System | File |
             |---|---|
-            | Windows 10/11 | `KiloNote_<version>_x64-setup.exe`: per-user install, no administrator rights |
+            | Windows 10/11 | `KiloNote_<version>_x64-setup.exe`: per-user install, no administrator rights; `KiloNote_<version>_x64-portable.exe`: single file, nothing to install |
             | macOS (Intel and Apple Silicon) | `KiloNote_<version>_universal.dmg` |
             | Linux | `.AppImage` (portable), `.deb` (Debian, Ubuntu), `.rpm` (Fedora, openSUSE) |
 
@@ -67,6 +67,18 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+      # The single-file portable exe (used by the Scoop manifest), next to the installer.
+      - name: Portable exe (Windows)
+        if: matrix.platform == 'windows-latest'
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          cp src-tauri/target/release/kilonote.exe "KiloNote_${VERSION}_x64-portable.exe"
+          gh release upload "v$VERSION" "KiloNote_${VERSION}_x64-portable.exe" --clobber --repo "$GITHUB_REPOSITORY"
 
   # SHA-256 checksums of every installer, published with the release
   # (to verify a file, or to allow it by hash in a corporate environment).
