@@ -41,3 +41,24 @@ describe("HTML preview", () => {
     expect(doc.getElementById("d")?.hasAttribute("poster")).toBe(false);
   });
 });
+
+describe("editing the page text in the preview", async () => {
+  const { markTextRuns, escapeHtmlText } = await import("./html-preview");
+  it("finds the text runs and their place in the source", () => {
+    const src = `<!doctype html><html><head><title>T</title><style>p{color:red}</style></head>
+<body><!-- c --><h1>Hello &amp; welcome</h1><p>a < b <b>bold</b> end</p>
+<script>var s = "<p>x</p>";</script><svg><text>svg text</text></svg><table>loose<tr><td>cell</td></tr></table></body></html>`;
+    const { marked, runs } = markTextRuns(src);
+    expect(runs.map((r) => src.slice(r.from, r.to))).toEqual(["Hello &amp; welcome", "a < b", "bold", "end", "loose", "cell"]);
+    expect(marked).toContain('<h1><kn-t data-kn="0">Hello &amp; welcome</kn-t></h1>');
+    expect(marked).toContain('<title>T</title>'); // raw text left alone
+    expect(marked).toContain('var s = "<p>x</p>"');
+    expect(marked).toContain("<text>svg text</text>");
+    // Removing the markers gives the page back.
+    expect(marked.replace(/<kn-t data-kn="\d+">|<\/kn-t>/g, "")).toBe(src);
+  });
+
+  it("writes typed text as text, never as markup", () => {
+    expect(escapeHtmlText('<script>alert("x")</script> & co !')).toBe('&lt;script&gt;alert("x")&lt;/script&gt; &amp; co&nbsp;!');
+  });
+});

@@ -459,3 +459,20 @@ describe("side views", () => {
     expect(JSON.parse(disk.text(session)!).preview).toEqual(["tree"]);
   });
 });
+
+describe("tasks stay in notes", () => {
+  it("Ctrl+Enter never turns a line of a code or data file into a task", async () => {
+    const { app } = await start({ "/notes/flow.mmd": "flowchart LR\n  A --> B\n", "/notes/a.json": '{"a": 1}\n', "/notes/n.txt": "call Bob\n" });
+    for (const p of ["/notes/flow.mmd", "/notes/a.json"]) {
+      const doc = (await app.openFile(p))!;
+      const before = doc.state.doc.toString();
+      app.view.contentDOM.blur(); // (happy-dom: see the archive test above)
+      await app.cycleTasks();
+      expect(app.view.state.doc.toString(), p).toBe(before);
+    }
+    await app.openFile("/notes/n.txt");
+    app.view.contentDOM.blur();
+    await app.cycleTasks();
+    expect(app.view.state.doc.toString()).toBe("- call Bob - todo\n");
+  });
+});

@@ -174,10 +174,20 @@ npx tauri build --no-bundle
   removed), and its links only open http(s)/mailto addresses in the browser. An SVG file
   is shown as an image, which never runs scripts. The end-to-end tests check that a
   page's script does not run.
-- The JSON and YAML tree view only reads the text and, when a value is edited, replaces
-  that value in the editor (one undo step); YAML is parsed by the `yaml` package, without
-  custom tags, and aliases are never expanded. Documents nested deeper than 500 levels
-  are refused instead of exhausting memory.
+- Editing the text of a page in its preview: only the text of the page can be changed
+  (each run of text is made editable as plain text, in the same sandboxed frame), and
+  what is typed is written into the HTML escaped (`<` becomes `&lt;`): it can never add
+  markup or script to the file.
+- The JSON, YAML and XML tree view only reads the text and, when a value is edited,
+  replaces that value in the editor (one undo step), escaped for its place; YAML is
+  parsed by the `yaml` package, without custom tags, and aliases are never expanded.
+  Documents nested deeper than 500 levels are refused instead of exhausting memory.
+- Diagrams (Mermaid files, ` ```mermaid ` blocks, the schema of a SQL file) are drawn by
+  the Mermaid library, loaded only when a diagram is shown, with its `strict` security
+  level (labels are cleaned, no click handlers) and plain SVG labels; the drawing is then
+  shown as an image, which cannot run scripts or load anything. The interface's content
+  security policy (no inline script) applies while it is drawn. The SQL view only reads
+  the file: nothing is ever run against a database.
 - The content security policy keeps `'unsafe-inline'` for styles only (the editor sets
   element styles); `dangerousDisableAssetCspModification: ["style-src"]` stops Tauri from
   replacing it with nonces, which would block those styles. Scripts stay `'self'` only.
@@ -190,6 +200,8 @@ npx tauri build --no-bundle
   `cargo audit`.
 - The only npm package with an install script is `fsevents` (macOS only); builds use
   `--ignore-scripts`.
+- Diagrams use Mermaid (MIT) and its dependencies (its layout engines included); none of
+  this code is loaded until a diagram is shown.
 - Releases are built by GitHub Actions on GitHub-hosted runners. Every action is pinned
   to a commit (not a movable tag), workflows run with a read-only token unless a job
   needs to publish, and the release job signs the build provenance of every file.

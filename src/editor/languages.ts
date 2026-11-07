@@ -6,7 +6,7 @@ import type { StreamParser } from "@codemirror/language";
 import { basename, extname, isProbablyBinary } from "../core/path";
 
 /** What a file is, for its icon and for the note features (tasks, tags…). */
-export type FileKind = "text" | "markdown" | "json" | "code" | "config" | "markup";
+export type FileKind = "text" | "markdown" | "json" | "code" | "config" | "markup" | "diagram";
 
 export interface LanguageInfo {
   id: string;
@@ -50,6 +50,33 @@ const batch: Parser = {
   languageData: { commentTokens: { line: "REM " } },
 };
 
+const MERMAID_KEYWORDS = new Set(
+  ("graph flowchart sequenceDiagram classDiagram stateDiagram stateDiagram-v2 erDiagram gantt pie journey gitGraph mindmap timeline " +
+    "quadrantChart sankey-beta xychart-beta block-beta requirementDiagram architecture-beta kanban packet-beta radar-beta treemap-beta " +
+    "subgraph end direction participant actor loop alt else opt par and critical break rect note over of left right title section " +
+    "dateFormat axisFormat excludes class state style classDef linkStyle click as TB TD BT RL LR autonumber activate deactivate " +
+    "commit branch checkout merge accTitle accDescr").split(" "),
+);
+
+/** Mermaid diagrams (.mmd): keywords, arrows, labels, %% comments. */
+const mermaid: Parser = {
+  name: "mermaid",
+  token(stream) {
+    if (stream.eatSpace()) return null;
+    if (stream.match(/^%%.*/)) return "comment";
+    if (stream.match(/^"[^"]*"?/)) return "string";
+    // Labels: A[Start], B(Round), C{Choice}, |edge text|
+    if (stream.match(/^\[[^\]]*\]?|^\([^)]*\)?|^\{[^}]*\}?|^\|[^|]*\|?/)) return "string";
+    if (stream.match(/^(?:<?[-=.ox*+|}{]{2,}>?>?|-->>|->>|-x|--x|--o)/)) return "operator";
+    if (stream.match(/^:::?[\w-]+/)) return "typeName";
+    if (stream.match(/^\d+(?:\.\d+)?%?/)) return "number";
+    if (stream.match(/^[\w-]+/)) return MERMAID_KEYWORDS.has(stream.current()) ? "keyword" : "variableName";
+    stream.next();
+    return null;
+  },
+  languageData: { commentTokens: { line: "%%" } },
+};
+
 export const LANGUAGES: LanguageInfo[] = [
   { id: "text", label: "Text", kind: "text", exts: [] },
   { id: "markdown", label: "Markdown", kind: "markdown", exts: ["md", "markdown", "mdx"] },
@@ -71,6 +98,7 @@ export const LANGUAGES: LanguageInfo[] = [
   { id: "ini", label: "INI / Properties", kind: "config", exts: ["ini", "cfg", "conf", "properties", "env", "inf", "editorconfig", "gitconfig"], names: [".env", ".editorconfig", ".gitconfig", ".npmrc", ".gitattributes"], load: () => import("@codemirror/legacy-modes/mode/properties").then((m) => m.properties as Parser) },
   { id: "dockerfile", label: "Dockerfile", kind: "config", exts: ["dockerfile"], names: ["dockerfile", "containerfile"], load: () => import("@codemirror/legacy-modes/mode/dockerfile").then((m) => m.dockerFile as Parser) },
   { id: "nginx", label: "Nginx", kind: "config", exts: [], names: ["nginx.conf"], load: () => import("@codemirror/legacy-modes/mode/nginx").then((m) => m.nginx as Parser) },
+  { id: "mermaid", label: "Mermaid diagram", kind: "diagram", exts: ["mmd", "mermaid"], load: async () => mermaid },
   { id: "diff", label: "Diff", kind: "code", exts: ["diff", "patch"], load: () => import("@codemirror/legacy-modes/mode/diff").then((m) => m.diff as Parser) },
   { id: "c", label: "C", kind: "code", exts: ["c", "h"], load: () => import("@codemirror/legacy-modes/mode/clike").then((m) => m.c as Parser) },
   { id: "cpp", label: "C++", kind: "code", exts: ["cpp", "cc", "cxx", "hpp", "hh", "hxx", "ino"], load: () => import("@codemirror/legacy-modes/mode/clike").then((m) => m.cpp as Parser) },

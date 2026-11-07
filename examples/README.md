@@ -7,13 +7,16 @@ right of the tabs, or press **Ctrl+Shift+V**.
 | File | What to try |
 |---|---|
 | `README.md` | This note: **Preview** shows it rendered, task statuses included |
-| `page.html` | **Preview**: the page, in a sandbox (its script never runs) |
+| `page.html` | **Preview**: the page, in a sandbox (its script never runs); the pencil button edits its text in place |
 | `logo.svg` | **Preview**: the drawing |
 | `config.json` | **Tree**: hover, click, double-click a value to change it |
 | `services.yaml` | **Tree**: several documents, anchors, multi-line values |
 | `minified.json` | **Shift+Alt+F** formats it (then **Tree**) |
 | `broken.json` | **Tree** shows the error; *Go to* jumps to it |
-| `layout.xml`, `styles.css` | **Shift+Alt+F** formats them |
+| `layout.xml` | **Tree** (elements, attributes, text); **Shift+Alt+F** formats it |
+| `flow.mmd` | **Diagram**: a Mermaid flowchart, zoom and *Save as SVG* |
+| `schema.sql` | **Schema**: entity-relationship diagram, tables, data, statements |
+| `styles.css` | **Shift+Alt+F** formats it |
 | `report.py`, `query.sql`, `deploy.ps1`, `build.bat` | Syntax coloring |
 
 ## Tasks in a Markdown note
@@ -33,6 +36,16 @@ Select nothing and press **Shift+Alt+F**: the columns line up.
 |api|8080|ok|
 |worker|9000|degraded|
 |web-frontend|443|ok|
+
+## A diagram in a note
+
+```mermaid
+sequenceDiagram
+  participant You
+  participant KiloNote
+  You->>KiloNote: Ctrl+Enter
+  KiloNote-->>You: todo → ongoing → done
+```
 
 ## Code, quotes and lists
 

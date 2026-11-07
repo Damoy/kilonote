@@ -1,0 +1,10 @@
+%% A Mermaid flowchart: open the Diagram view (Ctrl+Shift+V)
+flowchart LR
+  idea([An idea]) --> note[Write it in a note]
+  note --> task{Is it a task?}
+  task -- yes --> todo["- my task - todo"]
+  task -- no --> keep[Keep writing]
+  todo -->|Ctrl+Enter| ongoing[ongoing]
+  ongoing -->|Ctrl+Enter| done[done]
+  done -->|Ctrl+Shift+Enter| archive[(work_done.txt)]
+  archive --> report[[Activity report]]

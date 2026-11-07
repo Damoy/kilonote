@@ -6,7 +6,7 @@
 import { FormatError, jsonTokens, MAX_DEPTH, tooDeep, type JTok, where } from "./format";
 
 export type NodeType = "object" | "array" | "string" | "number" | "boolean" | "null" | "alias" | "other";
-export type TreeFormat = "json" | "yaml";
+export type TreeFormat = "json" | "yaml" | "xml";
 
 export interface TreeNode {
   /** Property name, array index, or document label (null for the root). */
@@ -237,10 +237,120 @@ export async function parseYamlTree(text: string): Promise<ParsedTree> {
   return { format: "yaml", roots, error };
 }
 
+// ---------------------------------------------------------------------------
+// XML: elements, attributes ("@name") and text ("#text")
+
+const XML_ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+export function decodeXml(s: string): string {
+  return s.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (m, e: string) => {
+    if (e[0] === "#") {
+      const code = e[1].toLowerCase() === "x" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : m;
+    }
+    return XML_ENTITIES[e] ?? m;
+  });
+}
+
+export function parseXmlTree(text: string): TreeNode[] {
+  const roots: TreeNode[] = [];
+  const stack: TreeNode[] = [];
+  const add = (n: TreeNode) => (stack.length ? stack[stack.length - 1].children!.push(n) : roots.push(n));
+  const textNode = (from: number, to: number) => {
+    const raw = text.slice(from, to);
+    const lead = raw.length - raw.trimStart().length;
+    const body = raw.trim();
+    if (!body || !stack.length) return;
+    const a = from + lead;
+    add({ key: "#text", type: "string", from: a, to: a + body.length, text: decodeXml(body), editable: !body.includes("\n"), keyEditable: false, style: "text" });
+  };
+  let i = 0;
+  while (i < text.length) {
+    const lt = text.indexOf("<", i);
+    if (lt < 0) {
+      textNode(i, text.length);
+      break;
+    }
+    if (lt > i) textNode(i, lt);
+    const skip = (open: string, close: string) => {
+      if (!text.startsWith(open, lt)) return -1;
+      const end = text.indexOf(close, lt + open.length);
+      if (end < 0) throw new FormatError(`"${open}" at ${where(text, lt)} is never closed.`, lt);
+      return end + close.length;
+    };
+    let end = skip("<!--", "-->");
+    if (end < 0) end = skip("<?", "?>");
+    if (end >= 0) {
+      i = end;
+      continue;
+    }
+    end = skip("<![CDATA[", "]]>");
+    if (end >= 0) {
+      if (stack.length) {
+        const from = lt + 9;
+        const to = end - 3;
+        add({ key: "#cdata", type: "string", from, to, text: text.slice(from, to), editable: !text.slice(from, to).includes("\n"), keyEditable: false, style: "cdata" });
+      }
+      i = end;
+      continue;
+    }
+    // The end of the tag, skipping ">" inside attribute values.
+    let j = lt + 1;
+    let quote: string | null = null;
+    for (; j < text.length; j++) {
+      const ch = text[j];
+      if (quote) {
+        if (ch === quote) quote = null;
+      } else if (ch === '"' || ch === "'") quote = ch;
+      else if (ch === ">") break;
+    }
+    if (j >= text.length) throw new FormatError(`Unclosed tag at ${where(text, lt)}`, lt);
+    const tag = text.slice(lt, j + 1);
+    i = j + 1;
+    if (tag.startsWith("<!")) continue; // <!DOCTYPE …>
+    const close = /^<\/\s*([^\s>]+)\s*>$/.exec(tag);
+    if (close) {
+      const open = stack.pop();
+      if (!open) throw new FormatError(`Closing tag </${close[1]}> at ${where(text, lt)} matches no open tag.`, lt);
+      if (open.key !== close[1]) throw new FormatError(`<${String(open.key)}> opened at ${where(text, open.from)} is closed by </${close[1]}> at ${where(text, lt)}.`, lt);
+      open.to = i;
+      // <name>text</name> (no attribute, no child): shown as a value; <name></name>: an empty one.
+      const kids = open.children!;
+      if (kids.length === 1 && kids[0].key === "#text") {
+        const tx = kids[0];
+        Object.assign(open, { type: "string", text: tx.text, from: tx.from, to: tx.to, editable: tx.editable, style: "text", children: undefined });
+      } else if (!kids.length) Object.assign(open, { type: "string", text: "", from: lt, to: lt, editable: true, style: "text", children: undefined });
+      continue;
+    }
+    const m = /^<([^\s/>]+)/.exec(tag);
+    if (!m) throw new FormatError(`Invalid tag at ${where(text, lt)}`, lt);
+    if (stack.length >= MAX_DEPTH) throw tooDeep(text, lt);
+    const el: TreeNode = { key: m[1], type: "object", from: lt, to: i, keyFrom: lt + 1, keyTo: lt + 1 + m[1].length, children: [], editable: false, keyEditable: false };
+    // Attributes, with the position of their values.
+    const attrRe = /([^\s=/>]+)\s*=\s*("([^"]*)"|'([^']*)')/g;
+    attrRe.lastIndex = m[0].length;
+    const body = tag;
+    for (let a = attrRe.exec(body); a; a = attrRe.exec(body)) {
+      const valueFrom = lt + a.index + a[0].length - a[2].length + 1;
+      const raw = a[3] ?? a[4] ?? "";
+      el.children!.push({ key: `@${a[1]}`, type: "string", from: valueFrom, to: valueFrom + raw.length, text: decodeXml(raw), editable: !raw.includes("\n"), keyEditable: false, style: a[2][0] });
+    }
+    add(el);
+    if (!/\/\s*>$/.test(tag)) stack.push(el);
+    // <name/>: nothing inside (and no room to write a value).
+    else if (!el.children!.length) Object.assign(el, { type: "null", text: "", children: undefined });
+  }
+  if (stack.length) {
+    const open = stack[stack.length - 1];
+    throw new FormatError(`<${String(open.key)}> opened at ${where(text, open.from)} is never closed.`, open.from);
+  }
+  return roots;
+}
+
 /** Never throws: a problem becomes the tree's error. */
 export async function parseTree(text: string, format: TreeFormat): Promise<ParsedTree> {
   try {
     if (format === "yaml") return await parseYamlTree(text);
+    if (format === "xml") return { format, roots: parseXmlTree(text), error: null };
     return { format, roots: [parseJsonTree(text)], error: null };
   } catch (e) {
     const err = e instanceof FormatError ? e : new FormatError(`The ${format === "json" ? "JSON" : "YAML"} could not be read: ${(e as Error).message}`, 0);
@@ -271,6 +381,13 @@ function yamlString(s: string, style: string | undefined): string {
 
 /** The source text for a new value typed in the tree (strings stay strings). */
 export function valueSource(node: TreeNode, input: string, format: TreeFormat): string {
+  if (format === "xml") {
+    if (node.style === "cdata") return input.replace(/]]>/g, "]]]]><![CDATA[>");
+    const s = input.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    if (node.style === '"') return s.replace(/"/g, "&quot;");
+    if (node.style === "'") return s.replace(/'/g, "&apos;");
+    return s.replace(/>/g, "&gt;");
+  }
   // "key:" with no value yet: the value needs a space after the colon.
   if (format === "yaml" && node.from === node.to) return " " + valueSource({ ...node, from: -1 }, input, format);
   if (format === "json") {
@@ -301,6 +418,25 @@ export function keySource(node: TreeNode, input: string, format: TreeFormat): st
     return JSON.stringify(input);
   }
   return yamlString(input, node.keyStyle);
+}
+
+/** XPath-like path of an XML node: /root/item[2]/@id */
+export function xmlPath(chain: TreeNode[]): string {
+  let out = "";
+  chain.forEach((n, i) => {
+    const parent = chain[i - 1];
+    if (n.key === "#text" || n.key === "#cdata") {
+      out += "/text()";
+      return;
+    }
+    let step = String(n.key);
+    if (parent && !step.startsWith("@")) {
+      const same = parent.children!.filter((c) => c.key === n.key);
+      if (same.length > 1) step += `[${same.indexOf(n) + 1}]`;
+    }
+    out += "/" + step;
+  });
+  return out;
 }
 
 /** `servers[0].name`, `["my key"]`: the path of a node, from its chain of ancestors. */

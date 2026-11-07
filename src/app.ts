@@ -14,7 +14,7 @@ import { applyMascot, applyTheme, findTheme, MASCOT_VARIANTS, PALETTE_LABELS, TH
 import { fuzzyFilter } from "./core/fuzzy";
 import { editorHooks } from "./editor/decorations";
 import { createEditorState, langForPath, languageReady, loadLanguage, reconfigureLanguage, settingsCompartment, settingsExtensions, type LangId } from "./editor/setup";
-import { isLangId, LANGUAGES, languageLabel } from "./editor/languages";
+import { isCodeLang, isLangId, LANGUAGES, languageLabel } from "./editor/languages";
 import { FormatError, formatKindFor, formatText, minifyJson } from "./editor/format";
 import {
   archivedLine, cycleLine, findTags, findTasks, isDoneStatus, makeTaskConfig, parseDateInput, parseTask, setDueInLine, todayISO,
@@ -28,7 +28,7 @@ import { TabBar } from "./ui/tabbar";
 import { Sidebar } from "./ui/sidebar";
 import { StatusBar } from "./ui/statusbar";
 import { Welcome } from "./ui/welcome";
-import { Preview, type SideKind } from "./ui/preview";
+import { Preview, SIDE_KINDS, type SideKind } from "./ui/preview";
 import { showSettingsView } from "./ui/settings-view";
 import { showCheatSheet } from "./ui/cheatsheet";
 import { setIconPack, type IconPack } from "./ui/icons";
@@ -1315,8 +1315,15 @@ export class App {
    * Ctrl+Enter: next status (or `target`) on the selected lines.
    * Resolves once an automatic archive (auto_archive) is written.
    */
+  /** Tasks belong to notes: in code and data files, a line is never turned into one. */
+  private notesOnly(doc: Doc): boolean {
+    if (!isCodeLang(doc.lang)) return true;
+    this.toastInfo(`Tasks live in notes (text and Markdown files): this is a ${languageLabel(doc.lang)} file, it is left as it is.`);
+    return false;
+  }
+
   async cycleTasks(target?: string, doc = this.active, lines?: number[]): Promise<void> {
-    if (!doc) return;
+    if (!doc || !this.notesOnly(doc)) return;
     const state = doc === this.active ? this.view.state : doc.state;
     const nums = lines ?? this.selectedLines(state);
     const multi = nums.length > 1;
@@ -1402,13 +1409,13 @@ export class App {
 
   async archiveSelection() {
     const doc = this.active;
-    if (!doc) return;
+    if (!doc || !this.notesOnly(doc)) return;
     await this.archiveLines(doc, this.selectedLines(this.view.state));
   }
 
   async archiveAllDone() {
     const doc = this.active;
-    if (!doc) return;
+    if (!doc || !this.notesOnly(doc)) return;
     const found = findTasks(this.view.state.doc.toString(), this.taskCfg).filter((f) => isDoneStatus(f.task.key, this.taskCfg));
     if (!found.length) {
       toast("No completed task in this note.");
@@ -1563,7 +1570,7 @@ export class App {
   /** Ctrl+Shift+U: sets the due date ("@2026-11-14") of the selected tasks. */
   setDueDate() {
     const doc = this.active;
-    if (!doc) return;
+    if (!doc || !this.notesOnly(doc)) return;
     const lines = this.selectedLines(this.view.state).filter((n) => parseTask(this.view.state.doc.line(n).text, this.taskCfg));
     if (!lines.length) {
       toast(`Put the cursor on a task first (${shortcutFor("task.cycle")} turns a line into a task).`);
@@ -2026,7 +2033,7 @@ export class App {
       const target = activeTab ? this.docs.find((d) => (activeTab.path ? d.path === activeTab.path : d.title === activeTab.title)) : this.docs[0];
       if (s.zen) this.setZen(true);
       const views: unknown[] = Array.isArray(s.preview) ? s.preview : s.preview ? ["markdown"] : [];
-      this.preview.open = new Set(views.filter((v): v is SideKind => v === "markdown" || v === "html" || v === "tree"));
+      this.preview.open = new Set(views.filter((v): v is SideKind => SIDE_KINDS.includes(v as SideKind)));
       if (typeof s.previewSize === "number") this.preview.size = Math.min(0.85, Math.max(0.15, s.previewSize));
       this.preview.only = s.previewOnly === true;
       this.activate(target ?? this.docs[0] ?? null);

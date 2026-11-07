@@ -58,12 +58,112 @@ export function svgPage(src: string): Document {
   return doc;
 }
 
+// ---------------------------------------------------------------------------
+// Editing the text of the page in the preview
+
+/** Elements whose content is not markup (never made editable). */
+const RAW_TEXT = new Set(["script", "style", "textarea", "title", "noscript", "xmp", "iframe", "noembed", "noframes", "plaintext"]);
+
+export interface TextRun {
+  from: number;
+  to: number;
+}
+
+/**
+ * The runs of text of a page (between tags, outside comments, scripts, styles
+ * and SVG), with their place in the source, and the page with each run wrapped
+ * in a <kn-t data-kn="n"> element, so that an edit in the preview can be
+ * written back at the right place.
+ */
+export function markTextRuns(src: string): { marked: string; runs: TextRun[] } {
+  const runs: TextRun[] = [];
+  let out = "";
+  let last = 0;
+  let foreign = 0; // inside <svg> or <math>: text there is not plain HTML text
+  let seg = 0; // start of the current text segment
+  const n = src.length;
+  const text = (from: number, to: number) => {
+    if (foreign || to <= from) return;
+    const s = src.slice(from, to);
+    const a = from + (s.length - s.trimStart().length);
+    const b = to - (s.length - s.trimEnd().length);
+    if (b <= a) return;
+    runs.push({ from: a, to: b });
+    out += `${src.slice(last, a)}<kn-t data-kn="${runs.length - 1}">${src.slice(a, b)}</kn-t>`;
+    last = b;
+  };
+  let i = 0;
+  while (i < n) {
+    const lt = src.indexOf("<", i);
+    if (lt < 0) break;
+    const next = src[lt + 1] ?? "";
+    // "a < b": not a tag, still text.
+    if (!/[A-Za-z/!?]/.test(next)) {
+      i = lt + 1;
+      continue;
+    }
+    text(seg, lt);
+    if (src.startsWith("<!--", lt)) {
+      const e = src.indexOf("-->", lt + 4);
+      i = seg = e < 0 ? n : e + 3;
+      continue;
+    }
+    if (next === "!" || next === "?") {
+      const close = src.startsWith("<![CDATA[", lt) ? "]]>" : ">";
+      const e = src.indexOf(close, lt + 2);
+      i = seg = e < 0 ? n : e + close.length;
+      continue;
+    }
+    let j = lt + 1;
+    let q: string | null = null;
+    for (; j < n; j++) {
+      const c = src[j];
+      if (q) {
+        if (c === q) q = null;
+      } else if (c === '"' || c === "'") q = c;
+      else if (c === ">") break;
+    }
+    const tag = src.slice(lt, j + 1);
+    i = seg = Math.min(n, j + 1);
+    const m = /^<(\/?)([A-Za-z][^\s/>]*)/.exec(tag);
+    if (!m) continue;
+    const name = m[2].toLowerCase();
+    if (name === "svg" || name === "math") {
+      if (m[1]) foreign = Math.max(0, foreign - 1);
+      else if (!/\/\s*>$/.test(tag)) foreign++;
+    } else if (!m[1] && !foreign && RAW_TEXT.has(name)) {
+      const re = new RegExp(`</${name}\\s*>`, "ig");
+      re.lastIndex = i;
+      const r = re.exec(src);
+      i = seg = r ? r.index + r[0].length : n;
+    }
+  }
+  text(seg, n);
+  out += src.slice(last);
+  return { marked: out, runs };
+}
+
+/** Text typed in the preview, written as HTML text (it can never become markup). */
+export function escapeHtmlText(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\u00a0/g, "&nbsp;");
+}
+
+/** How editable text looks in the preview. */
+const EDIT_STYLE = `kn-t[contenteditable]{outline:1px dashed rgba(123,108,246,.35);outline-offset:1px;border-radius:2px;cursor:text}
+kn-t[contenteditable]:hover{outline-color:rgba(123,108,246,.85)}
+kn-t[contenteditable]:focus{outline:2px solid #7b6cf6;background:rgba(123,108,246,.1)}`;
+
 const SHELL = `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="${FRAME_CSP}"></head><body></body></html>`;
 
 export class HtmlFrame {
   readonly el: HTMLIFrameElement;
   private ready: Promise<void>;
   private resolveReady!: () => void;
+  private editing = false;
+  /** A run of text was changed in the preview (its index, its new text). */
+  onEdit: ((index: number, text: string) => void) | null = null;
+  /** Key presses in the page (the app's shortcuts keep working there). */
+  onKey: ((e: KeyboardEvent) => void) | null = null;
 
   constructor(private openUrl: (url: string) => void) {
     const el = document.createElement("iframe");
@@ -91,23 +191,52 @@ export class HtmlFrame {
       const href = a.getAttribute("href") ?? "";
       if (href.startsWith("#")) return; // a link inside the page
       e.preventDefault();
+      // While editing, a click on a link places the cursor in its text.
+      if (this.editing) return;
       if (e.type === "click" && /^(https?:|mailto:)/i.test(href)) this.openUrl(href);
     };
     doc.addEventListener("click", onClick, true);
     doc.addEventListener("auxclick", onClick, true);
     doc.addEventListener("submit", (e) => e.preventDefault(), true);
+    doc.addEventListener("input", (e) => {
+      const run = (e.target as Element | null)?.closest?.("kn-t[data-kn]");
+      if (run && this.editing) this.onEdit?.(Number(run.getAttribute("data-kn")), run.textContent ?? "");
+    });
+    doc.addEventListener("keydown", (e) => {
+      const inRun = (e.target as Element | null)?.closest?.("kn-t[contenteditable]");
+      // One run of text: Enter or Escape ends the edit (no new paragraph).
+      if (inRun && (e.key === "Enter" || e.key === "Escape")) {
+        e.preventDefault();
+        (inRun as HTMLElement).blur();
+        return;
+      }
+      this.onKey?.(e);
+    }, true);
     this.resolveReady();
   }
 
-  /** Shows a page; the scroll position is kept from one update to the next. */
-  async show(src: string, kind: "html" | "svg") {
+  /**
+   * Shows a page; the scroll position is kept from one update to the next.
+   * With `edit`, its text can be changed in place (see markTextRuns).
+   */
+  async show(src: string, kind: "html" | "svg", edit = false) {
     await this.ready;
     const doc = this.el.contentDocument;
     if (!doc?.documentElement) return;
     const scroller = doc.scrollingElement;
     const top = scroller?.scrollTop ?? 0;
     const left = scroller?.scrollLeft ?? 0;
-    const clean = kind === "svg" ? svgPage(src) : sanitizeHtml(src);
+    this.editing = edit && kind === "html";
+    const clean = kind === "svg" ? svgPage(src) : sanitizeHtml(this.editing ? markTextRuns(src).marked : src);
+    if (this.editing) {
+      for (const run of clean.querySelectorAll("kn-t[data-kn]")) {
+        run.setAttribute("contenteditable", "plaintext-only");
+        run.setAttribute("spellcheck", "false");
+      }
+      const style = clean.createElement("style");
+      style.textContent = EDIT_STYLE;
+      clean.head.append(style);
+    }
     // The frame keeps its policy: it belongs to the document, not to the <meta>.
     doc.replaceChild(doc.importNode(clean.documentElement, true), doc.documentElement);
     if (doc.scrollingElement) {

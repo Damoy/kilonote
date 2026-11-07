@@ -54,12 +54,18 @@ open it as a folder and follow its `README.md`.
 **Editor**
 - Fast even on large files (CodeMirror 6), multiple cursors (Ctrl+D, Alt+click), column selection
 - Note highlighting: `#` headings, bullets, clickable links (Ctrl+click), dates, `#tags`, `@mentions`
-- A second view next to the editor (Ctrl+Shift+V, or the *Preview* / *Tree* button that shows
-  up at the right of the tabs): live **Markdown preview**; **HTML and SVG preview**, in a
-  sandbox (no script runs, nothing is loaded from the network); and for **JSON and YAML** an
-  editable **tree view** (hover a node to see it in the text, double-click a value or a key to
-  change it, the tree follows the cursor); drag the separator to resize the pane, or show it
-  alone
+- A second view next to the editor (Ctrl+Shift+V, or the button that shows up at the right of
+  the tabs); drag the separator to resize the pane, or show it alone:
+  - live **Markdown preview**, with ` ```mermaid ` blocks drawn as diagrams;
+  - **HTML and SVG preview**, in a sandbox (no script runs, nothing is loaded from the network);
+    the text of a page can be **edited right in the preview** (the HTML follows, escaped);
+  - an editable **tree view** for **JSON, YAML and XML** (hover a node to see it in the text,
+    double-click a value or a key to change it, the tree follows the cursor);
+  - **Mermaid diagrams** (`.mmd`: flowcharts, sequence, class, state, entity-relationship,
+    Gantt, mind maps…), with zoom and *Save as SVG*;
+  - for **SQL** files: the schema as an entity-relationship diagram (from `CREATE TABLE` and
+    foreign keys), the tables and their columns, the rows of `INSERT` statements as grids, and
+    the list of statements (a click goes there). Nothing is ever run against a database.
 - **Syntax coloring** for about 40 languages and config formats (Python, JavaScript, TypeScript,
   C#, Java, C/C++, Go, Rust, SQL, PowerShell, Batch, Shell, YAML, TOML, INI, XML, HTML, CSS…),
   loaded only when such a file is opened; the status bar changes the document type
@@ -384,6 +390,7 @@ no UI framework.
 
 - [Tauri](https://tauri.app) (MIT / Apache-2.0) and [CodeMirror](https://codemirror.net) (MIT),
   including its legacy language modes for the syntax coloring
+- [Mermaid](https://mermaid.js.org) (MIT) for the diagrams
 - [yaml](https://eemeli.org/yaml/) (ISC) for the YAML tree view
 - [JetBrains Mono](https://www.jetbrains.com/lp/mono/) font (SIL Open Font License 1.1), bundled through [Fontsource](https://fontsource.org)
 

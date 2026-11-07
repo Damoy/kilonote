@@ -6,7 +6,7 @@
 import type { Text } from "@codemirror/state";
 import type { App, Doc } from "../app";
 import { setTreeHighlight } from "../editor/setup";
-import { keySource, nodePath, parseTree, valueSource, type ParsedTree, type TreeFormat, type TreeNode } from "../editor/tree-parse";
+import { keySource, nodePath, parseTree, valueSource, xmlPath, type ParsedTree, type TreeFormat, type TreeNode } from "../editor/tree-parse";
 import { h, icon } from "./dom";
 import { showMenu, toast } from "./overlay";
 
@@ -24,7 +24,9 @@ interface Row {
 }
 
 const SEP = "\u0001";
-const childId = (parent: string, n: TreeNode) => parent + SEP + String(n.key);
+/** XML siblings may share a name: their position tells them apart. */
+let byIndex = false;
+const childId = (parent: string, n: TreeNode, i: number) => parent + SEP + (byIndex ? `${i}:` : "") + String(n.key);
 
 export class TreeView {
   readonly el: HTMLElement;
@@ -72,7 +74,7 @@ export class TreeView {
       this.doc = doc;
       this.tree = null;
       this.source = null;
-      this.title.textContent = format === "json" ? "JSON" : "YAML";
+      this.title.textContent = format.toUpperCase();
       this.status.hidden = true;
       this.rows = [];
       this.body.replaceChildren(h("div", { class: "tv-empty" }, `This file is too large for the tree view (${Math.round(source.length / 1024 / 1024)} MB).`));
@@ -80,6 +82,7 @@ export class TreeView {
     }
     const tree = await parseTree(source.toString(), format);
     if (token !== this.renderToken || this.editing) return;
+    byIndex = format === "xml";
     const first = !this.expanded.has(doc.id);
     // While the text has an error (often: in the middle of typing), the last
     // good tree of the same document stays, dimmed and read-only.
@@ -95,10 +98,10 @@ export class TreeView {
       for (const r of tree.roots) {
         const id = String(r.key);
         this.open.add(id);
-        if ((r.children?.length ?? 0) <= 30) for (const c of r.children ?? []) if (c.children) this.open.add(childId(id, c));
+        if ((r.children?.length ?? 0) <= 30) (r.children ?? []).forEach((c, i) => c.children && this.open.add(childId(id, c, i)));
       }
     }
-    this.title.textContent = format === "json" ? "JSON" : "YAML";
+    this.title.textContent = format.toUpperCase();
     if (tree.error) {
       const pos = tree.error.pos;
       this.status.replaceChildren(icon("x"), h("span", {}, tree.error.message),
@@ -121,7 +124,7 @@ export class TreeView {
       this.rows.push(row);
       if (!n.children || !this.open.has(id)) return;
       const limit = this.limits.get(`${this.doc?.id}:${id}`) ?? PAGE;
-      for (const c of n.children.slice(0, limit)) walk(c, [...chain, n], childId(id, c), depth + 1);
+      n.children.slice(0, limit).forEach((c, i) => walk(c, [...chain, n], childId(id, c, i), depth + 1));
       if (n.children.length > limit) {
         const more = h("div", { class: "tv-row tv-more", style: { paddingLeft: `${(depth + 1) * 14 + 22}px` } },
           `Show ${Math.min(PAGE * 5, n.children.length - limit)} more of ${n.children.length - limit}…`);
@@ -204,7 +207,7 @@ export class TreeView {
         if (!n.children || count > 5000) return;
         set.add(id);
         count += n.children.length;
-        for (const c of n.children) walk(c, childId(id, c));
+        n.children.forEach((c, i) => walk(c, childId(id, c, i)));
       };
       for (const r of this.tree.roots) walk(r, String(r.key));
     } else for (const r of this.tree.roots) set.add(String(r.key));
@@ -248,7 +251,7 @@ export class TreeView {
         if (n.keyFrom === undefined || pos < n.keyFrom || pos > n.to) return;
       }
       best = { node: n, id, ancestors };
-      for (const c of n.children ?? []) walk(c, childId(id, c), [...ancestors, id]);
+      (n.children ?? []).forEach((c, i) => walk(c, childId(id, c, i), [...ancestors, id]));
     };
     for (const r of this.tree.roots) walk(r, String(r.key), []);
     const found = best as { id: string; ancestors: string[] } | null;
@@ -333,7 +336,7 @@ export class TreeView {
   private menu(row: Row, x: number, y: number) {
     const n = row.node;
     const i = this.rows.indexOf(row);
-    const path = nodePath(row.chain);
+    const path = this.tree?.format === "xml" ? xmlPath(row.chain) : nodePath(row.chain);
     const src = this.app.view.state.sliceDoc(n.from, n.to);
     showMenu(
       [
@@ -357,7 +360,7 @@ export class TreeView {
     const walk = (n: TreeNode, id: string) => {
       if (!n.children) return;
       this.open.add(id);
-      for (const c of n.children) walk(c, childId(id, c));
+      n.children.forEach((c, i) => walk(c, childId(id, c, i)));
     };
     walk(row.node, row.id);
     this.draw();

@@ -26,6 +26,9 @@ writeFileSync(join(notes, "work.txt"), "# Work\n- call colleague X - todo\n- rev
 writeFileSync(join(notes, "old.txt"), Buffer.from("caf\xe9 - todo\n", "latin1")); // Windows-1252
 writeFileSync(join(notes, "data.json"), '{"name":"kilo","tags":["a","b"]}');
 writeFileSync(join(notes, "page.html"), '<h1>Page</h1><script>window.parent.PWNED = 1</script><img src="https://example.com/x.png" onerror="window.parent.PWNED = 2">');
+writeFileSync(join(notes, "flow.mmd"), "flowchart LR\n  A[Note] --> B{Task?}\n  B -- yes --> C[Done]\n");
+writeFileSync(join(notes, "shop.sql"), "CREATE TABLE customers (id INT PRIMARY KEY, name TEXT);\nCREATE TABLE orders (id INT PRIMARY KEY, customer_id INT REFERENCES customers(id));\nINSERT INTO customers VALUES (1, 'Acme');\n");
+writeFileSync(join(notes, "conf.xml"), '<?xml version="1.0"?>\n<config env="prod"><title>Kilo</title><item id="1">a</item></config>\n');
 writeFileSync(join(notes, "build.py"), "import os\n\ndef main():\n    return 1  # done\n");
 // Programs placed in the notes folder: KiloNote must never run them.
 writeFileSync(join(notes, "evil.exe"), `#!/bin/sh\ntouch "${marker}"\n`);
@@ -201,6 +204,36 @@ try {
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));`);
     expect(await run("return app.view.state.doc.toString().includes('\"name\": \"note\"');"), true, "value edited from the tree");
     await run("app.preview.toggle();");
+  });
+
+  await test("Mermaid diagrams, the SQL schema and the XML tree are drawn in the real app", async () => {
+    await run("await app.openFile(args[0]); app.preview.open = new Set(['diagram', 'sql', 'tree']); app.preview.update(true);", join(notes, "flow.mmd"));
+    await until(() => run("const i = document.querySelector('#preview .dv-img'); return !!i && i.naturalWidth > 20;"), "the Mermaid diagram");
+    await run("await app.openFile(args[0]);", join(notes, "shop.sql"));
+    await until(() => run("const i = document.querySelector('.sv .dv-img'); return !!i && i.naturalWidth > 20 && document.querySelectorAll('.sv-table').length === 2;"), "the SQL schema");
+    await run("await app.openFile(args[0]);", join(notes, "conf.xml"));
+    await until(() => run("return [...document.querySelectorAll('.tv-row')].some((r) => r.textContent === '@env:\"prod\"');"), "the XML tree");
+    await run("app.preview.open.clear(); app.preview.update(true);");
+  });
+
+  await test("the text of a page can be edited in its preview, and lands escaped in the HTML", async () => {
+    await run("await app.openFile(args[0]); app.preview.open = new Set(['html']); app.preview.setHtmlEdit(true);", join(notes, "page.html"));
+    await until(() => run("return !!document.querySelector('.pv-frame').contentDocument.querySelector('kn-t[contenteditable]');"), "the editable page");
+    await run(`const run = document.querySelector('.pv-frame').contentDocument.querySelector('h1 kn-t');
+      run.textContent = 'Page <b>2';
+      run.dispatchEvent(new Event('input', { bubbles: true }));`);
+    expect(await run("return app.view.state.doc.toString().startsWith('<h1>Page &lt;b&gt;2</h1>');"), true, "the HTML");
+    expect(await run("return window.PWNED ?? null;"), null, "a script of the page ran");
+    await run("app.preview.setHtmlEdit(false); app.preview.open.clear(); app.preview.update(true);");
+  });
+
+  await test("Ctrl+Shift+O opens the folder picker, even with the cheat sheet open", async () => {
+    await run("window.__picked = 0; app.backend.pickFolder = async () => { window.__picked++; return null; };");
+    await run("document.querySelector('.st-item[title^=\"Keyboard shortcuts\"]').click();");
+    expect(await run("return !!document.querySelector('.kn-cheatsheet');"), true, "cheat sheet open");
+    await press("Control", "Shift", "o");
+    await until(() => run("return window.__picked === 1;"), "the folder picker");
+    expect(await run("return document.querySelector('.kn-cheatsheet') === null;"), true, "cheat sheet closed");
   });
 
   await test("Ctrl+Shift+N opens a second window", async () => {

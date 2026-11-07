@@ -72,6 +72,11 @@ it to the tasks of one tag (a client, a topic…).
   script and load nothing from the network); JSON and YAML files get a tree: hover a
   node to see it in the text, double-click a value or a key to change it. Drag the
   separator to make the pane wider; its corner button shows it alone.
+- XML files get a tree too; Mermaid files (\`.mmd\`) and \`\`\`mermaid blocks of a
+  Markdown note are drawn as diagrams; a SQL file shows its schema, tables, data
+  and statements.
+- In an HTML preview, the pencil button lets you change the text of the page in
+  place: the HTML follows.
 - **Ctrl+F** / **Ctrl+H**: find / replace in the note.
 - **Ctrl+D**: select the next occurrence (multiple cursors), **Alt+click**: add a cursor.
 - **Alt+↑ / Alt+↓**: move the line. **Ctrl+Shift+K**: delete the line.

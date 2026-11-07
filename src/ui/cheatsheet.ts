@@ -3,7 +3,7 @@
 // The shortcuts are read from the current keybindings, so custom ones show up.
 
 import type { App } from "../app";
-import { formatCombo, shortcutFor } from "../core/commands";
+import { formatCombo, onBeforeCommand, shortcutFor } from "../core/commands";
 import { h, icon } from "./dom";
 import { showSettingsView } from "./settings-view";
 import { mascot } from "./welcome";
@@ -26,7 +26,11 @@ function keyCaps(combo: string): HTMLElement {
 }
 
 export function showCheatSheet(app: App, opts: { startup?: boolean } = {}) {
-  if (open?.backdrop.isConnected) return;
+  // Ctrl+? while it is open closes it.
+  if (open?.backdrop.isConnected) {
+    if (!opts.startup) open.close();
+    return;
+  }
   const mac = app.backend.platform === "macos";
   const mod = mac ? "⌘" : "Ctrl+";
   const alt = mac ? "⌥" : "Alt+";
@@ -107,6 +111,7 @@ export function showCheatSheet(app: App, opts: { startup?: boolean } = {}) {
 
   const close = () => {
     backdrop.remove();
+    stopListening();
     document.removeEventListener("keydown", onKey, true);
     open = null;
     app.focusEditor();
@@ -138,8 +143,13 @@ export function showCheatSheet(app: App, opts: { startup?: boolean } = {}) {
       h("button", { class: "kn-btn subtle", onclick: () => { close(); showSettingsView(app, "shortcuts"); } }, icon("keyboard"), "Change shortcuts…"),
       done),
   );
-  // "kn-modal-backdrop": the global shortcuts stay off while it is open.
-  const backdrop = h("div", { class: "kn-modal-backdrop kn-cheatsheet-backdrop" }, panel);
+  // Not a modal: every shortcut keeps working. It closes the sheet and runs
+  // (trying a shortcut you just read is the point).
+  const backdrop = h("div", { class: "kn-cheatsheet-backdrop" }, panel);
+  const stopListening = onBeforeCommand((id) => {
+    if (id === "help.shortcuts") return; // Ctrl+? toggles it: handled below
+    close();
+  });
   backdrop.addEventListener("mousedown", (e) => {
     if (e.target === backdrop) close();
   });

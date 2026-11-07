@@ -290,6 +290,7 @@ export class TabBar {
       { label: "Close", icon: "x", shortcut: shortcutFor("tab.close"), action: () => app.closeDoc(doc) },
       { label: "Close others", action: () => app.closeMany(app.docs.filter((d) => d !== doc)) },
       { label: "Close tabs to the right", disabled: idx === app.docs.length - 1, action: () => app.closeMany(app.docs.slice(idx + 1)) },
+      { label: "Close all", shortcut: shortcutFor("tab.closeAll"), action: () => app.closeMany([...app.docs]) },
       { label: "Move to new window", icon: "newWindow", disabled: !doc.path, action: () => app.moveToNewWindow(doc) },
       { separator: true },
       { header: "Color" },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { keySource, nodePath, parseJsonTree, parseTree, valueSource, type TreeNode } from "./tree-parse";
+import { keySource, nodePath, parseJsonTree, parseTree, valueSource, xmlPath, type TreeNode } from "./tree-parse";
 
 const find = (n: TreeNode, ...keys: (string | number)[]): TreeNode => keys.reduce((cur, k) => cur.children!.find((c) => c.key === k)!, n);
 const edit = (src: string, n: TreeNode, text: string, key = false) => src.slice(0, key ? n.keyFrom! : n.from) + text + src.slice(key ? n.keyTo! : n.to);
@@ -110,5 +110,49 @@ describe("robustness", () => {
     const t = await parseTree("tags: [a, b]\n", "yaml");
     expect(valueSource(find(t.roots[0], "tags", 0), "x, y", "yaml")).toBe('"x, y"');
     expect(valueSource(find(t.roots[0], "tags", 0), "[x]", "yaml")).toBe('"[x]"');
+  });
+});
+
+describe("XML tree", () => {
+  const src = `<?xml version="1.0"?>
+<!-- comment -->
+<config env="prod" name='a &amp; b'>
+  <title>Kilo &lt;Note&gt;</title>
+  <item id="1">first</item>
+  <item id="2"><![CDATA[x < y]]></item>
+  <empty></empty>
+  <flag/>
+  mixed text
+</config>`;
+  it("shows elements, attributes and text, with their positions", async () => {
+    const t = await parseTree(src, "xml");
+    expect(t.error).toBeNull();
+    const root = t.roots[0];
+    expect(root.key).toBe("config");
+    expect(root.children!.map((c) => c.key)).toEqual(["@env", "@name", "title", "item", "item", "empty", "flag", "#text"]);
+    expect(find(root, "@name").text).toBe("a & b");
+    const title = find(root, "title");
+    expect([title.type, title.text]).toEqual(["string", "Kilo <Note>"]);
+    expect(src.slice(title.from, title.to)).toBe("Kilo &lt;Note&gt;");
+    const item2 = root.children![4];
+    expect(item2.children!.map((c) => [c.key, c.text])).toEqual([["@id", "2"], ["#cdata", "x < y"]]);
+    expect(find(root, "flag").type).toBe("null");
+    expect(xmlPath([root, item2, item2.children![0]])).toBe("/config/item[2]/@id");
+  });
+
+  it("writes values escaped for their place", async () => {
+    const t = await parseTree(src, "xml");
+    const root = t.roots[0];
+    expect(valueSource(find(root, "title"), "a < b & c", "xml")).toBe("a &lt; b &amp; c");
+    expect(valueSource(find(root, "@env"), 'say "hi"', "xml")).toBe("say &quot;hi&quot;");
+    expect(valueSource(find(root, "@name"), "it's", "xml")).toBe("it&apos;s");
+    expect(valueSource(root.children![4].children![1], "a ]]> b", "xml")).toBe("a ]]]]><![CDATA[> b");
+    const empty = find(root, "empty");
+    expect(src.slice(0, empty.from) + "now" + src.slice(empty.to)).toContain("<empty>now</empty>");
+  });
+
+  it("reports mismatched tags", async () => {
+    expect((await parseTree("<a><b></a>", "xml")).error?.message).toMatch(/<b> opened at line 1, column 4 is closed by <\/a>/);
+    expect((await parseTree("<a>", "xml")).error?.message).toMatch(/never closed/);
   });
 });

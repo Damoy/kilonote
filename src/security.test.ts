@@ -92,3 +92,14 @@ describe("hardening of the Windows build and of the release", () => {
     }
   });
 });
+
+describe("diagrams and previews build no markup from the content", () => {
+  it("diagrams are shown as images, page edits are written as text", () => {
+    const code = (f: string) => read(f).split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+    for (const f of ["src/editor/diagrams.ts", "src/ui/diagram-view.ts", "src/ui/sql-view.ts", "src/ui/preview.ts", "src/ui/tree-view.ts", "src/editor/sql-parse.ts"]) {
+      expect(code(f), f).not.toMatch(/\.innerHTML\s*=|outerHTML\s*=|insertAdjacentHTML|document\.write|new Function|\beval\(/);
+    }
+    expect(read("src/editor/diagrams.ts")).toMatch(/securityLevel: "strict"/);
+    expect(read("src/ui/preview.ts")).toMatch(/const insert = escapeHtmlText\(text\)/);
+  });
+});

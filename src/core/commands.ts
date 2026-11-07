@@ -22,9 +22,17 @@ export function registerCommands(list: Command[]) {
   for (const c of list) commands.set(c.id, c);
 }
 
+/** Called before a command runs (e.g. the cheat sheet closes itself). */
+const beforeCommand = new Set<(id: string) => void>();
+export function onBeforeCommand(fn: (id: string) => void): () => void {
+  beforeCommand.add(fn);
+  return () => beforeCommand.delete(fn);
+}
+
 export function runCommand(id: string): boolean {
   const c = commands.get(id);
   if (!c) return false;
+  for (const fn of [...beforeCommand]) fn(id);
   try {
     const r = c.run();
     if (r instanceof Promise) r.catch((e) => console.error(`[${id}]`, e));
