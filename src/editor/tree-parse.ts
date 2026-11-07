@@ -122,7 +122,52 @@ export async function loadYaml(): Promise<YamlLib> {
   return yamlLib;
 }
 
+/**
+ * Where a YAML text nests deeper than MAX_DEPTH ([ and { outside quotes and
+ * comments, or a very deep indentation), checked before parsing: the YAML
+ * parser could run out of memory on such a file.
+ */
+export function yamlTooDeep(text: string): number {
+  let depth = 0;
+  let quote: string | null = null;
+  let lineStart = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === "\n") {
+      lineStart = i + 1; // (quoted scalars may span lines: the quote stays open)
+      continue;
+    }
+    if (quote) {
+      if (quote === '"' && c === "\\") i++;
+      else if (c === quote) {
+        if (quote === "'" && text[i + 1] === "'") i++;
+        else quote = null;
+      }
+      continue;
+    }
+    if (i === lineStart) {
+      let j = i;
+      while (text[j] === " ") j++;
+      if (j - i > MAX_DEPTH * 4) return i;
+    }
+    if (c === "#" && (i === lineStart || /\s/.test(text[i - 1]))) {
+      const nl = text.indexOf("\n", i);
+      if (nl < 0) break;
+      i = nl - 1;
+    } else if (c === '"' || c === "'") quote = c;
+    else if (c === "[" || c === "{") {
+      if (++depth > MAX_DEPTH) return i;
+    } else if ((c === "]" || c === "}") && depth > 0) depth--;
+  }
+  return -1;
+}
+
 export async function parseYamlTree(text: string): Promise<ParsedTree> {
+  const deep = yamlTooDeep(text);
+  if (deep >= 0) {
+    const e = tooDeep(text, deep);
+    return { format: "yaml", roots: [], error: { message: e.message, pos: e.pos } };
+  }
   const Y = await loadYaml();
   const docs = Y.parseAllDocuments(text);
   const list = Array.isArray(docs) ? docs : [];

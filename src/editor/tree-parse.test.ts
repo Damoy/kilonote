@@ -81,10 +81,22 @@ describe("YAML tree", () => {
 
 describe("robustness", () => {
   it("never throws: deep or broken documents become an error", async () => {
-    for (const [src, fmt] of [["[".repeat(100000) + "]".repeat(100000), "json"], ["[".repeat(100000), "yaml"], ["{\"a\": ", "json"], ["a: [1,", "yaml"]] as const) {
+    for (const [src, fmt] of [
+      ["[".repeat(100000) + "]".repeat(100000), "json"],
+      ["[".repeat(100000), "yaml"],
+      ["a:" + "\n" + " ".repeat(5000) + "b: 1", "yaml"],
+      ['{"a": ', "json"],
+      ["a: [1,", "yaml"],
+    ] as const) {
       const t = await parseTree(src, fmt);
       expect(t.error, `${fmt} ${src.slice(0, 10)}`).not.toBeNull();
     }
+  });
+
+  it("the depth check of YAML ignores quotes and comments", async () => {
+    const { yamlTooDeep } = await import("./tree-parse");
+    expect(yamlTooDeep(`a: "${"[".repeat(2000)}"\nb: '${"{".repeat(2000)}'\n# ${"[".repeat(2000)}\nc: [1, [2]]\n`)).toBe(-1);
+    expect(yamlTooDeep("x: " + "[".repeat(600))).toBe(503);
   });
 
   it("YAML aliases are shown, never expanded", async () => {
