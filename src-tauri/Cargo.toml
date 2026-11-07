@@ -1,6 +1,6 @@
 [package]
 name = "kilonote"
-version = "0.1.1"
+version = "0.2.0"
 description = "KiloNote — a light, keyboard-driven note-taking app with built-in task tracking"
 license = "MIT"
 repository = "https://github.com/Damoy/kilonote"
