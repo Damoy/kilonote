@@ -155,7 +155,7 @@ npx tauri build --no-bundle
   opening `http(s)://` and `mailto:` addresses with the default app and revealing a file
   in the file manager: there is no permission to open or execute files, and no shell or
   process plugin. Developer tools are not compiled into the distributed build.
-- Automated tests enforce this (`src/security.test.ts`, `src/security.behavior.test.ts`):
+- Automated tests enforce this (`src/security/security.test.ts`, `src/security/security.behavior.test.ts`):
   they fail if a launch capability, a broader link scope, a download or registry write in
   the installer, developer tools, or an unpinned CI action is added; they check with a
   recording backend that opening executables from every entry point never does more than

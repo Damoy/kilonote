@@ -3,10 +3,10 @@
 // list of statements. A click goes to the statement in the editor.
 // Nothing is ever run: the file is only read.
 
-import type { App } from "../app";
-import { erDiagram, parseSql, type SqlModel } from "../editor/sql-parse";
+import type { App } from "../../app/app";
+import { erDiagram, parseSql, type SqlModel } from "../../text/sql-parse";
 import { DiagramView } from "./diagram-view";
-import { h, icon } from "./dom";
+import { h, icon } from "../dom";
 
 /** Above this size, no SQL view (it is read again at every pause in typing). */
 const MAX_SQL_SIZE = 5 * 1024 * 1024;

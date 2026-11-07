@@ -7,15 +7,15 @@
 // Each view is turned on or off on its own (kept with the session).
 
 import type { Text } from "@codemirror/state";
-import type { App, Doc } from "../app";
-import { handleKeydown } from "../core/commands";
-import { extname, stem } from "../core/path";
-import { findTheme } from "../core/themes";
-import { diagramError, fixSvgSize, renderMermaid, svgDataUrl } from "../editor/diagrams";
-import { renderMarkdown } from "../editor/markdown-render";
-import { todayISO } from "../editor/tasks";
+import type { App, Doc } from "../../app/app";
+import { handleKeydown } from "../../core/commands";
+import { extname, stem } from "../../core/path";
+import { findTheme } from "../../core/themes";
+import { diagramError, fixSvgSize, renderMermaid, svgDataUrl } from "./mermaid";
+import { renderMarkdown } from "./markdown-render";
+import { todayISO } from "../../text/tasks";
 import { DiagramView } from "./diagram-view";
-import { debounce, h, icon } from "./dom";
+import { debounce, h, icon } from "../dom";
 import { escapeHtmlText, HtmlFrame, markTextRuns, type TextRun } from "./html-preview";
 import { SqlView } from "./sql-view";
 import { TreeView } from "./tree-view";

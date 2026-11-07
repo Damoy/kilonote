@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SETTINGS } from "../core/settings";
+import { DEFAULT_SETTINGS } from "../../core/settings";
 import { renderMarkdown } from "./markdown-render";
-import { makeTaskConfig } from "./tasks";
+import { makeTaskConfig } from "../../text/tasks";
 
 const taskCfg = makeTaskConfig({
   statuses: DEFAULT_SETTINGS.task_statuses, cycle: DEFAULT_SETTINGS.task_cycle, done: DEFAULT_SETTINGS.task_done_statuses,

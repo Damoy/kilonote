@@ -1,7 +1,7 @@
 // Settings screen: every option of settings.json with a control. Each change is
 // written to settings.json right away (comments kept) and applies immediately.
 
-import type { App } from "../app";
+import type { App } from "../app/app";
 import { shortcutFor } from "../core/commands";
 import type { Settings } from "../core/settings";
 import { findTheme, MASCOT_VARIANTS, PALETTE_LABELS, PALETTE_NAMES, resolveColor, THEMES } from "../core/themes";

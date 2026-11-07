@@ -1,6 +1,6 @@
 // Welcome screen (no open tab), featuring Kilo the mascot.
 
-import type { App } from "../app";
+import type { App } from "../app/app";
 import { shortcutFor } from "../core/commands";
 import { basename } from "../core/path";
 import kiloSvg from "../assets/kilo.svg?raw";

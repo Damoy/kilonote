@@ -4,8 +4,8 @@
 // reads text. A recording backend proves that nothing is launched.
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { App } from "./app";
-import type { Backend, Meta } from "./core/backend";
+import { App } from "../app/app";
+import type { Backend, Meta } from "../core/backend";
 
 type Call = { method: string; args: unknown[] };
 

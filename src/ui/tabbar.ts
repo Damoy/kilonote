@@ -1,13 +1,13 @@
 // Tab bar: per-tab colors, browser-style collapsible groups,
 // mouse drag and drop (pointer events, works in WebView2 and WebKit).
 
-import type { App, Doc, TabGroup } from "../app";
+import type { App, Doc, TabGroup } from "../app/app";
 import { shortcutFor, titleWithKey } from "../core/commands";
 import { isDoneFile, relative } from "../core/path";
 import { resolveColor } from "../core/themes";
 import { h, icon } from "./dom";
 import { fileIcon } from "./sidebar";
-import { SIDE_LABELS, sideKindFor } from "./preview";
+import { SIDE_LABELS, sideKindFor } from "./views/preview";
 import { showMenu, type MenuItem } from "./overlay";
 
 export class TabBar {

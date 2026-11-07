@@ -4,7 +4,7 @@
 import { Facet, type Range } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { resolveColor } from "../core/themes";
-import { DUE_RE, dueState, isDoneStatus, makeTaskConfig, parseTask, todayISO, type DueState, type TaskConfig } from "./tasks";
+import { DUE_RE, dueState, isDoneStatus, makeTaskConfig, parseTask, todayISO, type DueState, type TaskConfig } from "../text/tasks";
 
 export const taskConfigFacet = Facet.define<TaskConfig, TaskConfig>({
   combine: (values) =>

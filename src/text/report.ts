@@ -1,7 +1,7 @@
 // Activity report: reads the archive files (*_done.txt) and produces a
 // Markdown summary by project and by month, ready to paste into a yearly review.
 
-import { findDateInLine, hasTag, isBlockedStatus, isDoneStatus, isOngoingStatus, parseTask, todayISO, type TaskConfig } from "./editor/tasks";
+import { findDateInLine, hasTag, isBlockedStatus, isDoneStatus, isOngoingStatus, parseTask, todayISO, type TaskConfig } from "./tasks";
 
 export interface ReportSource {
   project: string;

@@ -1,14 +1,14 @@
 // Status bar: cursor position, tasks of the note, encoding, line endings, language.
 
-import type { App } from "../app";
+import type { App } from "../app/app";
 import { titleWithKey } from "../core/commands";
 import { resolveColor } from "../core/themes";
 import { isCodeLang, languageLabel } from "../editor/languages";
-import { findTasks } from "../editor/tasks";
+import { findTasks } from "../text/tasks";
 import { debounce, h, icon } from "./dom";
 import { showMenu } from "./overlay";
 import { showCheatSheet } from "./cheatsheet";
-import { SIDE_LABELS, sideKindFor } from "./preview";
+import { SIDE_LABELS, sideKindFor } from "./views/preview";
 
 const ENCODINGS: [string, string][] = [
   ["UTF-8", "UTF-8"],

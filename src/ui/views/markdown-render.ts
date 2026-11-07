@@ -5,8 +5,8 @@
 
 import { GFM, parser as baseParser } from "@lezer/markdown";
 import type { SyntaxNode } from "@lezer/common";
-import { resolveColor } from "../core/themes";
-import { dueState, isDoneStatus, parseTask, type TaskConfig } from "./tasks";
+import { resolveColor } from "../../core/themes";
+import { dueState, isDoneStatus, parseTask, type TaskConfig } from "../../text/tasks";
 
 const parser = baseParser.configure(GFM);
 

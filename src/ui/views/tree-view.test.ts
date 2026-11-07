@@ -4,7 +4,7 @@
 
 import { Text } from "@codemirror/state";
 import { describe, expect, it, vi } from "vitest";
-import type { App, Doc } from "../app";
+import type { App, Doc } from "../../app/app";
 import { TreeView } from "./tree-view";
 
 function setup(lines: string[]) {

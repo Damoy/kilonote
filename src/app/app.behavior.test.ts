@@ -4,8 +4,8 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 import { App, historyName, parseHistoryName, pathHash } from "./app";
-import type { Backend, Entry, Meta } from "./core/backend";
-import { basename, dirname, isInside } from "./core/path";
+import type { Backend, Entry, Meta } from "../core/backend";
+import { basename, dirname, isInside } from "../core/path";
 
 interface Disk {
   files: Map<string, { text: string; mtime: number }>;

@@ -1,6 +1,6 @@
 import "@fontsource-variable/jetbrains-mono/wght.css";
 import "./styles.css";
-import { App } from "./app";
+import { App } from "./app/app";
 import { createTauriBackend, createWebBackend, isTauri } from "./core/backend";
 import { handleKeydown } from "./core/commands";
 

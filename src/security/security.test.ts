@@ -6,9 +6,10 @@
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { isProbablyBinary } from "./core/path";
+import { isProbablyBinary } from "../core/path";
 
-const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
+/** A file of the repository, from its root. */
+const read = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), "utf8");
 
 describe("no program execution", () => {
   it("the window capabilities grant no way to open or run files", () => {
@@ -46,12 +47,12 @@ describe("no program execution", () => {
 
 describe("previews never run the content", () => {
   it("the page preview frame is sandboxed without scripts, under a strict policy", () => {
-    const src = read("src/ui/html-preview.ts");
+    const src = read("src/ui/views/html-preview.ts");
     expect(src).toMatch(/setAttribute\("sandbox", "allow-same-origin"\)/);
     expect(src).toMatch(/FRAME_CSP = "default-src 'none';/);
     // (The code only: the comments explain what is not allowed.)
     const code = (f: string) => read(f).split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
-    for (const f of ["src/ui/html-preview.ts", "src/ui/preview.ts", "src/ui/tree-view.ts", "src/editor/markdown-render.ts"]) {
+    for (const f of ["src/ui/views/html-preview.ts", "src/ui/views/preview.ts", "src/ui/views/tree-view.ts", "src/ui/views/markdown-render.ts"]) {
       expect(code(f), f).not.toMatch(/allow-scripts|allow-top-navigation|allow-popups|allow-forms|allow-modals/);
     }
   });
@@ -65,7 +66,7 @@ describe("hardening of the Windows build and of the release", () => {
       (p) => typeof p === "object" && (p as { identifier: string }).identifier === "opener:allow-open-url",
     ) as { allow: { url: string }[] };
     expect(opener.allow.map((a) => a.url).sort()).toEqual(["http://*", "https://*", "mailto:*"]);
-    const { isSafeUrl } = await import("./core/backend");
+    const { isSafeUrl } = await import("../core/backend");
     for (const ok of ["https://example.com/a?b=1", "http://x.y", "mailto:a@b.c"]) expect(isSafeUrl(ok), ok).toBe(true);
     for (const bad of ["file:///C:/Windows/System32/calc.exe", "C:\\\\x.exe", "ms-settings:", "search-ms:query=x", "ms-msdt:/id", "javascript:alert(1)", "tel:123", "https://a b", "\\\\\\\\server\\\\share"])
       expect(isSafeUrl(bad), bad).toBe(false);
@@ -96,18 +97,18 @@ describe("hardening of the Windows build and of the release", () => {
 describe("diagrams and previews build no markup from the content", () => {
   it("diagrams are shown as images, page edits are written as text", () => {
     const code = (f: string) => read(f).split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
-    for (const f of ["src/editor/diagrams.ts", "src/ui/diagram-view.ts", "src/ui/sql-view.ts", "src/ui/preview.ts", "src/ui/tree-view.ts", "src/editor/sql-parse.ts"]) {
+    for (const f of ["src/ui/views/mermaid.ts", "src/ui/views/diagram-view.ts", "src/ui/views/sql-view.ts", "src/ui/views/preview.ts", "src/ui/views/tree-view.ts", "src/text/sql-parse.ts"]) {
       expect(code(f), f).not.toMatch(/\.innerHTML\s*=|outerHTML\s*=|insertAdjacentHTML|document\.write|new Function|\beval\(/);
     }
-    expect(read("src/editor/diagrams.ts")).toMatch(/securityLevel: "strict"/);
-    expect(read("src/ui/preview.ts")).toMatch(/const insert = escapeHtmlText\(text\)/);
+    expect(read("src/ui/views/mermaid.ts")).toMatch(/securityLevel: "strict"/);
+    expect(read("src/ui/views/preview.ts")).toMatch(/const insert = escapeHtmlText\(text\)/);
   });
 });
 
 describe("licenses and bundle", () => {
   it("Mermaid's GPL/EPL layout engine (elkjs) is replaced at build time, and the dagre layout is used", () => {
     expect(read("vite.config.ts")).toMatch(/find: \/\^elkjs\\\/lib\\\/elk\\\.bundled\\\.js\$\//);
-    expect(read("src/editor/diagrams.ts")).toMatch(/layout: "dagre"/);
+    expect(read("src/ui/views/mermaid.ts")).toMatch(/layout: "dagre"/);
     expect(read("src/vendor/elk-stub.ts")).not.toMatch(/import/);
   });
 

@@ -14,7 +14,7 @@ import { tags as t } from "@lezer/highlight";
 import type { Settings } from "../core/settings";
 import { codeDocFacet, notesClickHandler, notesHighlighter, plainNotesFacet, taskConfigFacet } from "./decorations";
 import { isCodeLang, languageForPath, languageInfo } from "./languages";
-import type { TaskConfig } from "./tasks";
+import type { TaskConfig } from "../text/tasks";
 
 /** A document type id of LANGUAGES ("text", "markdown", "jsonc", "python"…). */
 export type LangId = string;

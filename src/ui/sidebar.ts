@@ -1,12 +1,12 @@
 // Sidebar: file explorer, folder-wide task view, search in files.
 
-import type { App } from "../app";
+import type { App } from "../app/app";
 import { shortcutFor, titleWithKey } from "../core/commands";
 import type { Entry } from "../core/backend";
 import { basename, dirname, isDoneFile, isInside, projectName, relative, samePath } from "../core/path";
 import { resolveColor } from "../core/themes";
 import { fileKindFor } from "../editor/languages";
-import { dueState, findTags, findTasks, isDoneStatus, isOngoingStatus, todayISO, type FoundTask } from "../editor/tasks";
+import { dueState, findTags, findTasks, isDoneStatus, isOngoingStatus, todayISO, type FoundTask } from "../text/tasks";
 import { debounce, h, icon } from "./dom";
 import { confirm, showMenu, toast, type MenuItem } from "./overlay";
 

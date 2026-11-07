@@ -4,11 +4,11 @@
 // The tree follows the cursor of the editor.
 
 import type { Text } from "@codemirror/state";
-import type { App, Doc } from "../app";
-import { setTreeHighlight } from "../editor/setup";
-import { keySource, nodePath, parseTree, valueSource, xmlPath, type ParsedTree, type TreeFormat, type TreeNode } from "../editor/tree-parse";
-import { h, icon } from "./dom";
-import { showMenu, toast } from "./overlay";
+import type { App, Doc } from "../../app/app";
+import { setTreeHighlight } from "../../editor/setup";
+import { keySource, nodePath, parseTree, valueSource, xmlPath, type ParsedTree, type TreeFormat, type TreeNode } from "../../text/tree-parse";
+import { h, icon } from "../dom";
+import { showMenu, toast } from "../overlay";
 
 /** Children shown at first in a big array or object ("Show more" for the rest). */
 const PAGE = 200;

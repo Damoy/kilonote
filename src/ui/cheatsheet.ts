@@ -2,7 +2,7 @@
 // the status bar keyboard button, Help: Keyboard shortcuts, or Ctrl+?.
 // The shortcuts are read from the current keybindings, so custom ones show up.
 
-import type { App } from "../app";
+import type { App } from "../app/app";
 import { formatCombo, onBeforeCommand, shortcutFor } from "../core/commands";
 import { h, icon } from "./dom";
 import { showSettingsView } from "./settings-view";

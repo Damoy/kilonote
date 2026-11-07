@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SETTINGS } from "./core/settings";
-import { makeTaskConfig } from "./editor/tasks";
+import { DEFAULT_SETTINGS } from "../core/settings";
+import { makeTaskConfig } from "./tasks";
 import { buildReport, periodFor } from "./report";
 
 const cfg = makeTaskConfig({

@@ -1,10 +1,10 @@
 // A rendered diagram (Mermaid file, or the schema of a SQL file): zoom, fit to
 // the pane, save as SVG. The drawing is an image: it cannot run anything.
 
-import type { App } from "../app";
-import { diagramError, fixSvgSize, renderMermaid, svgDataUrl } from "../editor/diagrams";
-import { h, icon } from "./dom";
-import { toast } from "./overlay";
+import type { App } from "../../app/app";
+import { diagramError, fixSvgSize, renderMermaid, svgDataUrl } from "./mermaid";
+import { h, icon } from "../dom";
+import { toast } from "../overlay";
 
 export class DiagramView {
   readonly el: HTMLElement;

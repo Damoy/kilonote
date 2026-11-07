@@ -3,35 +3,35 @@
 import { ChangeSet, EditorState, Text, type ChangeSpec, type TransactionSpec } from "@codemirror/state";
 import { EditorView, type ViewUpdate } from "@codemirror/view";
 import { openSearchPanel } from "@codemirror/search";
-import type { Backend } from "./core/backend";
-import { registerCommands, runCommand, setKeybindings, setPlatform, shortcutFor, type Command } from "./core/commands";
-import { parseJsonc } from "./core/jsonc";
+import type { Backend } from "../core/backend";
+import { registerCommands, runCommand, setKeybindings, setPlatform, shortcutFor, type Command } from "../core/commands";
+import { parseJsonc } from "../core/jsonc";
 import {
   basename, dirname, doneFileFor, extname, isDoneFile, isInside, isProbablyBinary, isWindowsPath, join, projectName, relative, samePath, stem,
-} from "./core/path";
-import { mergeSettings, setSettingInText, SETTINGS_TEMPLATE, type Settings } from "./core/settings";
-import { applyMascot, applyTheme, findTheme, MASCOT_VARIANTS, PALETTE_LABELS, THEMES } from "./core/themes";
-import { fuzzyFilter } from "./core/fuzzy";
-import { editorHooks } from "./editor/decorations";
-import { createEditorState, langForPath, languageReady, loadLanguage, reconfigureLanguage, settingsCompartment, settingsExtensions, type LangId } from "./editor/setup";
-import { isCodeLang, isLangId, LANGUAGES, languageLabel } from "./editor/languages";
-import { FormatError, formatKindFor, formatText, minifyJson } from "./editor/format";
+} from "../core/path";
+import { mergeSettings, setSettingInText, SETTINGS_TEMPLATE, type Settings } from "../core/settings";
+import { applyMascot, applyTheme, findTheme, MASCOT_VARIANTS, PALETTE_LABELS, THEMES } from "../core/themes";
+import { fuzzyFilter } from "../core/fuzzy";
+import { editorHooks } from "../editor/decorations";
+import { createEditorState, langForPath, languageReady, loadLanguage, reconfigureLanguage, settingsCompartment, settingsExtensions, type LangId } from "../editor/setup";
+import { isCodeLang, isLangId, LANGUAGES, languageLabel } from "../editor/languages";
+import { FormatError, formatKindFor, formatText, minifyJson } from "../text/format";
 import {
   archivedLine, cycleLine, findTags, findTasks, isDoneStatus, makeTaskConfig, parseDateInput, parseTask, setDueInLine, todayISO,
   type TaskConfig,
-} from "./editor/tasks";
-import { buildReport, periodFor, type PeriodKind, type ReportSource } from "./report";
-import { debounce } from "./ui/dom";
-import { confirm, prompt, setFocusRestorer, showMenu, toast, type MenuItem } from "./ui/overlay";
-import { openPicker, setPaletteFocusRestorer, type PickItem } from "./ui/palette";
-import { TabBar } from "./ui/tabbar";
-import { Sidebar } from "./ui/sidebar";
-import { StatusBar } from "./ui/statusbar";
-import { Welcome } from "./ui/welcome";
-import { Preview, SIDE_KINDS, type SideKind } from "./ui/preview";
-import { showSettingsView } from "./ui/settings-view";
-import { showCheatSheet } from "./ui/cheatsheet";
-import { setIconPack, type IconPack } from "./ui/icons";
+} from "../text/tasks";
+import { buildReport, periodFor, type PeriodKind, type ReportSource } from "../text/report";
+import { debounce } from "../ui/dom";
+import { confirm, prompt, setFocusRestorer, showMenu, toast, type MenuItem } from "../ui/overlay";
+import { openPicker, setPaletteFocusRestorer, type PickItem } from "../ui/palette";
+import { TabBar } from "../ui/tabbar";
+import { Sidebar } from "../ui/sidebar";
+import { StatusBar } from "../ui/statusbar";
+import { Welcome } from "../ui/welcome";
+import { Preview, SIDE_KINDS, type SideKind } from "../ui/views/preview";
+import { showSettingsView } from "../ui/settings-view";
+import { showCheatSheet } from "../ui/cheatsheet";
+import { setIconPack, type IconPack } from "../ui/icons";
 import { GUIDE } from "./guide";
 
 export interface Doc {
