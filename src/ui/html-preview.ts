@@ -160,6 +160,9 @@ export class HtmlFrame {
   private ready: Promise<void>;
   private resolveReady!: () => void;
   private editing = false;
+  /** Watches the edited text (an observer works in every engine: WebKit runs no
+   *  event listener inside a frame that may not run scripts). */
+  private observer: MutationObserver | null = null;
   /** A run of text was changed in the preview (its index, its new text). */
   onEdit: ((index: number, text: string) => void) | null = null;
   /** Key presses in the page (the app's shortcuts keep working there). */
@@ -198,10 +201,6 @@ export class HtmlFrame {
     doc.addEventListener("click", onClick, true);
     doc.addEventListener("auxclick", onClick, true);
     doc.addEventListener("submit", (e) => e.preventDefault(), true);
-    doc.addEventListener("input", (e) => {
-      const run = (e.target as Element | null)?.closest?.("kn-t[data-kn]");
-      if (run && this.editing) this.onEdit?.(Number(run.getAttribute("data-kn")), run.textContent ?? "");
-    });
     doc.addEventListener("keydown", (e) => {
       const inRun = (e.target as Element | null)?.closest?.("kn-t[contenteditable]");
       // One run of text: Enter or Escape ends the edit (no new paragraph).
@@ -238,7 +237,20 @@ export class HtmlFrame {
       clean.head.append(style);
     }
     // The frame keeps its policy: it belongs to the document, not to the <meta>.
+    this.observer?.disconnect();
     doc.replaceChild(doc.importNode(clean.documentElement, true), doc.documentElement);
+    if (this.editing) {
+      this.observer = new MutationObserver((records) => {
+        const runs = new Set<Element>();
+        for (const r of records) {
+          const node = r.target.nodeType === Node.TEXT_NODE ? r.target.parentElement : (r.target as Element);
+          const run = node?.closest?.("kn-t[data-kn]");
+          if (run) runs.add(run);
+        }
+        for (const run of runs) this.onEdit?.(Number(run.getAttribute("data-kn")), run.textContent ?? "");
+      });
+      this.observer.observe(doc.documentElement, { characterData: true, childList: true, subtree: true });
+    }
     if (doc.scrollingElement) {
       doc.scrollingElement.scrollTop = top;
       doc.scrollingElement.scrollLeft = left;

@@ -220,9 +220,8 @@ try {
     await run("await app.openFile(args[0]); app.preview.open = new Set(['html']); app.preview.setHtmlEdit(true);", join(notes, "page.html"));
     await until(() => run("return !!document.querySelector('.pv-frame').contentDocument.querySelector('kn-t[contenteditable]');"), "the editable page");
     await run(`const run = document.querySelector('.pv-frame').contentDocument.querySelector('h1 kn-t');
-      run.textContent = 'Page <b>2';
-      run.dispatchEvent(new Event('input', { bubbles: true }));`);
-    expect(await run("return app.view.state.doc.toString().startsWith('<h1>Page &lt;b&gt;2</h1>');"), true, "the HTML");
+      run.textContent = 'Page <b>2';`);
+    await until(() => run("return app.view.state.doc.toString().startsWith('<h1>Page &lt;b&gt;2</h1>');"), "the HTML to follow");
     expect(await run("return window.PWNED ?? null;"), null, "a script of the page ran");
     await run("app.preview.setHtmlEdit(false); app.preview.open.clear(); app.preview.update(true);");
   });
