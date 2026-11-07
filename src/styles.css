@@ -173,6 +173,11 @@ body.zen .cm-gutters { display: none !important; }
 .kn-tab.missing .kn-tab-name { text-decoration: line-through; opacity: 0.7; }
 .kn-tab.dragging { z-index: 3; background: var(--kn-bg-hover); box-shadow: var(--shadow); transition: none; opacity: 0.95; }
 #tabbar.is-dragging .kn-tab { pointer-events: none; }
+/* Dragged out of the window: the tab will move to another window. */
+#tabbar.detaching .kn-tab.dragging { opacity: 0.45; outline: 1px dashed var(--kn-accent); }
+#tabbar.detaching .kn-tab-marker { display: none; }
+/* The list of all tabs only when they no longer fit. */
+#tabbar:not(.overflowing) .kn-tab-list { display: none; }
 .kn-tab-marker { position: absolute; top: 6px; bottom: 6px; width: 2px; border-radius: 1px; background: var(--kn-accent); pointer-events: none; }
 .kn-tab-icon { width: 14px; height: 14px; color: var(--kn-green); opacity: 0.8; }
 .kn-tab-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

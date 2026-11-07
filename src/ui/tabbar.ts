@@ -10,14 +10,19 @@ import { showMenu, type MenuItem } from "./overlay";
 
 export class TabBar {
   private scroller: HTMLElement;
-  private dragging: { doc: Doc; el: HTMLElement; startX: number; offset: number; active: boolean; pointerId: number } | null = null;
+  private dragging: {
+    doc: Doc; el: HTMLElement; startX: number; offset: number; active: boolean; pointerId: number; outside: boolean;
+  } | null = null;
   private marker = h("div", { class: "kn-tab-marker" });
+  private listBtn: HTMLElement;
 
   constructor(private app: App, private el: HTMLElement) {
     this.scroller = h("div", { class: "kn-tabs" });
+    this.listBtn = h("button", { class: "kn-icon-btn kn-tab-list", title: titleWithKey("All tabs", "tab.list"), onclick: (e: MouseEvent) => this.showTabList(e) }, icon("list"));
     const actions = h(
       "div",
       { class: "kn-tabbar-actions" },
+      this.listBtn,
       h("button", { class: "kn-icon-btn", title: titleWithKey("New note", "file.new"), onclick: () => app.newDoc() }, icon("plus")),
       h("button", { class: "kn-icon-btn", title: titleWithKey("Command palette", "palette.commands"), onclick: () => app.openCommandPalette() }, icon("more")),
     );
@@ -33,6 +38,8 @@ export class TabBar {
     this.scroller.addEventListener("dblclick", (e) => {
       if (e.target === this.scroller) app.newDoc();
     });
+    // The list of all tabs shows up when they no longer fit.
+    new ResizeObserver(() => this.updateOverflow()).observe(this.scroller);
     app.on("docs", () => this.render());
     app.on("active", () => this.render());
     app.on("settings", () => this.render());
@@ -54,6 +61,36 @@ export class TabBar {
     }
     const activeEl = this.scroller.querySelector<HTMLElement>(".kn-tab.active");
     activeEl?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    this.updateOverflow();
+  }
+
+  private updateOverflow() {
+    this.el.classList.toggle("overflowing", this.scroller.scrollWidth > this.scroller.clientWidth + 1);
+  }
+
+  /** Menu of every tab (by group), to reach the ones scrolled out of view. */
+  showTabList(e?: MouseEvent) {
+    const app = this.app;
+    const items: MenuItem[] = [];
+    let lastGroup: string | null = null;
+    for (const doc of app.docs) {
+      if (doc.groupId !== lastGroup) {
+        const g = app.groups.find((x) => x.id === doc.groupId);
+        if (g) items.push({ header: g.name || "Group" });
+        else if (lastGroup) items.push({ separator: true });
+        lastGroup = doc.groupId;
+      }
+      items.push({
+        label: `${doc.dirty ? "● " : ""}${app.docName(doc)}`,
+        color: doc.color ?? undefined,
+        icon: doc.path && isDoneFile(doc.path, app.settings.archive_suffix) ? "fileDone" : "file",
+        checked: doc === app.active,
+        action: () => app.activate(doc),
+      });
+    }
+    if (!items.length) items.push({ header: "No open tab" });
+    const r = (e?.currentTarget as HTMLElement | undefined)?.getBoundingClientRect() ?? this.listBtn.getBoundingClientRect();
+    showMenu(items, r.right - 240, r.bottom + 4);
   }
 
   private renderGroupChip(group: TabGroup) {
@@ -117,13 +154,13 @@ export class TabBar {
     if (e.button !== 0 || (e.target as HTMLElement).closest(".kn-tab-close")) return;
     this.app.activate(doc);
     const fresh = this.scroller.querySelector<HTMLElement>(".kn-tab.active") ?? el;
-    this.dragging = { doc, el: fresh, startX: e.clientX, offset: 0, active: false, pointerId: e.pointerId };
+    this.dragging = { doc, el: fresh, startX: e.clientX, offset: 0, active: false, pointerId: e.pointerId, outside: false };
     const move = (ev: PointerEvent) => this.onPointerMove(ev);
-    const up = () => {
+    const up = (ev: PointerEvent) => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
-      this.onPointerUp();
+      this.onPointerUp(ev.type === "pointerup" ? ev : null);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -140,7 +177,16 @@ export class TabBar {
       d.el.classList.add("dragging");
       this.el.classList.add("is-dragging");
       this.scroller.append(this.marker);
+      // Keep receiving the pointer when it leaves the window (drop on another window).
+      try {
+        this.scroller.setPointerCapture(d.pointerId);
+      } catch {
+        /* not supported: the drop stays inside the window */
+      }
     }
+    // Outside the window: the tab will move to another window.
+    d.outside = e.clientX < 0 || e.clientY < 0 || e.clientX > innerWidth || e.clientY > innerHeight;
+    this.el.classList.toggle("detaching", d.outside);
     d.el.style.transform = `translateX(${dx}px)`;
     const target = this.dropIndex(e.clientX);
     const tabs = this.tabElements();
@@ -168,7 +214,7 @@ export class TabBar {
     return { docIndex: this.app.docs.length, visualIndex: tabs.length };
   }
 
-  private onPointerUp() {
+  private onPointerUp(e: PointerEvent | null) {
     const d = this.dragging;
     if (!d) return;
     if (d.active) {
@@ -176,9 +222,13 @@ export class TabBar {
       const { docIndex } = this.dropIndex(pointerX);
       d.el.style.transform = "";
       d.el.classList.remove("dragging");
-      this.el.classList.remove("is-dragging");
+      this.el.classList.remove("is-dragging", "detaching");
       this.marker.remove();
       this.dragging = null;
+      if (d.outside && e) {
+        void this.app.dropTabOutside(d.doc, e.screenX, e.screenY);
+        return;
+      }
       this.app.moveDoc(d.doc, docIndex);
     } else this.dragging = null;
     this.app.focusEditor();

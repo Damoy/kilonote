@@ -1813,6 +1813,22 @@ export class App {
     return true;
   }
 
+  /**
+   * A tab dropped outside the window: into the window under the pointer, or a
+   * new window opened there (screen coordinates in CSS pixels).
+   */
+  async dropTabOutside(doc: Doc, screenX: number, screenY: number) {
+    if (!doc.path) {
+      toast("Save this note first to move it to another window.", { action: { label: "Save", run: () => void this.saveAs(doc) } });
+      return;
+    }
+    if (doc.dirty && !(await this.save(doc))) return;
+    const target = await this.backend.windowAt(screenX, screenY).catch(() => null);
+    if (target) await this.backend.sendPaths(target, [doc.path]);
+    else await this.backend.openWindow([doc.path], undefined, { x: Math.max(0, screenX - 160), y: Math.max(0, screenY - 16) });
+    await this.closeDoc(doc, { force: true });
+  }
+
   /** Moves a saved note to a new window. */
   async moveToNewWindow(doc: Doc) {
     if (!doc.path) {
@@ -1933,6 +1949,7 @@ export class App {
       { id: "tab.closeOthers", title: "Tab: Close others", run: () => this.closeMany(this.docs.filter((d) => d !== this.active)) },
       { id: "tab.closeAll", title: "Tab: Close all", run: () => this.closeMany(this.docs) },
       { id: "tab.reopen", title: "Tab: Reopen last closed", run: () => this.reopenClosed() },
+      { id: "tab.list", title: "Tab: List all tabs", run: () => this.tabbar.showTabList() },
       { id: "tab.next", title: "Tab: Next", run: () => this.cycleTab(1) },
       { id: "tab.prev", title: "Tab: Previous", run: () => this.cycleTab(-1) },
       { id: "tab.color", title: "Tab: Color…", run: () => this.active && this.tabbar.showColorMenu(this.active) },

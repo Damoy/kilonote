@@ -46,8 +46,12 @@ export interface Backend {
   /** Paths this window must open (command line for the main window). */
   windowPaths(): Promise<string[]>;
   /** Opens another window, optionally restoring a saved one by its label. */
-  openWindow(paths: string[], label?: string): Promise<void>;
+  openWindow(paths: string[], label?: string, position?: { x: number; y: number }): Promise<void>;
   windowCount(): Promise<number>;
+  /** Label of the other window under a screen point (CSS pixels), or null. */
+  windowAt(screenX: number, screenY: number): Promise<string | null>;
+  /** Opens files in another window and brings it to the front. */
+  sendPaths(label: string, paths: string[]): Promise<void>;
   /** Keeps only the `keep` newest files of the local history (config folder only). */
   pruneHistory(keep: number): Promise<void>;
   /** Removes the saved session of a window (config folder only). */
@@ -113,8 +117,11 @@ export async function createTauriBackend(): Promise<Backend> {
     },
     windowLabel: win.label,
     windowPaths: () => invoke<string[]>("window_paths"),
-    openWindow: async (paths, label) => void (await invoke<string>("open_window", { paths, label: label ?? null })),
+    openWindow: async (paths, label, position) =>
+      void (await invoke<string>("open_window", { paths, label: label ?? null, position: position ? [position.x, position.y] : null })),
     windowCount: () => invoke<number>("window_count"),
+    windowAt: (x, y) => invoke<string | null>("window_at", { x: x * devicePixelRatio, y: y * devicePixelRatio }),
+    sendPaths: (label, paths) => invoke("send_paths", { label, paths }),
     deleteSession: (label) => invoke("delete_session", { label }),
     pruneHistory: (keep) => invoke("prune_history", { keep }),
     broadcastSettingsChanged: () => void emit("kilonote://settings-changed", { from: win.label }),
@@ -338,6 +345,10 @@ export function createWebBackend(): Backend {
       window.open(`${location.pathname}?window=${encodeURIComponent(next)}`, "_blank");
     },
     windowCount: async () => 1,
+    windowAt: async () => null,
+    async sendPaths(label, paths) {
+      channel?.postMessage({ type: "open", to: label, paths });
+    },
     async pruneHistory(keep) {
       const old = [...files.keys()].filter((p) => dirname(p) === "/.config/history").sort().slice(0, -keep || undefined);
       for (const p of old) files.delete(p);
@@ -378,6 +389,10 @@ export function createWebBackend(): Backend {
       window.addEventListener("beforeunload", () => void handler());
     },
     onFileDrop() {},
-    onOpenRequest() {},
+    onOpenRequest(handler) {
+      channel?.addEventListener("message", (e: MessageEvent) => {
+        if (e.data?.type === "open" && e.data.to === windowLabel) handler(e.data.paths as string[]);
+      });
+    },
   };
 }

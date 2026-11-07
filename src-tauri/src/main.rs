@@ -480,6 +480,7 @@ fn open_window(
     state: State<Windows>,
     paths: Vec<String>,
     label: Option<String>,
+    position: Option<(f64, f64)>,
 ) -> Result<String, String> {
     let label = match label {
         Some(l) if valid_label(&l) && l != "main" => l,
@@ -504,9 +505,14 @@ fn open_window(
         .cloned()
         .ok_or("no window configuration")?;
     config.label = label.clone();
-    // Cascade from the window that has the focus.
+    // At the given place (a tab dropped outside the windows), otherwise
+    // cascading from the window that has the focus.
     let focused = state.last_focused.lock().unwrap().clone();
-    if let Some(origin) = app.get_webview_window(&focused) {
+    if let Some((x, y)) = position {
+        config.center = false;
+        config.x = Some(x);
+        config.y = Some(y);
+    } else if let Some(origin) = app.get_webview_window(&focused) {
         if let (Ok(pos), Ok(scale)) = (origin.outer_position(), origin.scale_factor()) {
             config.center = false;
             config.x = Some(pos.x as f64 / scale + 36.0);
@@ -524,6 +530,44 @@ fn open_window(
 #[tauri::command]
 fn window_count(app: AppHandle) -> usize {
     app.webview_windows().len()
+}
+
+/// The other KiloNote window under a screen point (physical pixels), if any.
+#[tauri::command]
+fn window_at(window: WebviewWindow, app: AppHandle, x: f64, y: f64) -> Option<String> {
+    app.webview_windows()
+        .into_iter()
+        .filter(|(label, w)| {
+            label != window.label()
+                && w.is_visible().unwrap_or(false)
+                && !w.is_minimized().unwrap_or(false)
+        })
+        .find(|(_, w)| match (w.outer_position(), w.outer_size()) {
+            (Ok(pos), Ok(size)) => {
+                let (left, top) = (pos.x as f64, pos.y as f64);
+                x >= left
+                    && y >= top
+                    && x < left + size.width as f64
+                    && y < top + size.height as f64
+            }
+            _ => false,
+        })
+        .map(|(label, _)| label)
+}
+
+/// Hands files to another window (a tab dragged onto it), which comes to the front.
+#[tauri::command]
+fn send_paths(app: AppHandle, label: String, paths: Vec<String>) -> Result<(), String> {
+    if !valid_label(&label) {
+        return Err(format!("invalid window label: {label}"));
+    }
+    let target = app
+        .get_webview_window(&label)
+        .ok_or_else(|| format!("no window {label}"))?;
+    let _ = target.unminimize();
+    let _ = target.set_focus();
+    app.emit_to(label.as_str(), "kilonote://open-paths", paths)
+        .map_err(err)
 }
 
 /// Forgets the saved session of a window that was closed (config folder only).
@@ -634,6 +678,8 @@ fn main() {
             window_paths,
             open_window,
             window_count,
+            window_at,
+            send_paths,
             delete_session,
             prune_history
         ])
