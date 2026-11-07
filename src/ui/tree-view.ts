@@ -284,7 +284,7 @@ export class TreeView {
     if (what === "value" && !n.editable) {
       if (n.children) this.toggle(row.id);
       else {
-        toast(n.type === "alias" ? "An alias is edited in the text." : "Multi-line values are edited in the text.");
+        toast(n.type === "alias" ? "An alias is edited in the text." : n.type === "null" && tree.format === "xml" ? "An empty element (<name/>) is edited in the text." : "Multi-line values are edited in the text.");
         this.reveal(n.from, n.to, true);
       }
       return;

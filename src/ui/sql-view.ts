@@ -77,9 +77,10 @@ export class SqlView {
 
   private schema(model: SqlModel, opts: { dark: boolean; name: string }): HTMLElement {
     const code = erDiagram(model);
-    // The diagram is drawn again only when the schema changed.
-    if (code && code !== this.lastSchema) {
-      this.lastSchema = code;
+    // The diagram is drawn again only when the schema (or the theme) changed.
+    const key = code && `${opts.dark ? "dark" : "light"}\n${code}`;
+    if (key && key !== this.lastSchema) {
+      this.lastSchema = key;
       void this.diagram.render(code, { dark: opts.dark, title: "ENTITY-RELATIONSHIP", name: `${opts.name}-schema` });
     }
     return this.diagram.el;
