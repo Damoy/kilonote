@@ -148,7 +148,7 @@ try {
     }
     // A script is only ever opened as text.
     expect(await run("const d = await app.openFile(args[0]); return d?.state.doc.toString().startsWith('#!/bin/sh');", join(notes, "evil.sh")), true, "evil.sh as text");
-    await run("await app.openPaths(args);", [join(notes, "evil.exe"), join(notes, "tool")]);
+    await run("await app.openPaths(args[0]);", [join(notes, "evil.exe"), join(notes, "tool")]);
     await sleep(1500);
     expect(existsSync(marker), false, "a program ran");
   });
