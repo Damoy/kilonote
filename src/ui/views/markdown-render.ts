@@ -4,7 +4,7 @@
 // network (images show their description) and links go through the app.
 
 import { GFM, parser as baseParser } from "@lezer/markdown";
-import type { SyntaxNode } from "@lezer/common";
+import type { SyntaxNode, Tree } from "@lezer/common";
 import { resolveColor } from "../../core/themes";
 import { dueState, isDoneStatus, parseTask, type TaskConfig } from "../../text/tasks";
 
@@ -32,12 +32,69 @@ function decodeEntity(s: string): string {
 export interface RenderOptions {
   taskCfg: TaskConfig;
   today?: string;
+  /** The syntax tree of `src`, when the editor already has it (no parsing then). */
+  tree?: Tree;
+  /** The blocks of the previous rendering, reused when their text did not change. */
+  reuse?: BlockCache;
 }
 
+/**
+ * The rendered top-level blocks of a note, by source text: while typing, only
+ * the block being edited is built again, the others are moved over as they are.
+ */
+export class BlockCache {
+  private blocks = new Map<string, Node[][]>();
+  take(source: string): Node[] | undefined {
+    const list = this.blocks.get(source);
+    return list?.shift();
+  }
+  put(source: string, nodes: Node[]) {
+    const list = this.blocks.get(source);
+    if (list) list.push(nodes);
+    else this.blocks.set(source, [nodes]);
+  }
+}
+
+/** The note as HTML elements, and the cache of its blocks for the next time. */
 export function renderMarkdown(src: string, opts: RenderOptions): HTMLElement {
+  return renderMarkdownBlocks(src, opts).root;
+}
+
+/** A top-level block of a note: its source text, and how to render it (on demand). */
+export interface MarkdownBlock {
+  source: string;
+  render: () => Node[];
+}
+
+/**
+ * The top-level blocks of a note, each rendered only when asked: the preview
+ * renders the blocks that changed and keeps the others where they are. A block
+ * that does not end before the end of `src` (a cut text) is left out.
+ */
+export function markdownBlocks(src: string, opts: RenderOptions): MarkdownBlock[] {
+  const { tree, renderTop } = prepare(src, opts);
+  const out: MarkdownBlock[] = [];
+  for (let c: SyntaxNode | null = tree.topNode.firstChild; c && c.to <= src.length; c = c.nextSibling) {
+    const node = c;
+    out.push({ source: src.slice(node.from, node.to), render: () => renderTop(node) });
+  }
+  return out;
+}
+
+export function renderMarkdownBlocks(src: string, opts: RenderOptions): { root: HTMLElement; blocks: BlockCache } {
   const root = document.createElement("div");
   root.className = "md";
-  const tree = parser.parse(src);
+  const blocks = new BlockCache();
+  for (const b of markdownBlocks(src, opts)) {
+    const nodes = opts.reuse?.take(b.source) ?? b.render();
+    root.append(...nodes);
+    blocks.put(b.source, nodes);
+  }
+  return { root, blocks };
+}
+
+function prepare(src: string, opts: RenderOptions): { tree: Tree; renderTop: (node: SyntaxNode) => Node[] } {
+  const tree = opts.tree ?? parser.parse(src);
   const el = (tag: string, cls?: string) => {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -236,6 +293,12 @@ export function renderMarkdown(src: string, opts: RenderOptions): HTMLElement {
     }
   }
 
-  for (let c: SyntaxNode | null = tree.topNode.firstChild; c; c = c.nextSibling) renderBlock(c, root);
-  return root;
+  const holder = document.createElement("div");
+  const renderTop = (node: SyntaxNode): Node[] => {
+    renderBlock(node, holder);
+    const nodes = [...holder.childNodes];
+    holder.replaceChildren();
+    return nodes;
+  };
+  return { tree, renderTop };
 }

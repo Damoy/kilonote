@@ -62,3 +62,29 @@ describe("Markdown preview", () => {
     expect(md.textContent).toBe("Tom & Jerry ✓ *not em*");
   });
 });
+
+describe("incremental rendering", async () => {
+  const { renderMarkdownBlocks } = await import("./markdown-render");
+  const { GFM, parser } = await import("@lezer/markdown");
+  const cfg = makeTaskConfig({ statuses: { todo: "blue", done: "green" }, cycle: ["todo", "done"], done: ["done"], archiveStatus: "done", archiveDate: false });
+  it("reuses the blocks whose text did not change", () => {
+    const a = "# Title\n\nFirst paragraph.\n\n- one\n- two\n\nLast paragraph.\n";
+    const first = renderMarkdownBlocks(a, { taskCfg: cfg });
+    const kept = [...first.root.childNodes];
+    const b = a.replace("First paragraph.", "First paragraph, edited.");
+    const second = renderMarkdownBlocks(b, { taskCfg: cfg, reuse: first.blocks });
+    const now = [...second.root.childNodes];
+    expect(now.length).toBe(kept.length);
+    expect(now[0]).toBe(kept[0]); // the heading: same element
+    expect(now[1]).not.toBe(kept[1]); // the edited paragraph: built again
+    expect(now[1].textContent).toBe("First paragraph, edited.");
+    expect(now[2]).toBe(kept[2]);
+    expect(now[3]).toBe(kept[3]);
+  });
+
+  it("renders the same with the editor's tree as with its own parsing", () => {
+    const src = "# A\n\n| x | y |\n|---|---|\n| 1 | 2 |\n\n- task - todo\n\n```js\nlet a;\n```\n";
+    const tree = parser.configure(GFM).parse(src);
+    expect(renderMarkdownBlocks(src, { taskCfg: cfg, tree }).root.innerHTML).toBe(renderMarkdownBlocks(src, { taskCfg: cfg }).root.innerHTML);
+  });
+});

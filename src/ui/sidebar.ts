@@ -6,7 +6,7 @@ import type { Entry } from "../core/backend";
 import { basename, dirname, isDoneFile, isInside, projectName, relative, samePath } from "../core/path";
 import { resolveColor } from "../core/themes";
 import { fileKindFor } from "../editor/languages";
-import { dueState, findTags, findTasks, isDoneStatus, isOngoingStatus, todayISO, type FoundTask } from "../text/tasks";
+import { dueState, findTags, findTasks, isDoneStatus, isOngoingStatus, todayISO, type FoundTask, type TaskConfig } from "../text/tasks";
 import { debounce, h, icon } from "./dom";
 import { confirm, showMenu, toast, type MenuItem } from "./overlay";
 import { copyText, createFileIn, createFolderIn, renamePath, trashPath } from "../app/files";
@@ -503,6 +503,8 @@ export class Sidebar {
   private tasksToken = 0;
   /** Contents of the scanned notes (avoids re-reading the whole folder on every save). */
   private taskTexts = new Map<string, string | null>();
+  /** The tasks found in each note, kept while its text and the task settings stay the same. */
+  private taskCache = new Map<string, { text: string; cfg: TaskConfig; tasks: FoundTask[] }>();
 
   async renderTasks(full = true) {
     const app = this.app;
@@ -531,7 +533,9 @@ export class Sidebar {
     files.forEach((path, i) => {
       const text = texts[i];
       if (!text) return;
-      const all = findTasks(text, cfg);
+      let cached = this.taskCache.get(path);
+      if (!cached || cached.cfg !== cfg || cached.text !== text) this.taskCache.set(path, (cached = { text, cfg, tasks: findTasks(text, cfg) }));
+      const all = cached.tasks;
       const ongoing = all.filter((t) => isOngoingStatus(t.task.key, cfg)).length;
       ongoingTotal += ongoing;
       for (const t of all) {

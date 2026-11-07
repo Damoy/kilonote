@@ -7,12 +7,13 @@
 // Each view is turned on or off on its own (kept with the session), and its
 // code is only loaded the first time it is shown: the app starts lighter.
 
+import { ensureSyntaxTree } from "@codemirror/language";
 import type { Text } from "@codemirror/state";
 import type { App, Doc } from "../../app/app";
 import { handleKeydown } from "../../core/commands";
 import { extname, stem } from "../../core/path";
 import { findTheme } from "../../core/themes";
-import { debounce, h, icon } from "../dom";
+import { h, icon } from "../dom";
 import { toast } from "../overlay";
 import type { DiagramView } from "./diagram-view";
 import type { HtmlFrame, TextRun } from "./html-preview";
@@ -77,6 +78,10 @@ export class Preview {
   private html: HtmlModule | null = null;
   private rendered: unknown = null;
   private renderedKind: SideKind | null = null;
+  private renderedDoc: Doc | null = null;
+  /** How long the last redraw took: long documents wait for longer pauses. */
+  private cost = 0;
+  private timer: ReturnType<typeof setTimeout> | undefined;
   private syncing = false;
 
   constructor(private app: App) {
@@ -94,16 +99,22 @@ export class Preview {
     pane.before(this.resizer);
     this.onlyBtn.addEventListener("click", () => this.setOnly(!this.only));
     this.setupResizer();
-    const soon = debounce(() => this.update(), 160);
-    const slow = debounce(() => this.update(), 450);
-    app.on("selection", () => {
-      // A page reloads its frame, a diagram is drawn again: a little more patience while typing.
-      if (this.kind === "html" || this.kind === "diagram") slow();
-      else soon();
-    });
+    app.on("selection", () => this.schedule());
     app.on("active", () => this.update(true));
     app.on("settings", () => this.update(true));
-    app.on("docs", () => this.update());
+    // Another tab, another document type: at once. The same text being edited: after a pause.
+    app.on("docs", () => (app.active !== this.renderedDoc || this.kind !== this.renderedKind ? this.update() : this.schedule()));
+  }
+
+  /**
+   * Redraws after a pause in typing. A page or a diagram waits a little more,
+   * and so does a document whose last redraw was slow (three times its cost):
+   * the redraw never gets in the way of typing.
+   */
+  private schedule() {
+    clearTimeout(this.timer);
+    const base = this.kind === "html" || this.kind === "diagram" ? 450 : 160;
+    this.timer = setTimeout(() => this.update(), Math.min(2000, Math.max(base, this.cost * 3)));
   }
 
   /** Loads the code of a view the first time it is needed, then shows it. */
@@ -299,12 +310,19 @@ export class Preview {
       return;
     }
     if (force || doc !== this.rendered) {
+      const fresh = force || this.renderedDoc !== this.app.active;
       this.rendered = doc;
       this.renderedKind = kind;
+      this.renderedDoc = this.app.active;
+      const t0 = performance.now();
       const text = doc.length > MAX_PREVIEW ? doc.sliceString(0, MAX_PREVIEW) : doc.toString();
       const active = this.app.active!;
       const name = active.path ? stem(active.path) : "diagram";
-      if (kind === "markdown") views.markdown!.render(text, this.dark());
+      if (kind === "markdown") {
+        // The editor keeps the note parsed as you type: its tree is reused (when it covers the text).
+        const tree = ensureSyntaxTree(this.app.view.state, text.length, 40) ?? undefined;
+        views.markdown!.render(text, this.dark(), { tree, fresh });
+      }
       else if (kind === "diagram") void views.diagram!.render(text, { dark: this.dark(), title: "MERMAID", name });
       else if (kind === "sql") views.sql!.render(text, { dark: this.dark(), name });
       else if (kind === "html") {
@@ -316,10 +334,13 @@ export class Preview {
         void views.html!.show(text, svg ? "svg" : "html", edit);
       } else {
         const tree = views.tree!;
-        void tree.render(active, doc, active.lang === "yaml" ? "yaml" : active.lang === "xml" ? "xml" : "json").then(() =>
-          tree.followCursor(this.app.view.state.selection.main.head));
+        void tree.render(active, doc, active.lang === "yaml" ? "yaml" : active.lang === "xml" ? "xml" : "json").then(() => {
+          this.cost = performance.now() - t0;
+          tree.followCursor(this.app.view.state.selection.main.head);
+        });
         return;
       }
+      this.cost = performance.now() - t0;
     }
     if (kind === "tree") views.tree!.followCursor(this.app.view.state.selection.main.head);
   }
