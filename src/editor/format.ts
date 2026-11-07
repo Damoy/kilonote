@@ -1,6 +1,8 @@
-// "Format document": JSON (comments kept), XML / HTML, CSS and Markdown tables.
-// Pure functions, no dependency: each one returns the formatted text or
-// throws a FormatError that points at the problem.
+// "Format document": JSON (comments kept), XML / HTML, CSS, Markdown tables and
+// SQL (format-sql.ts). Pure functions, no dependency: each one returns the
+// formatted text or throws a FormatError that points at the problem.
+
+import { formatSql } from "./format-sql";
 
 export class FormatError extends Error {
   constructor(message: string, public pos: number) {
@@ -545,10 +547,10 @@ export function alignMarkdownTables(text: string): string {
 
 // ---------------------------------------------------------------------------
 
-export type FormatKind = "json" | "xml" | "html" | "css" | "tables";
+export type FormatKind = "json" | "xml" | "html" | "css" | "tables" | "sql";
 
 const BY_LANG: Record<string, FormatKind> = {
-  jsonc: "json", xml: "xml", html: "html", css: "css", scss: "css", less: "css", markdown: "tables",
+  jsonc: "json", xml: "xml", html: "html", css: "css", scss: "css", less: "css", markdown: "tables", sql: "sql",
 };
 
 /** What "Format document" does with a text, from its document type (or its content for plain text). */
@@ -574,6 +576,8 @@ export function formatText(kind: FormatKind, text: string, indent: string): stri
       return formatXml(text, indent, true);
     case "css":
       return formatCss(text, indent);
+    case "sql":
+      return formatSql(text, indent);
     case "tables":
       return alignMarkdownTables(text);
   }

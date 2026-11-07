@@ -443,7 +443,7 @@ export class App {
 
   /**
    * Formats the selection, or the whole document: JSON (comments kept), XML,
-   * HTML, CSS, Markdown tables. One undo step; the cursor stays close.
+   * HTML, CSS, SQL, Markdown tables. One undo step; the cursor stays close.
    */
   formatDocument(mode: "format" | "minify" = "format") {
     const doc = this.active;
@@ -458,7 +458,7 @@ export class App {
     // A selection is recognized by its content first (some JSON in a note).
     const kind = mode === "minify" ? "json" : whole ? formatKindFor(doc.lang, text) : (formatKindFor("text", text) ?? formatKindFor(doc.lang, text));
     if (!kind) {
-      this.toastInfo(`Nothing to format in ${languageLabel(doc.lang)}: KiloNote formats JSON, XML, HTML, CSS and Markdown tables (select some JSON or XML to format just that).`);
+      this.toastInfo(`Nothing to format in ${languageLabel(doc.lang)}: KiloNote formats JSON, XML, HTML, CSS, SQL and Markdown tables (select some JSON or XML to format just that).`);
       return;
     }
     let out: string;
@@ -2233,7 +2233,7 @@ export class App {
       { id: "palette.symbol", title: "Go to heading or task…", run: () => this.openQuickOpen("@") },
       { id: "edit.find", title: "Edit: Find", run: () => this.active && openSearchPanel(this.view) },
       { id: "edit.replace", title: "Edit: Find and replace", run: () => this.active && openSearchPanel(this.view) },
-      { id: "edit.format", title: "Edit: Format document (JSON, XML, HTML, CSS, Markdown tables)", run: () => this.formatDocument() },
+      { id: "edit.format", title: "Edit: Format document (JSON, XML, HTML, CSS, SQL, Markdown tables)", run: () => this.formatDocument() },
       { id: "edit.minify", title: "Edit: Minify JSON", run: () => this.formatDocument("minify") },
       { id: "view.sidebar", title: "View: Toggle sidebar", run: () => this.sidebar.toggle() },
       { id: "view.files", title: "View: File explorer", run: () => this.sidebar.show("files") },

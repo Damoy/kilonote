@@ -69,8 +69,9 @@ open it as a folder and follow its `README.md`.
 - **Syntax coloring** for about 40 languages and config formats (Python, JavaScript, TypeScript,
   C#, Java, C/C++, Go, Rust, SQL, PowerShell, Batch, Shell, YAML, TOML, INI, XML, HTML, CSS…),
   loaded only when such a file is opened; the status bar changes the document type
-- **Format document** (Shift+Alt+F): JSON (comments and blank lines kept), XML, HTML, CSS and
-  Markdown tables, or just the selection (some JSON pasted in a note); *Edit: Minify JSON*
+- **Format document** (Shift+Alt+F): JSON (comments and blank lines kept), XML, HTML, CSS, SQL
+  (one clause per line, keywords in capitals) and Markdown tables, or just the selection (some
+  JSON pasted in a note); *Edit: Minify JSON*
 - Files keep their encoding (UTF-8, UTF-8 with BOM, UTF-16, Windows-1252) and their LF/CRLF line endings;
   the status bar converts them on demand
 - Autosave, atomic writes, unsaved tabs kept between sessions
@@ -227,7 +228,7 @@ On macOS, Ctrl becomes ⌘.
 | Search (and replace) in folder | Ctrl+Shift+F |
 | Task: set due date | Ctrl+Shift+U |
 | Preview (Markdown, HTML, SVG) / tree view (JSON, YAML) | Ctrl+Shift+V |
-| Format document (JSON, XML, HTML, CSS, tables) | Shift+Alt+F |
+| Format document (JSON, XML, HTML, CSS, SQL, tables) | Shift+Alt+F |
 | Shortcuts cheat sheet | Ctrl+? |
 | New note / open file / open folder | Ctrl+N / Ctrl+O / Ctrl+Shift+O |
 | New window | Ctrl+Shift+N |

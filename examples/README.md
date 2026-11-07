@@ -15,9 +15,9 @@ right of the tabs, or press **Ctrl+Shift+V**.
 | `broken.json` | **Tree** shows the error; *Go to* jumps to it |
 | `layout.xml` | **Tree** (elements, attributes, text); **Shift+Alt+F** formats it |
 | `flow.mmd` | **Diagram**: a Mermaid flowchart, zoom and *Save as SVG* |
-| `schema.sql` | **Schema**: entity-relationship diagram, tables, data, statements |
+| `schema.sql` | **Schema**: entity-relationship diagram, tables, data, statements; **Shift+Alt+F** formats it |
 | `styles.css` | **Shift+Alt+F** formats it |
-| `report.py`, `query.sql`, `deploy.ps1`, `build.bat` | Syntax coloring |
+| `report.py`, `query.sql`, `deploy.ps1`, `build.bat` | Syntax coloring (and **Shift+Alt+F** on the SQL) |
 
 ## Tasks in a Markdown note
 

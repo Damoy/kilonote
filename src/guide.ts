@@ -80,7 +80,7 @@ it to the tasks of one tag (a client, a topic…).
 - **Ctrl+F** / **Ctrl+H**: find / replace in the note.
 - **Ctrl+D**: select the next occurrence (multiple cursors), **Alt+click**: add a cursor.
 - **Alt+↑ / Alt+↓**: move the line. **Ctrl+Shift+K**: delete the line.
-- **Shift+Alt+F**: format the document or the selection (JSON, XML, HTML, CSS,
+- **Shift+Alt+F**: format the document or the selection (JSON, XML, HTML, CSS, SQL,
   Markdown tables). Command palette → "Edit: Minify JSON".
 - The explorer button with two arrows collapses every folder (or expands them all).
   Hover a folder for its own button: everything inside it. Alt+click does the same.
