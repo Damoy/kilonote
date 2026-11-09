@@ -1,25 +1,27 @@
 #!/usr/bin/env python3
-"""KiloNote's pixel art logo: Kilo, the floppy disk.
+"""KiloNote's icons.
 
-The drawings are hand-made character grids (one character = one pixel).
-This script turns them into every icon file, with no dependency:
+The app icon is a vector drawing, src-tauri/icons/app-icon.svg: `tauri icon`
+renders every size from it (Windows ICO, macOS ICNS, PNGs), and it is the
+favicon of the browser mode.
+
+Kilo, the floppy disk mascot shown in the app, is pixel art: hand-made
+character grids (one character = one pixel), turned into
 
   src/assets/kilo.svg          mascot (welcome screen, README)
-  public/favicon.svg           icon (browser mode)
-  src-tauri/icons/app-icon.svg vector icon
-  src-tauri/icons/*.png        crisp PNGs ("nearest neighbor" upscaling)
-  src-tauri/icons/icon.ico     multi-size Windows ICO: 16, 24, 32, 48, 64, 128, 256
-  docs/kilo-1024.png           large version (source for `tauri icon`, macOS)
+  docs/kilo-1024.png           large version
   docs/logo-pack/              color variants (SVG, PNG, ICO), logotype, preview sheet
 
-Usage: python3 scripts/generate-icons.py
-       KILONOTE_ICON=mint python3 scripts/generate-icons.py   (app icon from another variant)
+Usage: npm run icons
+       KILONOTE_ICON=mint npm run icons   (Kilo as the app icon, in one of the pack colors)
 """
 
 from __future__ import annotations
 
 import os
+import shutil
 import struct
+import subprocess
 import zlib
 from pathlib import Path
 
@@ -353,21 +355,41 @@ def logo_pack(icon32: list[str], icon16: list[str], mascot: list[str]) -> None:
     (pack / "preview.png").write_bytes(png_bytes(compose(previews, cols=4, gap=24, bg=(0x1B, 0x1C, 0x22, 255))))
 
 
+def tauri_icon(source: Path, icons: Path) -> None:
+    """Every size of the app icon, from one drawing (desktop sizes only)."""
+    npx = shutil.which("npx") or "npx"
+    subprocess.run([npx, "tauri", "icon", str(source), "-o", str(icons)], check=True, cwd=ROOT)
+    for mobile in ("android", "ios"):
+        shutil.rmtree(icons / mobile, ignore_errors=True)
+
+
 def main() -> None:
     icon32, icon16, mascot = parse(ICON_32), parse(ICON_16), parse(MASCOT_40)
     assert len(icon32) == 32 and len(icon16) == 16 and len(mascot) == 40
-    # KILONOTE_ICON=<variant> builds the app with another logo of the pack.
-    variant = os.environ.get("KILONOTE_ICON", "classic")
-    if variant not in VARIANTS:
+    # KILONOTE_ICON=<variant> builds the app with Kilo as its icon, in that color.
+    variant = os.environ.get("KILONOTE_ICON")
+    if variant is not None and variant not in VARIANTS:
         raise SystemExit(f"unknown variant {variant!r}: {', '.join(VARIANTS)}")
-    pal = variant_palette(variant)
+    pal = variant_palette(variant or "classic")
     px32, px16 = to_rgba(icon32, pal), to_rgba(icon16, pal)
 
     icons = ROOT / "src-tauri" / "icons"
     icons.mkdir(parents=True, exist_ok=True)
     (ROOT / "docs").mkdir(exist_ok=True)
+    (ROOT / "docs" / "kilo-1024.png").write_bytes(png_bytes(scale_nearest(px32, 32)))
+    # The in-app mascot stays classic: the app recolors it (theme accent or chosen variant).
+    (ROOT / "src" / "assets" / "kilo.svg").write_text(svg(mascot, "Kilo, the KiloNote mascot", eyes_class="kilo-eyes", themable=True))
+    logo_pack(icon32, icon16, mascot)
 
-    # Each size comes from the best-suited drawing, without blur.
+    if not variant:
+        tauri_icon(icons / "app-icon.svg", icons)
+        shutil.copyfile(icons / "app-icon.svg", ROOT / "public" / "favicon.svg")
+        print("Icons generated from src-tauri/icons/app-icon.svg, + the mascot and docs/logo-pack/")
+        return
+
+    # Kilo as the app icon: the large sizes from `tauri icon`, then crisp pixel
+    # art for the others (each size from the best-suited drawing, without blur).
+    tauri_icon(ROOT / "docs" / "kilo-1024.png", icons)
     sizes = {
         16: px16,
         24: downscale_box(scale_nearest(px32, 3), 4),
@@ -384,14 +406,9 @@ def main() -> None:
     (icons / "128x128.png").write_bytes(pngs[128])
     (icons / "128x128@2x.png").write_bytes(pngs[256])
     (icons / "icon.png").write_bytes(png_bytes(scale_nearest(px32, 16)))
-    (ROOT / "docs" / "kilo-1024.png").write_bytes(png_bytes(scale_nearest(px32, 32)))
-
-    (icons / "app-icon.svg").write_text(svg(icon32, "KiloNote", pal))
     (ROOT / "public" / "favicon.svg").write_text(svg(icon32, "KiloNote", pal))
-    # The in-app mascot stays classic: the app recolors it (theme accent or chosen variant).
-    (ROOT / "src" / "assets" / "kilo.svg").write_text(svg(mascot, "Kilo, the KiloNote mascot", eyes_class="kilo-eyes", themable=True))
-    logo_pack(icon32, icon16, mascot)
-    print(f"Icons generated ({variant}):", ", ".join(f"{s}px" for s in sizes), "+ docs/logo-pack/")
+    print(f"Icons generated (Kilo, {variant}):", ", ".join(f"{s}px" for s in sizes), "+ docs/logo-pack/")
+    print("Back to the app icon: npm run icons")
 
 
 if __name__ == "__main__":

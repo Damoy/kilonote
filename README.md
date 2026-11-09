@@ -344,13 +344,18 @@ If KiloNote is already open, the existing window comes to the front and opens it
 
 ## Logo pack
 
+The app icon is a vector drawing, [`src-tauri/icons/app-icon.svg`](src-tauri/icons/app-icon.svg):
+`npm run icons` renders every size from it (Windows ICO, macOS ICNS, PNGs). Kilo, the
+mascot, stays in the app.
+
 [`docs/logo-pack/`](docs/logo-pack) holds Kilo in eight colors (classic, mint, ocean, ember,
 sakura, retro, slate, ink), each as an icon and a mascot in SVG, PNG and ICO, plus the
 pixel art "KiloNote" logotype for light and dark backgrounds.
 
 ![Kilo in the eight colors of the logo pack](docs/logo-pack/preview.png)
 
-To build the app with another icon: `KILONOTE_ICON=mint npm run icons`, then build as usual.
+To build the app with Kilo as its icon: `KILONOTE_ICON=mint npm run icons` (or another
+color), then build as usual; `npm run icons` brings the app icon back.
 
 ## Release a new version
 
