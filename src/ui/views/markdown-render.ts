@@ -159,11 +159,16 @@ function prepare(src: string, opts: RenderOptions): { tree: Tree; renderTop: (no
         return text(a, url ?? "");
       }
       case "Image": {
+        // An image element without a source: the view loads it (local files only).
         const marks = node.getChildren("LinkMark");
         const alt = src.slice(marks[0]?.to ?? node.from, marks[1]?.from ?? node.to);
-        const span = parent.appendChild(el("span", "md-image"));
-        span.title = urlOf(node) ?? "";
-        return text(span, `🖼 ${alt || "image"}`);
+        const url = urlOf(node);
+        if (!url) return text(parent.appendChild(el("span", "md-image")), `🖼 ${alt || "image"}`);
+        const img = parent.appendChild(el("img", "md-img")) as HTMLImageElement;
+        img.alt = alt || "image";
+        img.title = url;
+        img.dataset.ref = url;
+        return;
       }
       case "Escape":
         return text(parent, src.slice(node.from + 1, node.to));

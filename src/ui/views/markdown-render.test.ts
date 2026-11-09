@@ -48,13 +48,15 @@ describe("Markdown preview", () => {
 
   it("never interprets HTML, loads images or runs links", () => {
     const md = render('<img src=x onerror="alert(1)">\n\n<b>hi</b> there\n\n[site](https://example.com) [bad](javascript:alert(1)) ![logo](https://example.com/a.png)\n');
-    expect(md.querySelector("img, script, b, iframe")).toBeNull();
+    expect(md.querySelector("img:not(.md-img), script, b, iframe")).toBeNull();
     expect(md.textContent).toContain('<img src=x onerror="alert(1)">');
     expect(md.textContent).toContain("<b>hi</b>");
     const links = [...md.querySelectorAll<HTMLAnchorElement>("a")];
     expect(links.map((a) => a.dataset.url ?? null)).toEqual(["https://example.com", null]);
     expect(links.every((a) => !a.hasAttribute("href"))).toBe(true);
-    expect(md.querySelector(".md-image")?.textContent).toBe("🖼 logo");
+    // Images: an element without a source (the view loads local files itself).
+    const img = md.querySelector<HTMLImageElement>("img.md-img")!;
+    expect([img.alt, img.dataset.ref, img.getAttribute("src"), img.attributes.length]).toEqual(["logo", "https://example.com/a.png", null, 4]);
   });
 
   it("decodes entities and escapes", () => {

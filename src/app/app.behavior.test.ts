@@ -9,11 +9,13 @@ import type { Backend, Entry, Meta } from "../core/backend";
 import { basename, dirname, isInside } from "../core/path";
 import { formatDocument } from "./editing";
 import { renamePath } from "./files";
+import { pasteImage, loadNoteImage } from "./images";
 import { saveSessionNow } from "./session";
 import { archiveLines, cycleTasks } from "./tasks";
 
 interface Disk {
   files: Map<string, { text: string; mtime: number }>;
+  images: Map<string, Uint8Array>;
   dirs: Set<string>;
   /** Writes to these paths fail (locked file, read-only folder…). */
   failWrites: Set<string>;
@@ -32,6 +34,7 @@ interface Disk {
 function memoryBackend(init: Record<string, string> = {}, opts: { savePath?: string | null } = {}): { backend: Backend; disk: Disk } {
   const disk: Disk = {
     files: new Map(),
+    images: new Map(),
     dirs: new Set(["/", "/notes", "/config"]),
     failWrites: new Set(),
     appendDelay: 0,
@@ -90,6 +93,15 @@ function memoryBackend(init: Record<string, string> = {}, opts: { savePath?: str
     createFile: async (p) => void write(p, ""),
     rename: async () => {},
     trash: async (p) => void disk.files.delete(p),
+    async readImage(p) {
+      const img = disk.images.get(p);
+      if (!img) throw new Error(`not found: ${p}`);
+      return img;
+    },
+    async writeImage(p, bytes) {
+      if (disk.images.has(p) || disk.files.has(p)) throw new Error("exists");
+      disk.images.set(p, bytes);
+    },
     configDir: async () => "/config",
     windowPaths: async () => [],
     openWindow: async () => {},
@@ -481,5 +493,61 @@ describe("tasks stay in notes", () => {
     app.view.contentDOM.blur();
     await cycleTasks(app);
     expect(app.view.state.doc.toString()).toBe("- call Bob - todo\n");
+  });
+});
+
+describe("images in notes", () => {
+  const png = (n = 1) => new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, n])], { type: "image/png" });
+
+  it("a pasted image is saved next to the note and its reference written on a line of its own", async () => {
+    vi.useFakeTimers({ now: new Date(2026, 10, 9, 15, 30, 12), toFake: ["Date"] });
+    try {
+      const { app, disk } = await start({ "/notes/Meeting notes.txt": "Before the shot after" });
+      await app.openFile("/notes/Meeting notes.txt");
+      app.view.contentDOM.blur(); // (happy-dom: see the archive test)
+      app.view.dispatch({ selection: { anchor: "Before the shot".length } });
+      await pasteImage(app, app.view, png(1));
+      const first = "/notes/images/Meeting-notes-2026-11-09-153012.png";
+      expect([...disk.images.keys()]).toEqual([first]);
+      expect(app.view.state.doc.toString()).toBe("Before the shot\n![image](images/Meeting-notes-2026-11-09-153012.png)\n after");
+      // The same second: another name, never over the first image.
+      app.view.dispatch({ selection: { anchor: app.view.state.doc.length } });
+      await pasteImage(app, app.view, png(2));
+      expect(disk.images.get(first)![4]).toBe(1);
+      expect(disk.images.has("/notes/images/Meeting-notes-2026-11-09-153012-2.png")).toBe(true);
+      expect(app.view.state.doc.toString().endsWith(" after\n![image](images/Meeting-notes-2026-11-09-153012-2.png)")).toBe(true);
+      // And it is shown from the disk.
+      expect(await loadNoteImage(app, "images/Meeting-notes-2026-11-09-153012-2.png")).toMatch(/^data:image\/png;base64,/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("an unsaved note asks to be saved first, and only images a note can show are pasted", async () => {
+    const { app, disk } = await start({ "/notes/a.txt": "text" });
+    app.newDoc();
+    await pasteImage(app, app.view, png());
+    expect(disk.images.size).toBe(0);
+    expect(app.view.state.doc.toString()).toBe("");
+    await app.openFile("/notes/a.txt");
+    await pasteImage(app, app.view, new Blob(["x"], { type: "image/tiff" }));
+    expect(disk.images.size).toBe(0);
+    expect(app.view.state.doc.toString()).toBe("text");
+  });
+
+  it("the images folder of the settings is used, and cannot point outside the note's folder", async () => {
+    const { app, disk } = await start({
+      "/config/settings.json": SETTINGS(`, "images_folder": "attachments/shots"`),
+      "/notes/a.md": "",
+    });
+    await app.openFile("/notes/a.md");
+    app.view.contentDOM.blur();
+    await pasteImage(app, app.view, png());
+    expect([...disk.images.keys()][0]).toMatch(/^\/notes\/attachments\/shots\/a-.*\.png$/);
+    expect(app.view.state.doc.toString()).toMatch(/^!\[image\]\(attachments\/shots\/a-.*\.png\)$/);
+    for (const bad of ["../elsewhere", "C:\\\\Windows", "/etc", "a/../../b", ""]) {
+      const { app: other } = await start({ "/config/settings.json": SETTINGS(`, "images_folder": ${JSON.stringify(bad)}`) });
+      expect(other.settings.images_folder, bad).toBe("images");
+    }
   });
 });

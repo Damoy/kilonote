@@ -79,12 +79,26 @@ it to the tasks of one tag (a client, a topic…).
   place: the HTML follows.
 - **Ctrl+F** / **Ctrl+H**: find / replace in the note.
 - **Ctrl+D**: select the next occurrence (multiple cursors), **Alt+click**: add a cursor.
+- Click a line number to select the whole line (drag for several lines, Shift+click
+  to extend), then **Ctrl+C**, **Ctrl+X**, **Delete**, or **Shift+Alt+↓** to duplicate it.
+- **Ctrl+↑ / Ctrl+↓**: the cursor moves one line and the text scrolls with it, so the
+  line stays where it is on the screen.
 - **Alt+↑ / Alt+↓**: move the line. **Ctrl+Shift+K**: delete the line.
 - **Shift+Alt+F**: format the document or the selection (JSON, XML, HTML, CSS, SQL,
   Markdown tables). Command palette → "Edit: Minify JSON".
 - The explorer button with two arrows collapses every folder (or expands them all).
   Hover a folder for its own button: everything inside it. Alt+click does the same.
 - **Ctrl+?**: the shortcuts cheat sheet (also the keyboard button of the status bar).
+
+## Images in notes
+
+Paste an image (a screenshot, an image copied from a page…) with **Ctrl+V** in a
+\`.txt\` or \`.md\` note: it is saved next to the note, in an \`images\` folder, and a
+line such as \`![image](images/work-2026-11-09-153012.png)\` is written where the
+cursor is. The image shows right under that line; click it to see it full size.
+The note stays a plain text file: any other editor shows the line, and the image is
+an ordinary file next to it. The folder and the display can be changed in the
+settings (Editor).
 
 ## Code and config files
 

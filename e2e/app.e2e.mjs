@@ -216,6 +216,28 @@ try {
     await run("app.preview.open.clear(); app.preview.update(true);");
   });
 
+  await test("a pasted image is saved next to the note and shown under its line", async () => {
+    // A real 2×2 PNG, pasted as the clipboard would hand it over.
+    const png = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEklEQVR4nGP4z8DAwMDAxMDAAAAPgAJ/iXlGXwAAAABJRU5ErkJggg==";
+    writeFileSync(join(notes, "shots é.md"), "# Shots\n");
+    await run(`await app.openFile(args[0]); app.focusEditor(); app.view.dispatch({ selection: { anchor: app.view.state.doc.length } });
+      const bytes = Uint8Array.from(atob(args[1]), (c) => c.charCodeAt(0));
+      const dt = new DataTransfer(); dt.items.add(new File([bytes], "image.png", { type: "image/png" }));
+      app.view.contentDOM.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));`, join(notes, "shots é.md"), png);
+    const name = await until(async () => existsSync(join(notes, "images")) && readdirSync(join(notes, "images")).find((f) => f.endsWith(".png")), "the image file");
+    expect(readFileSync(join(notes, "images", name)).equals(Buffer.from(png, "base64")), true, "the bytes of the saved image");
+    await until(() => run("const i = document.querySelector('#editor-host .cm-note-image'); return !!i && i.naturalWidth === 2;"), "the image under its line");
+    expect(await run("return app.view.state.doc.toString();"), `# Shots\n![image](images/${name})`, "the note");
+    // The native side refuses other files, and never writes over a file.
+    const refused = await run(`const out = [];
+      for (const p of [args[0], args[1], args[2]]) { try { await app.backend.writeImage(p, new Uint8Array([1, 2])); out.push("written"); } catch (e) { out.push(String(e)); } }
+      try { await app.backend.readImage(args[3]); out.push("read"); } catch (e) { out.push(String(e)); }
+      return out;`, join(notes, "images", name), join(notes, "run.sh"), join(notes, "work.txt"), join(notes, "work.txt"));
+    expect(refused, ["exists", "not an image", "not an image", "not an image"], "what the image commands refuse");
+    expect(readFileSync(join(notes, "images", name)).equals(Buffer.from(png, "base64")), true, "the image after a second write");
+    expect(existsSync(join(notes, "run.sh")), false, "a script written by the image command");
+  });
+
   await test("the text of a page can be edited in its preview, and lands escaped in the HTML", async () => {
     await run("await app.openFile(args[0]); app.preview.open = new Set(['html']); app.preview.setHtmlEdit(true);", join(notes, "page.html"));
     await until(() => run("return !!document.querySelector('.pv-frame').contentDocument.querySelector('kn-t[contenteditable]');"), "the editable page");

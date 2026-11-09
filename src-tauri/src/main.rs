@@ -415,6 +415,103 @@ async fn trash_path(path: String) -> Result<(), String> {
     trash::delete(&path).map_err(err)
 }
 
+// ---------------------------------------------------------------------------
+// Images shown in notes, and images pasted into them. Only image files (by
+// extension), up to MAX_IMAGE_SIZE; a pasted image always goes to a new file.
+
+/// The image types a note can show or receive.
+const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"];
+/// Largest image read or written (bytes).
+const MAX_IMAGE_SIZE: u64 = 50 * 1024 * 1024;
+/// Error returned when the target of a pasted image exists (the frontend picks another name).
+const EXISTS: &str = "exists";
+
+fn is_image_path(p: &Path) -> bool {
+    p.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| IMAGE_EXTS.contains(&e.to_ascii_lowercase().as_str()))
+}
+
+/// Reads an image to show it in a note (raw bytes, not JSON).
+#[tauri::command]
+async fn read_image(path: String) -> Result<tauri::ipc::Response, String> {
+    let p = PathBuf::from(&path);
+    if !is_image_path(&p) {
+        return Err("not an image".into());
+    }
+    if fs::metadata(&p).map_err(err)?.len() > MAX_IMAGE_SIZE {
+        return Err("image too large".into());
+    }
+    Ok(tauri::ipc::Response::new(fs::read(&p).map_err(err)?))
+}
+
+/// Saves a pasted image. The bytes are the raw request body; the path comes
+/// URI-encoded in the `x-path` header.
+#[tauri::command]
+async fn write_image(request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    let path = request
+        .headers()
+        .get("x-path")
+        .and_then(|v| v.to_str().ok())
+        .ok_or("no path")?;
+    let path = percent_decode(path)?;
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("no image data".into());
+    };
+    save_new_image(Path::new(&path), bytes)
+}
+
+/// Writes an image to a new file: never over an existing file, never a non-image.
+fn save_new_image(target: &Path, bytes: &[u8]) -> Result<(), String> {
+    if !is_image_path(target) {
+        return Err("not an image".into());
+    }
+    if bytes.len() as u64 > MAX_IMAGE_SIZE {
+        return Err("image too large".into());
+    }
+    if let Some(parent) = target.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(err)?;
+        }
+    }
+    let mut f = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(target)
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::AlreadyExists {
+                EXISTS.to_string()
+            } else {
+                err(e)
+            }
+        })?;
+    let written = f.write_all(bytes).and_then(|_| f.sync_all());
+    if let Err(e) = written {
+        drop(f);
+        let _ = fs::remove_file(target);
+        return Err(err(e));
+    }
+    Ok(())
+}
+
+/// Decodes a URI-encoded text (%XX sequences, UTF-8).
+fn percent_decode(s: &str) -> Result<String, String> {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' {
+            let hex = s.get(i + 1..i + 3).ok_or("bad path")?;
+            out.push(u8::from_str_radix(hex, 16).map_err(|_| "bad path")?);
+            i += 3;
+        } else {
+            out.push(b[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).map_err(|_| "bad path".into())
+}
+
 #[tauri::command]
 fn config_dir(app: AppHandle) -> Result<String, String> {
     let dir = app.path().app_config_dir().map_err(err)?;
@@ -691,6 +788,8 @@ fn main() {
             create_file,
             rename_path,
             trash_path,
+            read_image,
+            write_image,
             config_dir,
             window_paths,
             open_window,
@@ -720,6 +819,34 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn images_only_go_to_new_image_files() {
+        let dir = std::env::temp_dir().join(format!("kilonote-img-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let png = dir.join("images").join("note-1.png");
+        save_new_image(&png, b"\x89PNG data").unwrap();
+        assert_eq!(fs::read(&png).unwrap(), b"\x89PNG data");
+        // Never over an existing file.
+        assert_eq!(save_new_image(&png, b"other").unwrap_err(), EXISTS);
+        assert_eq!(fs::read(&png).unwrap(), b"\x89PNG data");
+        // Only image types.
+        for name in ["run.exe", "script.ps1", "notes.txt", "noext", "image.png.bat"] {
+            assert!(save_new_image(&dir.join(name), b"x").is_err(), "{name}");
+            assert!(!dir.join(name).exists());
+        }
+        assert!(is_image_path(Path::new("C:/a/Shot.PNG")));
+        assert!(!is_image_path(Path::new("C:/a/shot.png.lnk")));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn image_paths_are_decoded() {
+        assert_eq!(percent_decode("C%3A%5CUsers%5CCl%C3%A9ment%5Cimg%201.png").unwrap(), "C:\\Users\\Clément\\img 1.png");
+        assert!(percent_decode("%ZZ").is_err());
+        assert!(percent_decode("abc%4").is_err());
+        assert!(percent_decode("%FF").is_err());
+    }
 
     #[test]
     fn binary_content_is_detected() {

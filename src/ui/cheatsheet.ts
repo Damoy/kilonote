@@ -78,6 +78,8 @@ export function showCheatSheet(app: App, opts: { startup?: boolean } = {}) {
       cmd("Format (JSON, XML…)", "edit.format"),
       fixed("Select next match", formatCombo(`${mac ? "Meta" : "Ctrl"}+D`)),
       fixed("Add a cursor", mac ? "⌥Click" : "Alt+Click"),
+      fixed("Select a line", "Click its number"),
+      ...(mac ? [] : [fixed("Move with the view", "Ctrl+↑↓")]),
       fixed("Move line", `${alt}↑↓`),
       fixed("Duplicate line", `${shift}${alt}↑↓`),
       fixed("Delete line", `${mod}${shift}K`),

@@ -397,6 +397,15 @@ button.st-item:hover { background: var(--kn-hover); color: var(--kn-fg); }
 #editor-host .cm-search .cm-button:hover { border-color: var(--kn-accent); }
 #editor-host .cm-search label { display: inline-flex; align-items: center; gap: 4px; color: var(--kn-fg-muted); font-size: calc(var(--kn-ui-size) - 1px); }
 #editor-host .cm-search input[type="checkbox"] { accent-color: var(--kn-accent); margin: 0; }
+/* Images in notes, under their line: a click shows them full size. */
+#editor-host .cm-note-images { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; padding: 4px 0 10px; }
+#editor-host .cm-note-image {
+  display: block; max-width: min(100%, 720px); max-height: 360px; object-fit: contain; cursor: zoom-in;
+  border: 1px solid var(--kn-border); border-radius: 6px; background: var(--kn-bg-alt);
+}
+#editor-host .cm-note-image.full { max-width: 100%; max-height: none; cursor: zoom-out; }
+#editor-host .cm-note-image-line, #editor-host .cm-note-image-line * { color: var(--kn-fg-faint) !important; }
+#editor-host .cm-note-image-missing { color: var(--kn-fg-faint); font-size: 0.86em; font-style: italic; }
 #editor-host .cm-search button[name="close"] { position: absolute; top: 8px; right: 10px; font-size: 18px; color: var(--kn-fg-muted); }
 #editor-host .cm-panel.cm-gotoLine { padding: 8px 12px; }
 
@@ -624,6 +633,7 @@ body.resizing .pv-frame { pointer-events: none; }
 .md a.md-link-local { color: var(--kn-fg-muted); text-decoration-style: dotted; }
 .md del { color: var(--kn-fg-muted); }
 .md .md-image { color: var(--kn-fg-muted); font-style: italic; }
+.md img.md-img { max-width: 100%; border-radius: 6px; vertical-align: middle; }
 .md .md-status {
   margin-left: 0.5em; padding: 0 0.45em; border-radius: 4px; font-size: 0.82em; font-weight: 650; font-family: var(--kn-font);
   color: var(--c); background: color-mix(in srgb, var(--c) 15%, transparent);

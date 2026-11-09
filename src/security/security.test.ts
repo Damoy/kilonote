@@ -32,6 +32,18 @@ describe("no program execution", () => {
     expect(rust).not.toMatch(/std::process::Command|Command::new|ShellExecute|CreateProcess/);
   });
 
+  it("the image commands only read and write image files, and never overwrite one", () => {
+    const rust = read("src-tauri/src/main.rs");
+    expect(rust).toMatch(/const IMAGE_EXTS: &\[&str\] = &\["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"\];/);
+    const fn = (name: string) => rust.slice(rust.indexOf(`fn ${name}(`), rust.indexOf("\n}\n", rust.indexOf(`fn ${name}(`)));
+    expect(fn("read_image")).toMatch(/if !is_image_path\(&p\)/);
+    expect(fn("read_image")).toMatch(/MAX_IMAGE_SIZE/);
+    expect(fn("write_image")).toMatch(/save_new_image\(/);
+    expect(fn("save_new_image")).toMatch(/if !is_image_path\(target\)/);
+    expect(fn("save_new_image")).toMatch(/\.create_new\(true\)/);
+    expect(fn("save_new_image")).not.toMatch(/File::create|fs::write|\.truncate\(/);
+  });
+
   it("the frontend backend has no method that opens files with the system", () => {
     const backend = read("src/core/backend.ts");
     expect(backend).not.toMatch(/openPath|plugin-shell|\.execute\(/);

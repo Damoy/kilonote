@@ -35,6 +35,7 @@ import { setIconPack, type IconPack } from "../ui/icons";
 import { historyDir, historyName, keepVersion } from "./history";
 import { beforeClose, restoreOtherWindows, restoreSession, saveSessionNow, sessionFileName, sessionTab, type SessionTab } from "./session";
 import { defaultKeybindings, registerAllCommands, registerStatusCommands } from "./commands";
+import { installImages } from "./images";
 import { showStatusMenu } from "./tasks";
 
 export interface Doc {
@@ -146,6 +147,7 @@ export class App {
     editorHooks.openUrl = (url) => void this.backend.openUrl(url);
 
     registerAllCommands(this);
+    installImages(this);
     this.applySettings();
     this.systemDark.addEventListener("change", () => this.settings.theme === "auto" && this.applySettings());
 

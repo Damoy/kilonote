@@ -5,6 +5,7 @@
 
 import type { Tree } from "@lezer/common";
 import type { App } from "../../app/app";
+import { loadNoteImage } from "../../app/images";
 import { todayISO } from "../../text/tasks";
 import { h } from "../dom";
 import { markdownBlocks } from "./markdown-render";
@@ -61,7 +62,23 @@ export class MarkdownView {
     for (const m of middle) for (const n of m.nodes) this.root.insertBefore(n, anchor);
     this.shown = [...old.slice(0, start), ...middle, ...old.slice(old.length - end)];
     this.el.scrollTop = top;
+    this.loadImages(middle);
     void this.drawDiagrams(middle, dark);
+  }
+
+  /** Images of the note: read from the disk (next to the note); a web image is not loaded. */
+  private loadImages(blocks: Shown[]) {
+    for (const block of blocks) {
+      for (const node of block.nodes) {
+        if (!(node instanceof HTMLElement)) continue;
+        for (const img of node.querySelectorAll<HTMLImageElement>("img.md-img[data-ref]")) {
+          void loadNoteImage(this.app, img.dataset.ref!).then((url) => {
+            if (url) img.src = url;
+            else img.replaceWith(h("span", { class: "md-image", title: img.dataset.ref! }, `🖼 ${img.alt}`));
+          });
+        }
+      }
+    }
   }
 
   /**

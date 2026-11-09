@@ -16,6 +16,8 @@ export interface Settings {
   line_numbers: boolean;
   word_wrap: boolean;
   highlight_active_line: boolean;
+  show_images: boolean;
+  images_folder: string;
   tab_size: number;
   indent_with_tabs: boolean;
   autosave: boolean;
@@ -72,6 +74,10 @@ export const SETTINGS_TEMPLATE = `// KiloNote settings
   "line_numbers": true,
   "word_wrap": true,
   "highlight_active_line": true,
+  // Show the images of a note under their line: ![image](images/shot.png)
+  "show_images": true,
+  // Where a pasted image is saved, next to the note (Ctrl+V a screenshot in a note)
+  "images_folder": "images",
   "tab_size": 4,
   "indent_with_tabs": false,
 
@@ -162,6 +168,9 @@ export function mergeSettings(user: Partial<Settings> | null | undefined): Setti
   if (!ICON_PACKS.some((p) => p.id === out.icon_pack)) out.icon_pack = DEFAULT_SETTINGS.icon_pack;
   // Without a suffix, a note would be its own archive.
   if (typeof out.archive_suffix !== "string" || !out.archive_suffix.trim()) out.archive_suffix = DEFAULT_SETTINGS.archive_suffix;
+  // Images stay next to the note: a folder name, not a path elsewhere.
+  if (typeof out.images_folder !== "string" || !out.images_folder.trim() || /^([a-z]:|[\\/])|(^|[\\/])\.\.([\\/]|$)/i.test(out.images_folder.trim())) out.images_folder = DEFAULT_SETTINGS.images_folder;
+  else out.images_folder = out.images_folder.trim();
   return out;
 }
 

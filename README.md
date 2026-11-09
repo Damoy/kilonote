@@ -74,6 +74,11 @@ open it as a folder and follow its `README.md`.
   JSON pasted in a note); *Edit: Minify JSON*
 - Files keep their encoding (UTF-8, UTF-8 with BOM, UTF-16, Windows-1252) and their LF/CRLF line endings;
   the status bar converts them on demand
+- **Images in notes**: paste a screenshot (Ctrl+V) in a `.txt` or `.md` note: it is saved
+  next to the note (`images/`) and shown right under its line, `![image](images/…png)`;
+  the note stays plain text
+- Click a line number to select the whole line (drag for more, Shift+click to extend);
+  **Ctrl+↑/↓** moves the cursor and scrolls the text with it
 - Autosave, atomic writes, unsaved tabs kept between sessions
 - Notes changed by another program are reloaded automatically (or you choose, if you have unsaved edits)
 - **Local history**: whenever a version is about to be thrown away (overwriting a file changed
@@ -242,7 +247,10 @@ On macOS, Ctrl becomes ⌘.
 | Settings | Ctrl+, |
 | Zen mode / full screen | Shift+F11 / F11 |
 | Select next occurrence | Ctrl+D |
-| Move / delete line | Alt+↑↓ / Ctrl+Shift+K |
+| Select a whole line | click its number (drag for more lines) |
+| Move the cursor with the view | Ctrl+↑↓ |
+| Move / duplicate / delete line | Alt+↑↓ / Shift+Alt+↑↓ / Ctrl+Shift+K |
+| Paste an image in a note | Ctrl+V |
 
 Every shortcut can be changed in `settings.json`:
 

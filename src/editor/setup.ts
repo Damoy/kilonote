@@ -1,9 +1,9 @@
 // CodeMirror 6 editor setup: a single view, one state per tab
 // (each tab keeps its own undo history).
 
-import { Compartment, EditorState, StateEffect, StateField, type Extension } from "@codemirror/state";
+import { Compartment, EditorSelection, EditorState, StateEffect, StateField, type Extension } from "@codemirror/state";
 import {
-  crosshairCursor, Decoration, type DecorationSet, drawSelection, dropCursor, EditorView, highlightActiveLine, highlightActiveLineGutter,
+  type BlockInfo, crosshairCursor, Decoration, type DecorationSet, drawSelection, dropCursor, EditorView, highlightActiveLine, highlightActiveLineGutter,
   highlightSpecialChars, keymap, lineNumbers, rectangularSelection, scrollPastEnd, type ViewUpdate,
 } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
@@ -13,6 +13,7 @@ import { GFM, parser as markdownParser } from "@lezer/markdown";
 import { tags as t } from "@lezer/highlight";
 import type { Settings } from "../core/settings";
 import { codeDocFacet, notesClickHandler, notesHighlighter, plainNotesFacet, taskConfigFacet } from "./decorations";
+import { noteImages } from "./images";
 import { isCodeLang, languageForPath, languageInfo } from "./languages";
 import type { TaskConfig } from "../text/tasks";
 
@@ -198,9 +199,71 @@ function continueList(view: EditorView): boolean {
   return true;
 }
 
+/** Whole lines from the line of `anchor` to the line of `head`, line breaks included. */
+function wholeLines(state: EditorState, anchor: number, head: number) {
+  const doc = state.doc;
+  const a = doc.lineAt(anchor);
+  const b = doc.lineAt(head);
+  return b.number >= a.number
+    ? EditorSelection.range(a.from, Math.min(b.to + 1, doc.length))
+    : EditorSelection.range(Math.min(a.to + 1, doc.length), b.from);
+}
+
+/**
+ * A click on a line number selects the whole line (ready to copy, cut, delete
+ * or duplicate); dragging selects more lines, Shift+click extends the selection.
+ */
+function selectLinesFromGutter(view: EditorView, line: BlockInfo, event: Event): boolean {
+  const e = event as MouseEvent;
+  if (e.button !== 0) return false;
+  e.preventDefault();
+  const anchor = e.shiftKey ? view.state.selection.main.anchor : line.from;
+  const select = (pos: number) => view.dispatch({ selection: wholeLines(view.state, anchor, pos), userEvent: "select.pointer" });
+  select(line.from);
+  view.focus();
+  const move = (ev: MouseEvent) => {
+    const box = view.contentDOM.getBoundingClientRect();
+    select(view.posAtCoords({ x: box.left + 1, y: ev.clientY }, false));
+  };
+  const up = () => {
+    document.removeEventListener("mousemove", move);
+    document.removeEventListener("mouseup", up);
+  };
+  document.addEventListener("mousemove", move);
+  document.addEventListener("mouseup", up);
+  return true;
+}
+
+/**
+ * Ctrl+Up/Down: the cursor moves one line and the text scrolls with it, so the
+ * line stays at the same height on the screen (Shift extends the selection).
+ */
+function moveWithView(forward: boolean, extend: boolean) {
+  return (view: EditorView): boolean => {
+    const { state } = view;
+    const ranges = state.selection.ranges.map((r) => {
+      const moved = view.moveVertically(r, forward);
+      return extend ? EditorSelection.range(r.anchor, moved.head, moved.goalColumn) : moved;
+    });
+    const selection = EditorSelection.create(ranges, state.selection.mainIndex);
+    const box = view.scrollDOM.getBoundingClientRect();
+    const before = view.coordsAtPos(state.selection.main.head, 1);
+    const onScreen = !!before && before.bottom > box.top && before.top < box.bottom;
+    view.dispatch({ selection, userEvent: "select", scrollIntoView: !onScreen });
+    const after = onScreen ? view.coordsAtPos(selection.main.head, 1) : null;
+    if (before && after) view.scrollDOM.scrollTop += after.top - before.top;
+    return true;
+  };
+}
+
+const moveWithViewKeys = [
+  { win: "Ctrl-ArrowUp", linux: "Ctrl-ArrowUp", run: moveWithView(false, false), shift: moveWithView(false, true), preventDefault: true },
+  { win: "Ctrl-ArrowDown", linux: "Ctrl-ArrowDown", run: moveWithView(true, false), shift: moveWithView(true, true), preventDefault: true },
+];
+
 export function settingsExtensions(s: Settings, taskCfg: TaskConfig, lang: LangId): Extension {
   return [
-    s.line_numbers ? [lineNumbers(), highlightActiveLineGutter()] : [],
+    s.line_numbers ? [lineNumbers({ domEventHandlers: { mousedown: selectLinesFromGutter } }), highlightActiveLineGutter()] : [],
     s.highlight_active_line ? highlightActiveLine() : [],
     s.word_wrap ? EditorView.lineWrapping : [],
     EditorState.tabSize.of(s.tab_size),
@@ -208,6 +271,7 @@ export function settingsExtensions(s: Settings, taskCfg: TaskConfig, lang: LangI
     taskConfigFacet.of(taskCfg),
     plainNotesFacet.of(lang === "text"),
     codeDocFacet.of(isCodeLang(lang)),
+    lang === "text" || lang === "markdown" ? noteImages(s.show_images) : [],
   ];
 }
 
@@ -231,7 +295,7 @@ export function createEditorState(
       highlightSelectionMatches(),
       search({ top: true }),
       scrollPastEnd(),
-      keymap.of([{ key: "Enter", run: continueList }, ...searchKeymap, ...historyKeymap, ...defaultKeymap, indentWithTab]),
+      keymap.of([{ key: "Enter", run: continueList }, ...moveWithViewKeys, ...searchKeymap, ...historyKeymap, ...defaultKeymap, indentWithTab]),
       languageCompartment.of(languageExtension(lang)),
       settingsCompartment.of(settingsExtensions(s, taskCfg, lang)),
       notesHighlighter,

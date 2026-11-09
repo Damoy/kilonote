@@ -150,7 +150,8 @@ npx tauri build --no-bundle
 
 - The web interface runs in WebView2, isolated from the system: it can only call a
   closed list of native commands declared in `src-tauri/src/main.rs` (read/write a text
-  file, list a folder, rename, move to the trash, open a KiloNote window) and the
+  file, read an image or save a pasted one, list a folder, rename, move to the trash,
+  open a KiloNote window) and the
   permissions of `src-tauri/capabilities/default.json`. The only "opener" permissions are
   opening `http(s)://` and `mailto:` addresses with the default app and revealing a file
   in the file manager: there is no permission to open or execute files, and no shell or
@@ -164,8 +165,15 @@ npx tauri build --no-bundle
   check that the window is denied the system's "open file" call and any non-web address.
 - Note content is never interpreted as HTML (it is displayed by a text editor), which
   rules out script injection through an opened file. The Markdown preview builds its
-  output element by element: raw HTML is shown as text, images and other remote content
-  are never loaded, and only http(s)/mailto links can be opened (in the browser).
+  output element by element: raw HTML is shown as text, remote content is never loaded,
+  and only http(s)/mailto links can be opened (in the browser).
+- Images in notes: a note shows the local image files it references
+  (`![image](images/shot.png)`), read by a native command that only reads image types
+  (png, jpg, gif, webp, bmp, svg; 50 MB at most) and shown as `data:` images: an image
+  cannot run anything, and an SVG shown this way runs no script and loads nothing.
+  Web images are never fetched. A pasted image is written by a native command that
+  only writes image types, only to a new file (never over an existing one), in the
+  images folder next to the note.
 - The HTML and SVG preview shows the page in a sandboxed frame that is not allowed to run
   scripts, submit forms, open windows or navigate; the frame's own policy only allows
   inline styles and embedded (data:) images and fonts, so nothing is loaded from the

@@ -47,6 +47,10 @@ export interface Backend {
   createFile(path: string): Promise<void>;
   rename(from: string, to: string): Promise<void>;
   trash(path: string): Promise<void>;
+  /** The bytes of an image file (png, jpg, gif, webp, bmp, svg) shown in a note. */
+  readImage(path: string): Promise<Uint8Array>;
+  /** Saves a pasted image to a new file; fails with "exists" when the file is already there. */
+  writeImage(path: string, bytes: Uint8Array): Promise<void>;
   configDir(): Promise<string>;
   /** Paths this window must open (command line for the main window). */
   windowPaths(): Promise<string[]>;
@@ -116,6 +120,9 @@ export async function createTauriBackend(): Promise<Backend> {
     createFile: (path) => invoke("create_file", { path }),
     rename: (from, to) => invoke("rename_path", { from, to }),
     trash: (path) => invoke("trash_path", { path }),
+    readImage: async (path) => new Uint8Array(await invoke<ArrayBuffer>("read_image", { path })),
+    // The bytes go as they are (no JSON); the path, URI-encoded, in a header.
+    writeImage: (path, bytes) => invoke("write_image", bytes, { headers: { "x-path": encodeURIComponent(path) } }),
     async configDir() {
       cfgDir ??= await invoke<string>("config_dir");
       return cfgDir;
@@ -232,6 +239,8 @@ export function createWebBackend(): Backend {
   const channel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("kilonote") : null;
   const files = new Map<string, DemoFile>();
   const dirs = new Set<string>([DEMO_ROOT, "/.config"]);
+  /** Pasted images (kept in memory only). */
+  const images = new Map<string, Uint8Array>();
   try {
     const raw = localStorage.getItem(DEMO_KEY);
     const data: Record<string, string> = raw ? JSON.parse(raw) : demoSeed();
@@ -294,7 +303,7 @@ export function createWebBackend(): Backend {
     async listDir(path, showHidden) {
       const out: Entry[] = [];
       for (const d of dirs) if (dirname(d) === path && d !== path) out.push({ name: basename(d), path: d, isDir: true });
-      for (const p of files.keys()) if (dirname(p) === path) out.push({ name: basename(p), path: p, isDir: false });
+      for (const p of [...files.keys(), ...images.keys()]) if (dirname(p) === path) out.push({ name: basename(p), path: p, isDir: false });
       return out
         .filter((e) => showHidden || !e.name.startsWith("."))
         .sort((a, b) => Number(b.isDir) - Number(a.isDir) || a.name.localeCompare(b.name));
@@ -339,6 +348,16 @@ export function createWebBackend(): Backend {
       for (const p of [...files.keys()]) if (isInside(p, path)) files.delete(p);
       for (const d of [...dirs]) if (d === path || isInside(d, path)) dirs.delete(d);
       persist();
+    },
+    async readImage(path) {
+      const img = images.get(path);
+      if (!img) throw new Error(`File not found: ${path}`);
+      return img;
+    },
+    async writeImage(path, bytes) {
+      if (images.has(path) || files.has(path)) throw new Error("exists");
+      ensureDirs(path);
+      images.set(path, bytes);
     },
     configDir: async () => "/.config",
     windowLabel,
