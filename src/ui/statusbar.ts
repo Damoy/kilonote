@@ -4,6 +4,7 @@ import type { App } from "../app/app";
 import { titleWithKey } from "../core/commands";
 import { resolveColor } from "../core/themes";
 import { isCodeLang, languageLabel } from "../editor/languages";
+import { countLabel, goToOccurrence, occurrences } from "../editor/matches";
 import { findTasks } from "../text/tasks";
 import { debounce, h, icon } from "./dom";
 import { showMenu } from "./overlay";
@@ -23,6 +24,7 @@ export class StatusBar {
   private left = h("div", { class: "st-left" });
   private right = h("div", { class: "st-right" });
   private pos = h("button", { class: "st-item", title: titleWithKey("Go to line", "palette.line") });
+  private occurrences = h("button", { class: "st-item st-occ" });
   private words = h("span", { class: "st-item st-dim" });
   private tasks = h("button", { class: "st-item st-tasks", title: titleWithKey("Headings and tasks of this note", "palette.symbol") });
   private encoding = h("button", { class: "st-item st-dim", title: "Encoding: click to convert" });
@@ -38,11 +40,14 @@ export class StatusBar {
     const settingsBtn = h("button", { class: "st-item st-icon", title: titleWithKey("Settings", "settings.open"), onclick: () => app.openSettings() }, icon("gear"));
     const keysBtn = h("button", { class: "st-item st-icon", title: titleWithKey("Keyboard shortcuts", "help.shortcuts"), onclick: () => void openCheatSheet(app) }, icon("keyboard"));
     this.left.append(sidebarBtn, this.tasks);
-    this.right.append(this.pos, this.words, this.encoding, this.eol, this.lang, this.previewBtn, this.save, themeBtn, keysBtn, settingsBtn);
+    this.right.append(this.pos, this.occurrences, this.words, this.encoding, this.eol, this.lang, this.previewBtn, this.save, themeBtn, keysBtn, settingsBtn);
     this.previewBtn.addEventListener("click", () => app.preview.toggle());
     el.append(this.left, this.right);
 
     this.pos.addEventListener("click", () => openQuickOpen(app, ":"));
+    this.occurrences.addEventListener("click", (e) => {
+      if (app.active && goToOccurrence(app.view, !e.shiftKey)) app.view.focus();
+    });
     this.tasks.addEventListener("click", () => openQuickOpen(app, "@"));
     this.eol.addEventListener("click", (e) => this.eolMenu(e));
     this.encoding.addEventListener("click", (e) => this.encodingMenu(e));
@@ -80,6 +85,7 @@ export class StatusBar {
 
   private updatePos() {
     const doc = this.app.active;
+    this.updateOccurrences();
     if (!doc) {
       this.pos.textContent = "";
       return;
@@ -95,6 +101,20 @@ export class StatusBar {
       text += ` · ${n} char${n > 1 ? "s" : ""}`;
     }
     this.pos.textContent = text;
+  }
+
+  /** How many times the selected text appears in the note. */
+  private updateOccurrences() {
+    const m = this.app.active ? occurrences(this.app.view.state) : null;
+    this.occurrences.hidden = !m;
+    if (!m) return;
+    const many = m.from.length > 1;
+    this.occurrences.classList.toggle("many", many);
+    this.occurrences.textContent = many ? `${countLabel(m)} occurrences` : "only here";
+    this.occurrences.title = many
+      ? `The selected text appears ${countLabel(m)} times in this note (marked by the scrollbar).\n` +
+        titleWithKey("Click: the next one · Shift+click: the previous one", "edit.nextOccurrence")
+      : "The selected text appears nowhere else in this note";
   }
 
   /** Words and tasks: recomputed only when the text changed. */

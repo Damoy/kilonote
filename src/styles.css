@@ -369,6 +369,8 @@ button.st-item:hover { background: var(--kn-hover); color: var(--kn-fg); }
 .st-save.warn { color: var(--kn-red); font-weight: 600; }
 .st-save:not(.warn) { cursor: default; }
 .st-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.st-occ { color: var(--kn-fg-faint); }
+.st-occ.many { color: var(--kn-accent); font-weight: 600; }
 
 /* ------------------------------------------------------------------ Editor */
 
@@ -397,6 +399,19 @@ button.st-item:hover { background: var(--kn-hover); color: var(--kn-fg); }
 #editor-host .cm-search .cm-button:hover { border-color: var(--kn-accent); }
 #editor-host .cm-search label { display: inline-flex; align-items: center; gap: 4px; color: var(--kn-fg-muted); font-size: calc(var(--kn-ui-size) - 1px); }
 #editor-host .cm-search input[type="checkbox"] { accent-color: var(--kn-accent); margin: 0; }
+/* How many matches the search finds in the whole note, next to its field. */
+#editor-host .cm-search-count {
+  min-width: 8ch; margin-left: -2px; color: var(--kn-fg-muted);
+  font-size: calc(var(--kn-ui-size) - 1px); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+#editor-host .cm-search-count:empty { display: none; }
+#editor-host .cm-search-count.none { color: var(--kn-red); }
+/* Marks over the scrollbar: where the other occurrences and the search matches are. */
+#editor-host .cm-match-ruler { position: absolute; right: 0; width: 11px; z-index: 2; pointer-events: none; }
+#editor-host .cm-match-ruler i { position: absolute; left: 1px; right: 1px; height: 3px; border-radius: 1px; }
+#editor-host .cm-match-ruler i.occ { background: var(--kn-accent); }
+#editor-host .cm-match-ruler i.found { background: var(--kn-yellow); }
+#editor-host .cm-match-ruler i.found.current { background: var(--kn-orange); left: 0; right: 0; height: 4px; }
 /* Images in notes, under their line: a click shows them full size. */
 #editor-host .cm-note-images { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; padding: 4px 0 10px; }
 #editor-host .cm-note-image {

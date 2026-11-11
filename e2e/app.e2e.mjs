@@ -68,7 +68,7 @@ async function run(code, ...args) {
   if (r?.err) throw new Error(r.err);
   return r?.ok;
 }
-const KEYS = { Control: "", Shift: "", Alt: "", Enter: "", Escape: "" };
+const KEYS = { Control: "", Shift: "", Alt: "", Enter: "", Escape: "", F3: "" };
 /** A key chord, e.g. press("Control", "Enter"). */
 async function press(...keys) {
   const codes = keys.map((k) => KEYS[k] ?? k);
@@ -236,6 +236,19 @@ try {
     expect(refused, ["exists", "not an image", "not an image", "not an image"], "what the image commands refuse");
     expect(readFileSync(join(notes, "images", name)).equals(Buffer.from(png, "base64")), true, "the image after a second write");
     expect(existsSync(join(notes, "run.sh")), false, "a script written by the image command");
+  });
+
+  await test("the selected text and the search are counted in the whole note", async () => {
+    writeFileSync(join(notes, "count.txt"), `-- Stockviz\n${"filler\n".repeat(300)}-- Stockviz\n`);
+    await run(`await app.openFile(args[0]); app.focusEditor();
+      const l = app.view.state.doc.line(1); app.view.dispatch({ selection: { anchor: l.from, head: l.to } });`, join(notes, "count.txt"));
+    await until(() => run("return document.querySelector('.st-occ')?.textContent === '2 occurrences';"), "the count in the status bar");
+    await until(() => run("return document.querySelectorAll('#editor-host .cm-match-ruler i.occ').length === 2;"), "the marks along the scrollbar");
+    await press("Control", "F3");
+    expect(await run("return app.view.state.doc.lineAt(app.view.state.selection.main.from).number;"), 302, "the line of the next occurrence");
+    await press("Control", "f");
+    await until(() => run("return document.querySelector('#editor-host .cm-search-count')?.textContent === '2 of 2';"), "the count next to the search field");
+    await press("Escape");
   });
 
   await test("the text of a page can be edited in its preview, and lands escaped in the HTML", async () => {

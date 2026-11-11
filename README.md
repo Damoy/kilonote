@@ -79,6 +79,10 @@ open it as a folder and follow its `README.md`.
   the note stays plain text
 - Click a line number to select the whole line (drag for more, Shift+click to extend);
   **Ctrl+↑/↓** moves the cursor and scrolls the text with it
+- **Where else it appears**: select some text and the status bar tells how many times it
+  appears in the whole note (or "only here"); the other occurrences are highlighted and
+  marked along the scrollbar, **Ctrl+F3** goes to the next one. Find (Ctrl+F) counts its
+  matches as you type: "3 of 12"
 - Autosave, atomic writes, unsaved tabs kept between sessions
 - Notes changed by another program are reloaded automatically (or you choose, if you have unsaved edits)
 - **Local history**: whenever a version is about to be thrown away (overwriting a file changed
@@ -247,6 +251,7 @@ On macOS, Ctrl becomes ⌘.
 | Settings | Ctrl+, |
 | Zen mode / full screen | Shift+F11 / F11 |
 | Select next occurrence | Ctrl+D |
+| Go to the next / previous occurrence of the selected text | Ctrl+F3 / Ctrl+Shift+F3 |
 | Select a whole line | click its number (drag for more lines) |
 | Move the cursor with the view | Ctrl+↑↓ |
 | Move / duplicate / delete line | Alt+↑↓ / Shift+Alt+↑↓ / Ctrl+Shift+K |

@@ -7,7 +7,7 @@ import {
   highlightSpecialChars, keymap, lineNumbers, rectangularSelection, scrollPastEnd, type ViewUpdate,
 } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
+import { search, searchKeymap } from "@codemirror/search";
 import { defineLanguageFacet, HighlightStyle, indentUnit, Language, StreamLanguage, syntaxHighlighting } from "@codemirror/language";
 import { GFM, parser as markdownParser } from "@lezer/markdown";
 import { tags as t } from "@lezer/highlight";
@@ -15,6 +15,7 @@ import type { Settings } from "../core/settings";
 import { codeDocFacet, notesClickHandler, notesHighlighter, plainNotesFacet, taskConfigFacet } from "./decorations";
 import { noteImages } from "./images";
 import { isCodeLang, languageForPath, languageInfo } from "./languages";
+import { matchesInNote } from "./matches";
 import type { TaskConfig } from "../text/tasks";
 
 /** A document type id of LANGUAGES ("text", "markdown", "jsonc", "python"…). */
@@ -149,7 +150,11 @@ const theme = EditorView.theme({
   ".cm-gutters": { backgroundColor: "var(--kn-bg)", color: "var(--kn-fg-faint)", border: "none", paddingLeft: "10px" },
   ".cm-lineNumbers .cm-gutterElement": { padding: "0 10px 0 6px", minWidth: "32px", fontSize: "0.86em" },
   ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--kn-fg-muted)" },
-  ".cm-selectionMatch": { backgroundColor: "color-mix(in srgb, var(--kn-accent) 16%, transparent)", borderRadius: "2px" },
+  ".cm-selectionMatch": {
+    backgroundColor: "color-mix(in srgb, var(--kn-accent) 20%, transparent)",
+    outline: "1px solid color-mix(in srgb, var(--kn-accent) 45%, transparent)",
+    borderRadius: "2px",
+  },
   ".cm-searchMatch": { backgroundColor: "color-mix(in srgb, var(--kn-yellow) 28%, transparent)", outline: "1px solid color-mix(in srgb, var(--kn-yellow) 55%, transparent)", borderRadius: "2px" },
   ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "color-mix(in srgb, var(--kn-orange) 45%, transparent)" },
   ".cm-specialChar": { color: "var(--kn-red)" },
@@ -292,8 +297,8 @@ export function createEditorState(
       EditorState.allowMultipleSelections.of(true),
       rectangularSelection(),
       crosshairCursor(),
-      highlightSelectionMatches(),
       search({ top: true }),
+      matchesInNote(),
       scrollPastEnd(),
       keymap.of([{ key: "Enter", run: continueList }, ...moveWithViewKeys, ...searchKeymap, ...historyKeymap, ...defaultKeymap, indentWithTab]),
       languageCompartment.of(languageExtension(lang)),

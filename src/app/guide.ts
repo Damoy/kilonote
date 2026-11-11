@@ -77,7 +77,12 @@ it to the tasks of one tag (a client, a topic…).
   and statements.
 - In an HTML preview, the pencil button lets you change the text of the page in
   place: the HTML follows.
-- **Ctrl+F** / **Ctrl+H**: find / replace in the note.
+- **Ctrl+F** / **Ctrl+H**: find / replace in the note. The count of matches in the
+  whole note shows next to the field ("3 of 12"), and marks along the scrollbar show
+  where they are.
+- Select some text: the status bar tells how many times it appears in the note (or
+  "only here"), the other occurrences are highlighted and marked along the scrollbar.
+  Click the count, or **Ctrl+F3** / **Ctrl+Shift+F3**, to go to the next / previous one.
 - **Ctrl+D**: select the next occurrence (multiple cursors), **Alt+click**: add a cursor.
 - Click a line number to select the whole line (drag for several lines, Shift+click
   to extend), then **Ctrl+C**, **Ctrl+X**, **Delete**, or **Shift+Alt+↓** to duplicate it.
