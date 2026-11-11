@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { fuzzyMatch } from "./fuzzy";
 import { parseJsonc } from "./jsonc";
-import { basename, dirname, doneFileFor, isDoneFile, join, projectName, relative } from "./path";
+import { basename, dirname, doneFileFor, isDoneFile, join, normalize, pathKey, projectName, relative } from "./path";
 import { DEFAULT_SETTINGS, mergeSettings, setSettingInText, SETTINGS_TEMPLATE } from "./settings";
 import { findTheme } from "./themes";
 
 describe("paths", () => {
+  it("are normalized to be compared", () => {
+    expect(normalize("/notes/sub/../images/./a.png")).toBe("/notes/images/a.png");
+    expect(normalize("C:\\Notes\\sub\\..\\a.png")).toBe("C:\\Notes\\a.png");
+    expect(pathKey("C:\\Notes\\A.png")).toBe(pathKey("c:/notes/sub/../a.PNG"));
+    expect(pathKey("/notes/A.png")).not.toBe(pathKey("/notes/a.png"));
+  });
+
   it("handles Unix and Windows paths", () => {
     expect(basename("/a/b/work.txt")).toBe("work.txt");
     expect(basename("C:\\notes\\work.txt")).toBe("work.txt");

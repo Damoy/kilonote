@@ -52,6 +52,25 @@ export function relative(root: string | null, p: string): string {
   return p;
 }
 
+/** `a/./b/../c` → `a/c` (the separators are kept as they are). */
+export function normalize(p: string): string {
+  const sep = sepOf(p);
+  const parts = p.split(/[\\/]/);
+  const out: string[] = [];
+  for (const [i, part] of parts.entries()) {
+    if (part === "." && i > 0) continue;
+    if (part === ".." && out.length > 1 && out[out.length - 1] !== "..") out.pop();
+    else out.push(part);
+  }
+  return out.join(sep);
+}
+
+/** A key to compare paths: forward slashes, no `.`/`..`, any case on Windows. */
+export function pathKey(p: string): string {
+  const s = normalize(p).replace(/\\/g, "/").replace(/\/+$/, "");
+  return isWindowsPath(p) ? s.toLowerCase() : s;
+}
+
 export function samePath(a: string, b: string): boolean {
   const norm = (s: string) => s.replace(/[\\/]+$/, "").replace(/\\/g, "/");
   return isWindowsPath(a) ? norm(a).toLowerCase() === norm(b).toLowerCase() : norm(a) === norm(b);

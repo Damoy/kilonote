@@ -35,7 +35,7 @@ import { setIconPack, type IconPack } from "../ui/icons";
 import { historyDir, historyName, keepVersion } from "./history";
 import { beforeClose, restoreOtherWindows, restoreSession, saveSessionNow, sessionFileName, sessionTab, type SessionTab } from "./session";
 import { defaultKeybindings, registerAllCommands, registerStatusCommands } from "./commands";
-import { installImages } from "./images";
+import { dropImageFiles, installImages } from "./images";
 import { showStatusMenu } from "./tasks";
 
 export interface Doc {
@@ -157,7 +157,7 @@ export class App {
     });
     window.addEventListener("blur", () => this.flushAutosaves());
     setInterval(() => document.hasFocus() && this.active?.path && void this.checkExternalChanges([this.active]), 4000);
-    this.backend.onFileDrop((paths) => void this.openPaths(paths));
+    this.backend.onFileDrop((paths, at) => void dropImageFiles(this, paths, at).then((rest) => this.openPaths(rest)));
     this.backend.onOpenRequest((paths) => void this.openPaths(paths));
     this.backend.onCloseRequested(() => beforeClose(this));
 

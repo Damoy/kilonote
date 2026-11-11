@@ -171,9 +171,10 @@ npx tauri build --no-bundle
   (`![image](images/shot.png)`), read by a native command that only reads image types
   (png, jpg, gif, webp, bmp, svg; 50 MB at most) and shown as `data:` images: an image
   cannot run anything, and an SVG shown this way runs no script and loads nothing.
-  Web images are never fetched. A pasted image is written by a native command that
-  only writes image types, only to a new file (never over an existing one), in the
-  images folder next to the note.
+  Web images are never fetched. A pasted or dropped image is written by a native
+  command that only writes image types, only to a new file (never over an existing
+  one), in the images folder next to the note. Unused images are only moved to the
+  system trash (recoverable), after a confirmation that lists them.
 - The HTML and SVG preview shows the page in a sandboxed frame that is not allowed to run
   scripts, submit forms, open windows or navigate; the frame's own policy only allows
   inline styles and embedded (data:) images and fonts, so nothing is loaded from the

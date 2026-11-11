@@ -14,6 +14,8 @@ export interface ImageHost {
   load(ref: string): Promise<string | null>;
   /** An image was pasted in the note shown by `view`. */
   paste(view: EditorView, image: File): void;
+  /** Image files were dropped on the note, at `pos`. */
+  drop(view: EditorView, images: File[], pos: number): void;
 }
 
 let host: ImageHost | null = null;
@@ -111,8 +113,12 @@ export const imagesField = StateField.define<DecorationSet>({
   provide: (f) => EditorView.decorations.from(f),
 });
 
-/** A pasted image (and no text with it: text from a spreadsheet comes with a picture of it). */
-const pasteImages = EditorView.domEventHandlers({
+/**
+ * A pasted image (and no text with it: text from a spreadsheet comes with a
+ * picture of it), and image files dropped on the note (the editor would
+ * otherwise insert their bytes as text).
+ */
+const addImages = EditorView.domEventHandlers({
   paste(event, view) {
     const data = event.clipboardData;
     if (!data || !host || data.getData("text/plain")) return false;
@@ -122,9 +128,16 @@ const pasteImages = EditorView.domEventHandlers({
     host.paste(view, file);
     return true;
   },
+  drop(event, view) {
+    const files = [...(event.dataTransfer?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+    if (!files.length || !host) return false;
+    event.preventDefault();
+    host.drop(view, files, view.posAtCoords({ x: event.clientX, y: event.clientY }, false));
+    return true;
+  },
 });
 
-/** Images in notes: shown under their line, and pasted from the clipboard. */
+/** Images in notes: shown under their line, pasted from the clipboard or dropped. */
 export function noteImages(show: boolean): Extension {
-  return show ? [imagesField, pasteImages] : pasteImages;
+  return show ? [imagesField, addImages] : addImages;
 }

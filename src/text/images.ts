@@ -44,6 +44,19 @@ export function pastedImageName(noteStem: string, at: Date, ext: string, n = 1):
   return `${safe}-${stamp}${n > 1 ? `-${n}` : ""}.${ext}`;
 }
 
+/** The file name of an image dropped on a note, after its own name: `diagram.png`, `diagram-2.png`… */
+export function droppedImageName(fileName: string, n = 1): string {
+  const dot = fileName.lastIndexOf(".");
+  const ext = dot > 0 ? fileName.slice(dot + 1).toLowerCase() : "png";
+  const base = (dot > 0 ? fileName.slice(0, dot) : fileName).replace(/[^\p{L}\p{N}_-]+/gu, "-").replace(/^-+|-+$/g, "") || "image";
+  return `${base}${n > 1 ? `-${n}` : ""}.${ext}`;
+}
+
+/** True for a file a note can show (by its extension). */
+export function isImageFile(path: string): boolean {
+  return Object.hasOwn(IMAGE_TYPES, extOf(path));
+}
+
 /** The reference written in the note for an image in `folder` (relative to the note). */
 export function imageMarkup(folder: string, name: string): string {
   const parts = [...folder.split(/[\\/]+/).filter(Boolean), name];

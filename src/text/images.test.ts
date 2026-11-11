@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extForMime, imageMarkup, imageRefs, pastedImageName, resolveImage } from "./images";
+import { droppedImageName, extForMime, imageMarkup, imageRefs, isImageFile, pastedImageName, resolveImage } from "./images";
 
 describe("image references in notes", () => {
   it("finds the images written on a line", () => {
@@ -14,6 +14,14 @@ describe("image references in notes", () => {
     expect(pastedImageName("work", at, "png")).toBe("work-2026-11-09-080503.png");
     expect(pastedImageName("Réunion (lundi)", at, "jpg", 2)).toBe("Réunion-lundi-2026-11-09-080503-2.jpg");
     expect(pastedImageName("../..", at, "png")).toBe("image-2026-11-09-080503.png");
+  });
+
+  it("names dropped images after their own name, safely", () => {
+    expect(droppedImageName("diagram.PNG")).toBe("diagram.png");
+    expect(droppedImageName("My shot (1).jpg", 2)).toBe("My-shot-1-2.jpg");
+    expect(droppedImageName("../../x.gif")).toBe("x.gif");
+    expect(isImageFile("C:\\a\\b.WebP")).toBe(true);
+    expect(isImageFile("/a/run.exe")).toBe(false);
   });
 
   it("writes a reference that reads back to the same file", () => {

@@ -79,7 +79,7 @@ export interface Backend {
   toggleFullscreen(): Promise<void>;
   /** The handler returns false to cancel closing. */
   onCloseRequested(handler: () => Promise<boolean>): void;
-  onFileDrop(handler: (paths: string[]) => void): void;
+  onFileDrop(handler: (paths: string[], at?: { x: number; y: number }) => void): void;
   /** Files requested by a second instance of the application. */
   onOpenRequest(handler: (paths: string[]) => void): void;
 }
@@ -180,7 +180,10 @@ export async function createTauriBackend(): Promise<Backend> {
     },
     onFileDrop(handler) {
       void getCurrentWebview().onDragDropEvent((ev) => {
-        if (ev.payload.type === "drop" && ev.payload.paths.length) handler(ev.payload.paths);
+        if (ev.payload.type !== "drop" || !ev.payload.paths.length) return;
+        // Where the files were dropped, in CSS pixels of the page.
+        const { x, y } = ev.payload.position;
+        handler(ev.payload.paths, { x: x / devicePixelRatio, y: y / devicePixelRatio });
       });
     },
     onOpenRequest(handler) {

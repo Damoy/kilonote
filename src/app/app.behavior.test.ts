@@ -9,7 +9,7 @@ import type { Backend, Entry, Meta } from "../core/backend";
 import { basename, dirname, isInside } from "../core/path";
 import { formatDocument } from "./editing";
 import { renamePath } from "./files";
-import { pasteImage, loadNoteImage } from "./images";
+import { deleteUnusedImages, dropImages, pasteImage, loadNoteImage } from "./images";
 import { saveSessionNow } from "./session";
 import { archiveLines, cycleTasks } from "./tasks";
 
@@ -87,12 +87,12 @@ function memoryBackend(init: Record<string, string> = {}, opts: { savePath?: str
       for (const f of disk.files.keys()) if (dirname(f) === p) out.push({ name: basename(f), path: f, isDir: false });
       return out;
     },
-    walk: async (root) => [...disk.files.keys()].filter((f) => isInside(f, root)),
+    walk: async (root) => [...disk.files.keys(), ...disk.images.keys()].filter((f) => isInside(f, root)),
     readMany: async (paths) => paths.map((p) => disk.files.get(p)?.text ?? null),
     createDir: async (p) => void disk.dirs.add(p),
     createFile: async (p) => void write(p, ""),
     rename: async () => {},
-    trash: async (p) => void disk.files.delete(p),
+    trash: async (p) => void (disk.files.delete(p) || disk.images.delete(p)),
     async readImage(p) {
       const img = disk.images.get(p);
       if (!img) throw new Error(`not found: ${p}`);
@@ -549,5 +549,36 @@ describe("images in notes", () => {
       const { app: other } = await start({ "/config/settings.json": SETTINGS(`, "images_folder": ${JSON.stringify(bad)}`) });
       expect(other.settings.images_folder, bad).toBe("images");
     }
+  });
+
+  it("image files dropped on a note are saved under their own name, after the line", async () => {
+    const { app, disk } = await start({ "/notes/a.txt": "first line\nsecond line" });
+    await app.openFile("/notes/a.txt");
+    app.view.contentDOM.blur();
+    const file = (name: string, type = "image/png") => new File([new Uint8Array([1, 2, 3])], name, { type });
+    await dropImages(app, app.view, [file("My diagram.PNG"), file("notes.txt", "text/plain"), file("photo.jpg", "image/jpeg")], 3);
+    expect([...disk.images.keys()]).toEqual(["/notes/images/My-diagram.png", "/notes/images/photo.jpg"]);
+    expect(app.view.state.doc.toString()).toBe("first line\n![image](images/My-diagram.png)\n![image](images/photo.jpg)\nsecond line");
+    // The same name again: a free one.
+    await dropImages(app, app.view, [file("My diagram.PNG")], app.view.state.doc.length);
+    expect(disk.images.has("/notes/images/My-diagram-2.png")).toBe(true);
+  });
+
+  it("the images no note uses are moved to the trash, after a confirmation", async () => {
+    const { app, disk } = await start({
+      "/notes/a.txt": "![image](images/used.png)\nsee also <img src=\"images/named.png\">",
+      "/notes/sub/b.md": "![x](../images/up.png)",
+    });
+    for (const p of ["/notes/images/used.png", "/notes/images/named.png", "/notes/images/up.png", "/notes/images/old.png", "/notes/sub/images/old 2.png", "/notes/photos/trip.png"]) {
+      disk.images.set(p, new Uint8Array([1]));
+    }
+    await app.openFile("/notes/a.txt");
+    const done = deleteUnusedImages(app);
+    await tick(10);
+    expect(document.querySelector(".kn-modal-message")?.textContent).toContain("images/old.png");
+    clickButton("Move to trash");
+    await done;
+    // Only the images of the images folders that no note shows or names.
+    expect([...disk.images.keys()].sort()).toEqual(["/notes/images/named.png", "/notes/images/up.png", "/notes/images/used.png", "/notes/photos/trip.png"]);
   });
 });

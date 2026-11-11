@@ -108,6 +108,11 @@ The note stays a plain text file: any other editor shows the line, and the image
 an ordinary file next to it. The folder and the display can be changed in the
 settings (Editor).
 
+Image files can also be dropped on a note (from the file explorer): they are copied
+into the images folder under their own name, or just referenced if they already are
+in the note's folder. Command palette → "File: Delete unused images…" moves the
+images that no note shows any more to the system trash, after listing them.
+
 ## Code and config files
 
 Python, JavaScript, TypeScript, C#, Java, C/C++, Go, Rust, SQL, PowerShell, Batch,

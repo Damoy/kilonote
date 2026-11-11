@@ -540,7 +540,7 @@ button.st-item:hover { background: var(--kn-hover); color: var(--kn-fg); }
   box-shadow: var(--shadow); animation: pop 140ms var(--ease);
 }
 .kn-modal-title { font-size: 15px; font-weight: 650; margin-bottom: 8px; color: var(--kn-fg); }
-.kn-modal-message { color: var(--kn-fg-muted); line-height: 1.5; margin-bottom: 14px; user-select: text; }
+.kn-modal-message { color: var(--kn-fg-muted); line-height: 1.5; margin-bottom: 14px; user-select: text; white-space: pre-line; overflow-wrap: anywhere; }
 .kn-modal .kn-input { margin: 4px 0 6px; }
 .kn-modal-colors { padding: 8px 0 0; }
 .kn-modal-error { min-height: 16px; color: var(--kn-red); font-size: 12px; margin-top: 4px; }

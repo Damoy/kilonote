@@ -76,7 +76,8 @@ open it as a folder and follow its `README.md`.
   the status bar converts them on demand
 - **Images in notes**: paste a screenshot (Ctrl+V) in a `.txt` or `.md` note: it is saved
   next to the note (`images/`) and shown right under its line, `![image](images/…png)`;
-  the note stays plain text
+  the note stays plain text. Image files can be dropped on a note too, and *File: Delete
+  unused images* moves the images no note uses any more to the trash
 - Click a line number to select the whole line, without its line break (drag for more,
   Shift+click to extend);
   **Ctrl+↑/↓** moves the cursor and scrolls the text with it

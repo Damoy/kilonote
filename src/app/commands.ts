@@ -6,6 +6,7 @@ import { confirm } from "../ui/overlay";
 import { openCheatSheet } from "../ui/lazy";
 import type { App } from "./app";
 import { formatDocument } from "./editing";
+import { deleteUnusedImages } from "./images";
 import { copyText, renamePath } from "./files";
 import { showLocalHistory } from "./history";
 import { openCommandPalette, openQuickOpen, selectAccent, selectLanguage, selectMascot, selectTheme } from "./pickers";
@@ -117,6 +118,7 @@ export function registerAllCommands(app: App) {
     { id: "edit.replace", title: "Edit: Find and replace", run: () => app.active && openFind(app.view) },
     { id: "edit.nextOccurrence", title: "Edit: Next occurrence of the selected text", run: () => app.active && goToOccurrence(app.view, true) },
     { id: "edit.prevOccurrence", title: "Edit: Previous occurrence of the selected text", run: () => app.active && goToOccurrence(app.view, false) },
+    { id: "file.deleteUnusedImages", title: "File: Delete unused images…", run: () => deleteUnusedImages(app) },
     { id: "edit.format", title: "Edit: Format document (JSON, XML, HTML, CSS, SQL, Markdown tables)", run: () => formatDocument(app) },
     { id: "edit.minify", title: "Edit: Minify JSON", run: () => formatDocument(app, "minify") },
     { id: "view.sidebar", title: "View: Toggle sidebar", run: () => app.sidebar.toggle() },
