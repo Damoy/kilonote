@@ -74,6 +74,8 @@ class Assistant {
       e.stopPropagation();
       this.menu(e.clientX, e.clientY);
     });
+    // Clicking Kilo or his bubble never takes the keyboard from the editor.
+    this.el.addEventListener("mousedown", (e) => e.preventDefault());
     this.bubble.addEventListener("mouseenter", () => clearTimeout(this.bubbleTimer));
     this.bubble.addEventListener("mouseleave", () => this.hideLater());
     this.el.append(this.bubble, this.body, h("span", { class: "kn-kilo-zz", "aria-hidden": "true" }, "z"));
@@ -168,7 +170,8 @@ class Assistant {
   /** The typing paused: a task just done makes Kilo cheer; a useful hint, he offers it. */
   private paused() {
     const ctx = this.context();
-    if (!ctx || !this.app.active) return;
+    // (Hidden in zen mode: no hint is offered there.)
+    if (!ctx || !this.app.active || document.body.classList.contains("zen")) return;
     if (ctx.text != null && (ctx.lang === "text" || ctx.lang === "markdown")) {
       const done = findTasks(ctx.text, ctx.cfg).filter((t) => isDoneStatus(t.task.key, ctx.cfg)).length;
       const before = this.doneCounts.get(this.app.active);
@@ -184,7 +187,7 @@ class Assistant {
   }
 
   private clicked() {
-    if (!this.bubble.hidden) return this.hide();
+    if (!this.bubble.hidden) return this.close();
     const ctx = this.context();
     const hint = ctx ? contextHints(ctx).find((x) => !this.dismissed.has(x.id)) : undefined;
     if (hint) {
@@ -198,19 +201,23 @@ class Assistant {
     const text = GENERAL_TIPS[this.tip].replace(/\{([\w.]+)\}/g, (_m, id: string) => shortcutFor(id) || id);
     this.render(h("strong", {}, "Tip · "), text, [
       h("button", { class: "kn-btn subtle", onclick: () => this.showTip() }, "Another tip"),
-      h("button", { class: "kn-btn", onclick: () => this.hide() }, "Thanks!"),
+      h("button", { class: "kn-btn", onclick: () => this.close() }, "Thanks!"),
     ]);
     this.bubble.dataset.auto = "0";
     this.mood("talking", 1700);
   }
 
   private show(hint: Hint, auto: boolean) {
+    // The line the hint is about: its action applies to it, even if the cursor moved since.
+    const state = this.app.view.state;
+    const at = state.doc.lineAt(state.selection.main.head);
+    const target = { doc: this.app.active, number: at.number, text: at.text };
     const buttons: HTMLElement[] = [];
     if (hint.action) {
       const action = hint.action;
-      buttons.push(h("button", { class: "kn-btn primary", onclick: () => this.act(action) }, action.label));
+      buttons.push(h("button", { class: "kn-btn primary", onclick: () => this.act(action, target) }, action.label));
     }
-    buttons.push(h("button", { class: "kn-btn", onclick: () => this.hide() }, hint.action ? "Not now" : "Thanks!"));
+    buttons.push(h("button", { class: "kn-btn", onclick: () => this.close() }, hint.action ? "Not now" : "Thanks!"));
     this.render(null, hint.text, buttons, h("button", { class: "kn-kilo-never", onclick: () => this.dismiss(hint.id) }, "Don't show again"));
     this.bubble.dataset.auto = auto ? "1" : "0";
     this.mood("talking", 1700);
@@ -233,6 +240,12 @@ class Assistant {
     this.bubbleTimer = setTimeout(() => this.hide(), BUBBLE_MS);
   }
 
+  /** Closed with one of its buttons: the editor gets the keyboard back. */
+  private close() {
+    this.hide();
+    this.app.focusEditor();
+  }
+
   private hide() {
     clearTimeout(this.bubbleTimer);
     this.bubble.hidden = true;
@@ -249,18 +262,27 @@ class Assistant {
     this.app.focusEditor();
   }
 
-  private act(action: HintAction) {
-    this.hide();
+  private act(action: HintAction, target: { doc: unknown; number: number; text: string }) {
+    this.close();
     const app = this.app;
     const state = app.view.state;
-    const line = state.doc.lineAt(state.selection.main.head);
-    app.focusEditor();
+    // The hint's line, where it is now (lines may have been added above it).
+    let line = target.number <= state.doc.lines ? state.doc.line(target.number) : null;
+    if (line?.text !== target.text) {
+      const i = state.doc.toString().split("\n").indexOf(target.text);
+      line = i >= 0 ? state.doc.line(i + 1) : null;
+    }
+    if (app.active !== target.doc || !line) {
+      toast("The line changed meanwhile: nothing was done.");
+      return;
+    }
     if ("due" in action) {
       const edit = setDueInLine(line.text, app.taskCfg, action.due);
       if (edit) app.view.dispatch({ changes: edit.changes.map((c) => ({ from: line.from + c.from, to: line.from + c.to, insert: c.insert })), userEvent: "input.task" });
       return;
     }
     if (action.selectLine) app.view.dispatch({ selection: { anchor: line.from, head: line.to } });
+    else if (action.onLine) app.view.dispatch({ selection: { anchor: line.to } });
     runCommand(action.command);
   }
 

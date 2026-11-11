@@ -23,6 +23,8 @@ describe("Kilo's hints", () => {
     }
     const hint = contextHints(ctx({ line: "pwd: s3cret!" }))[0];
     expect(hint.action).toEqual({ label: "Encrypt this line", command: "edit.encrypt", selectLine: true });
+    // Not in code: encrypting a line there would break it.
+    expect(ids(ctx({ lang: "python", line: 'password = "hunter2"' }))).not.toContain("secret-line");
   });
 
   it("see a list item that could be a task, and a date that could be its due date", () => {
@@ -32,6 +34,8 @@ describe("Kilo's hints", () => {
     const due = contextHints(ctx({ line: "- send the report on 14/11/2026 - todo" })).find((h) => h.id === "date-as-due");
     expect(due?.action).toEqual({ label: "Due on 2026-11-14", due: "2026-11-14" });
     expect(ids(ctx({ line: "- send the report @2026-11-14 - todo" }))).not.toContain("date-as-due");
+    // A date written month first is not a day of the calendar read day first: no hint.
+    expect(ids(ctx({ line: "- send the report on 11/14/2026 - todo" }))).not.toContain("date-as-due");
     // Not in a _done archive, nor in code.
     expect(ids(ctx({ line: "- call the bank", archive: true }))).not.toContain("make-task");
     expect(ids(ctx({ line: "- call the bank", lang: "python" }))).not.toContain("make-task");
@@ -41,6 +45,9 @@ describe("Kilo's hints", () => {
     expect(contextHints(ctx({ line: "see the notes_dev file", notes: ["notes_dev", "dev"] })).find((h) => h.id === "link-note")?.text).toContain("[[notes_dev]]");
     expect(ids(ctx({ line: "see [[notes_dev]]", notes: ["notes_dev"] }))).not.toContain("link-note");
     expect(ids(ctx({ line: "developer notes_devices", notes: ["notes_dev"] }))).not.toContain("link-note");
+    // Everyday words are not taken for links (a note called "work"), distinctive names are.
+    expect(ids(ctx({ line: "back to work tomorrow", notes: ["work"] }))).not.toContain("link-note");
+    expect(ids(ctx({ line: "check Stockviz first", notes: ["Stockviz"] }))).toContain("link-note");
   });
 
   it("read the note: late tasks, done tasks to archive, a long note without headings", () => {

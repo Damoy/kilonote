@@ -5,9 +5,12 @@
 
 import { DUE_RE, findDateInLine, findTasks, isDoneStatus, parseTask, type TaskConfig } from "./tasks";
 
-/** What a hint offers to do: run a command, select the line then run one, or set a due date. */
+/**
+ * What a hint offers to do: run a command (on the hint's line: with the line
+ * selected, or the cursor on it), or set the line's due date.
+ */
 export type HintAction =
-  | { label: string; command: string; selectLine?: boolean }
+  | { label: string; command: string; selectLine?: boolean; onLine?: boolean }
   | { label: string; due: string };
 
 export interface Hint {
@@ -61,8 +64,8 @@ export function contextHints(ctx: HintContext): Hint[] {
   const line = ctx.line;
   const task = line.length > 4 ? parseTask(line, ctx.cfg) : null;
 
-  // A private line in clear: offer to encrypt it.
-  if (!line.includes("KILONOTE SECRET") && (SECRET_LINE.test(line) || BEARER.test(line) || SSH_WITH_PASSWORD.test(line))) {
+  // A private line in clear, in a note: offer to encrypt it (in code, it would break the code).
+  if (isNote && !line.includes("KILONOTE SECRET") && (SECRET_LINE.test(line) || BEARER.test(line) || SSH_WITH_PASSWORD.test(line))) {
     out.push({
       id: "secret-line",
       text: "This line looks private (a password, a key…). Encrypt it: only your password will show it again, and it stays encrypted on the disk.",
@@ -76,13 +79,13 @@ export function contextHints(ctx: HintContext): Hint[] {
       out.push({
         id: "make-task",
         text: `This line could be a task: ${ctx.key("task.cycle")} adds " - todo", then ongoing, then done.`,
-        action: { label: "Make it a task", command: "task.cycle" },
+        action: { label: "Make it a task", command: "task.cycle", onLine: true },
       });
     }
     // A date written in a task: it can be its due date.
     if (task && !task.due && !DUE_RE.test(task.text) && DATE_IN_TEXT.test(task.text)) {
       const date = findDateInLine(task.text);
-      if (date) {
+      if (date && isRealDate(date)) {
         out.push({
           id: "date-as-due",
           text: `There is a date in this task: as a due date (@${date}), it turns orange when it is near and red when it is late.`,
@@ -151,13 +154,25 @@ export function contextHints(ctx: HintContext): Hint[] {
   return out;
 }
 
+/** `2026-11-14` is a day of the calendar (not `2026-14-11`, a date written month first). */
+function isRealDate(iso: string): boolean {
+  const [y, m, d] = iso.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
+}
+
+/** A note name that is not an everyday word ("notes_dev", "Project-2026", "Stockviz"…). */
+function distinctive(name: string): boolean {
+  return name.length >= 6 || /[\d_\-.]/.test(name) || /[a-z][A-Z]/.test(name);
+}
+
 /** The name of another note written on the line as a word (and not already a link). */
 function linkableName(line: string, notes: string[]): string | null {
   if (!notes.length || line.length > 400) return null;
   const plain = line.replace(/\[\[[^\]]*\]\]/g, " ");
   const lower = plain.toLowerCase();
   for (const name of notes) {
-    if (name.length < 4) continue;
+    if (name.length < 4 || !distinctive(name)) continue;
     const i = lower.indexOf(name.toLowerCase());
     if (i < 0) continue;
     const before = plain[i - 1] ?? " ";
