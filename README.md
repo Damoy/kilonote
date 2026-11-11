@@ -195,7 +195,8 @@ want double-clicks to open it in KiloNote. Windows records that choice itself: n
 installer nor the app writes file associations.
 
 The app is not code-signed yet, so SmartScreen may warn you the first time:
-*More info* → *Run anyway*.
+*More info* → *Run anyway*. The ways to sign it are compared in
+[docs/SIGNING.md](docs/SIGNING.md).
 
 ### macOS
 

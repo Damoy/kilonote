@@ -239,7 +239,8 @@ npx tauri build --no-bundle
    WDAC, Smart App Control) may treat an unknown executable in the user profile as
    suspicious, or block it. Options: allow it by SHA-256 hash or by path, sign it with a
    company certificate, or build it locally (see above). The provenance attestation lets
-   a security team tie a file to its source.
+   a security team tie a file to its source. The ways to sign the releases are compared
+   in [SIGNING.md](SIGNING.md).
 2. **Software outside the catalog.** Even without administrator rights, installing it may
    fall under the company's IT policy.
 3. **Downloads.** A web security gateway may scan or hold an unsigned executable
