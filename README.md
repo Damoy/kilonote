@@ -77,7 +77,8 @@ open it as a folder and follow its `README.md`.
 - **Images in notes**: paste a screenshot (Ctrl+V) in a `.txt` or `.md` note: it is saved
   next to the note (`images/`) and shown right under its line, `![image](images/…png)`;
   the note stays plain text
-- Click a line number to select the whole line (drag for more, Shift+click to extend);
+- Click a line number to select the whole line, without its line break (drag for more,
+  Shift+click to extend);
   **Ctrl+↑/↓** moves the cursor and scrolls the text with it
 - **Where else it appears**: select some text and the status bar tells how many times it
   appears in the whole note (or "only here"); the other occurrences are highlighted and

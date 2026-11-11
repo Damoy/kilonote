@@ -84,8 +84,9 @@ it to the tasks of one tag (a client, a topic…).
   "only here"), the other occurrences are highlighted and marked along the scrollbar.
   Click the count, or **Ctrl+F3** / **Ctrl+Shift+F3**, to go to the next / previous one.
 - **Ctrl+D**: select the next occurrence (multiple cursors), **Alt+click**: add a cursor.
-- Click a line number to select the whole line (drag for several lines, Shift+click
-  to extend), then **Ctrl+C**, **Ctrl+X**, **Delete**, or **Shift+Alt+↓** to duplicate it.
+- Click a line number to select the whole line, without its line break (drag for
+  several lines, Shift+click to extend): then **Ctrl+C** / **Ctrl+X** copies or cuts its
+  text, **Shift+Alt+↓** duplicates it, **Ctrl+Shift+K** deletes it.
 - **Ctrl+↑ / Ctrl+↓**: the cursor moves one line and the text scrolls with it, so the
   line stays where it is on the screen.
 - **Alt+↑ / Alt+↓**: move the line. **Ctrl+Shift+K**: delete the line.

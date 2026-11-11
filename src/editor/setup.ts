@@ -204,14 +204,11 @@ function continueList(view: EditorView): boolean {
   return true;
 }
 
-/** Whole lines from the line of `anchor` to the line of `head`, line breaks included. */
-function wholeLines(state: EditorState, anchor: number, head: number) {
-  const doc = state.doc;
-  const a = doc.lineAt(anchor);
-  const b = doc.lineAt(head);
-  return b.number >= a.number
-    ? EditorSelection.range(a.from, Math.min(b.to + 1, doc.length))
-    : EditorSelection.range(Math.min(a.to + 1, doc.length), b.from);
+/** Whole lines from the line of `anchor` to the line of `head` (their text, not the last line break). */
+export function wholeLines(state: EditorState, anchor: number, head: number) {
+  const a = state.doc.lineAt(anchor);
+  const b = state.doc.lineAt(head);
+  return b.number >= a.number ? EditorSelection.range(a.from, b.to) : EditorSelection.range(a.to, b.from);
 }
 
 /**
