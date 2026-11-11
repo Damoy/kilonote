@@ -32,6 +32,8 @@ jobs:
 
       - name: System dependencies (Linux)
         if: matrix.platform == 'ubuntu-22.04'
+        # (A slow package mirror fails the job in minutes instead of holding it for hours.)
+        timeout-minutes: 12
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
