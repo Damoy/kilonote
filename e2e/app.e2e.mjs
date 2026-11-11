@@ -238,6 +238,17 @@ try {
     expect(existsSync(join(notes, "run.sh")), false, "a script written by the image command");
   });
 
+  await test("the notes of the folder are read again only when they changed", async () => {
+    writeFileSync(join(notes, "r1.txt"), "first");
+    writeFileSync(join(notes, "r2.txt"), "second");
+    const read = () => run("return app.readFiles(args[0]);", [join(notes, "r1.txt"), join(notes, "r2.txt"), join(notes, "nothing.txt")]);
+    expect(await read(), ["first", "second", null], "the first read");
+    expect(await read(), ["first", "second", null], "a read of unchanged files");
+    await sleep(20);
+    writeFileSync(join(notes, "r2.txt"), "second, changed");
+    expect(await read(), ["first", "second, changed", null], "a read after a change");
+  });
+
   await test("the selected text and the search are counted in the whole note", async () => {
     writeFileSync(join(notes, "count.txt"), `-- Stockviz\n${"filler\n".repeat(300)}-- Stockviz\n`);
     await run(`await app.openFile(args[0]); app.focusEditor();
