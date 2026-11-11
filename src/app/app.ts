@@ -113,6 +113,10 @@ export class App {
     this.listeners.get(ev)!.add(fn);
   }
 
+  off(ev: AppEvent, fn: () => void) {
+    this.listeners.get(ev)?.delete(fn);
+  }
+
   emit(ev: AppEvent) {
     this.listeners.get(ev)?.forEach((fn) => fn());
     if (ev === "docs" || ev === "active" || ev === "workspace") this.saveSessionSoon();

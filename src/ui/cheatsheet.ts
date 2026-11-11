@@ -47,6 +47,7 @@ export function showCheatSheet(app: App, opts: { startup?: boolean } = {}) {
       cmd("Due date", "task.due"),
       cmd("Note ⇄ _done file", "file.toggleDone"),
       cmd("Tasks of the folder", "view.tasks"),
+      cmd("Task board", "view.board"),
     ]],
     ["Go to", "search", [
       cmd("Command palette", "palette.commands"),

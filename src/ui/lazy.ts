@@ -8,6 +8,10 @@ export function openCheatSheet(app: App, opts: { startup?: boolean } = {}): Prom
   return import("./cheatsheet").then((m) => m.showCheatSheet(app, opts));
 }
 
+export function openBoard(app: App): Promise<void> {
+  return import("./board").then((m) => m.showBoard(app));
+}
+
 export function openSettingsView(app: App, section?: SettingsSection): Promise<void> {
   return import("./settings-view").then((m) => m.showSettingsView(app, section));
 }

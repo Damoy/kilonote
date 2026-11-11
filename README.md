@@ -101,6 +101,8 @@ open it as a folder and follow its `README.md`.
 - Large files ask before opening (over 20 MB); binary files are never opened as text
 
 **Tasks**
+- **Task board** (**Ctrl+Alt+K**): the tasks of every note of the folder in one column per
+  status; drag a card to another column and its status changes in its note
 - A task is a line ending with ` - <status>`: `- call colleague X - todo`
 - **Ctrl+Enter** cycles the status: `todo` → `ongoing` → `done` (on one or several lines)
 - **Click a status** to pick another one or archive the task
@@ -255,6 +257,7 @@ On macOS, Ctrl becomes ⌘.
 | New note / open file / open folder | Ctrl+N / Ctrl+O / Ctrl+Shift+O |
 | New note from a template / today's note | Ctrl+Alt+N / Ctrl+Alt+D |
 | Notes linking to this one | Ctrl+Alt+B |
+| Task board | Ctrl+Alt+K |
 | New window | Ctrl+Shift+N |
 | Save / save as | Ctrl+S / Ctrl+Shift+S |
 | Close / reopen a tab | Ctrl+W / Ctrl+Shift+T |

@@ -8,12 +8,13 @@ import { historyName, parseHistoryName, pathHash, replaceInFiles, showLocalHisto
 import type { Backend, Entry, Meta } from "../core/backend";
 import { basename, dirname, isInside } from "../core/path";
 import { formatDocument } from "./editing";
+import { findTasks } from "../text/tasks";
 import { renamePath } from "./files";
 import { deleteUnusedImages, dropImages, pasteImage, loadNoteImage } from "./images";
 import { openDailyNote } from "./templates";
 import { openNoteLink } from "./links";
 import { saveSessionNow } from "./session";
-import { archiveLines, cycleTasks } from "./tasks";
+import { archiveLines, changeTaskInNote, cycleTasks } from "./tasks";
 
 interface Disk {
   files: Map<string, { text: string; mtime: number }>;
@@ -631,6 +632,19 @@ describe("links between notes", () => {
     // Never outside the folder.
     await openNoteLink(app, "../../etc/x");
     expect(document.querySelector(".kn-modal")).toBeNull();
+  });
+});
+
+describe("tasks changed from a list (sidebar, board)", () => {
+  it("are changed in their note, saved, and the note is not left open", async () => {
+    const { app, disk } = await start({ "/notes/work.txt": "- call the bank - todo\n- write - ongoing\n" });
+    const [t] = findTasks(disk.text("/notes/work.txt")!, app.taskCfg);
+    expect(await changeTaskInNote(app, "/notes/work.txt", t, { status: "ongoing" })).toBe("- call the bank - ongoing\n- write - ongoing\n");
+    expect(disk.text("/notes/work.txt")).toBe("- call the bank - ongoing\n- write - ongoing\n");
+    expect(app.findDoc("/notes/work.txt")).toBeFalsy();
+    // The line changed meanwhile: nothing is done.
+    expect(await changeTaskInNote(app, "/notes/work.txt", t, { status: "done" })).toBeNull();
+    expect(disk.text("/notes/work.txt")).toBe("- call the bank - ongoing\n- write - ongoing\n");
   });
 });
 

@@ -11,7 +11,8 @@ import { debounce, h, icon } from "./dom";
 import { confirm, showMenu, toast, type MenuItem } from "./overlay";
 import { copyText, createFileIn, createFolderIn, renamePath, trashPath } from "../app/files";
 import { replaceInFiles } from "../app/history";
-import { archiveLines, cycleTasks, generateReport } from "../app/tasks";
+import { changeTaskInNote, generateReport } from "../app/tasks";
+import { openBoard } from "./lazy";
 
 export type Panel = "files" | "tasks" | "search";
 
@@ -103,6 +104,7 @@ export class Sidebar {
       "div",
       { class: "sb-panel" },
       h("div", { class: "sb-header" }, h("span", { class: "sb-title" }, "Tasks"), h("span", { class: "kn-spacer" }),
+        h("button", { class: "kn-icon-btn", title: titleWithKey("Task board", "view.board"), onclick: () => void openBoard(app) }, icon("board")),
         h("button", { class: "kn-icon-btn", title: "Activity report", onclick: () => generateReport(app) }, icon("chart")),
         h("button", { class: "kn-icon-btn", title: "Refresh", onclick: () => this.renderTasks() }, icon("refresh"))),
       filterBar,
@@ -636,21 +638,13 @@ export class Sidebar {
 
   /** Quick action from the list, without necessarily opening a tab. */
   private async taskAction(path: string, t: FoundTask, action: "cycle" | "archive") {
-    const app = this.app;
-    const wasOpen = !!app.findDoc(path);
-    const doc = await app.openFile(path, { activate: false });
-    if (!doc) return;
-    const line = doc.state.doc.lines >= t.line ? doc.state.doc.line(t.line) : null;
-    if (!line || line.text !== t.raw) {
+    const text = await changeTaskInNote(this.app, path, t, { archive: action === "archive" });
+    if (text == null) {
       toast("The note changed in the meantime: list refreshed.");
       void this.renderTasks();
       return;
     }
-    if (action === "cycle") await cycleTasks(app, undefined, doc, [t.line]);
-    else await archiveLines(app, doc, [t.line]);
-    await app.save(doc);
-    this.taskTexts.set(path, doc.state.doc.toString());
-    if (!wasOpen && doc !== app.active) await app.closeDoc(doc, { force: true });
+    this.taskTexts.set(path, text);
     void this.renderTasks(false);
   }
 

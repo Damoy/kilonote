@@ -34,6 +34,13 @@ The **Tasks** view (Ctrl+Shift+A) lists the tasks of every note in the open fold
 ongoing ones first. Filter them (*Open*, *Ongoing*, *Due*, or a \`#tag\`), and hover a
 task to change its status or archive it. The badge counts overdue tasks.
 
+The **task board** (**Ctrl+Alt+K**, or the board button of the Tasks view) shows the
+same tasks in one column per status. Drag a card to another column: its status
+changes in its note (the notes stay the only place where tasks live). Click a card
+to open its note on that line, right-click it for every status or to archive it, or
+focus it and press ←/→. The filter keeps the cards with some words, a \`#tag\` or a
+note name.
+
 ## Activity report
 
 Command palette → "Report: Generate activity report…", then a period (this or last

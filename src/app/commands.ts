@@ -3,7 +3,7 @@
 import { registerCommands, type Command } from "../core/commands";
 import { goToOccurrence, openFind } from "../editor/matches";
 import { confirm } from "../ui/overlay";
-import { openCheatSheet } from "../ui/lazy";
+import { openBoard, openCheatSheet } from "../ui/lazy";
 import type { App } from "./app";
 import { formatDocument } from "./editing";
 import { deleteUnusedImages } from "./images";
@@ -66,6 +66,7 @@ export function defaultKeybindings(app: App): Record<string, string> {
     "Mod+Alt+N": "file.newFromTemplate",
     "Mod+Alt+D": "file.dailyNote",
     "Mod+Alt+B": "palette.backlinks",
+    "Mod+Alt+K": "view.board",
     "Mod+Shift+F3": "edit.prevOccurrence",
     "Mod+?": "help.shortcuts",
   };
@@ -134,6 +135,7 @@ export function registerAllCommands(app: App) {
     { id: "view.sidebar", title: "View: Toggle sidebar", run: () => app.sidebar.toggle() },
     { id: "view.files", title: "View: File explorer", run: () => app.sidebar.show("files") },
     { id: "view.tasks", title: "View: Folder tasks", run: () => app.sidebar.show("tasks") },
+    { id: "view.board", title: "View: Task board", run: () => openBoard(app) },
     { id: "view.search", title: "View: Search in files", run: () => app.sidebar.show("search") },
     { id: "view.zen", title: "View: Zen mode", run: () => app.setZen(!app.zen) },
     { id: "view.fullscreen", title: "View: Full screen", run: () => app.backend.toggleFullscreen() },

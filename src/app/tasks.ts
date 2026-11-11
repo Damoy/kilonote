@@ -6,7 +6,7 @@ import { shortcutFor } from "../core/commands";
 import { basename, dirname, doneFileFor, extname, isDoneFile, join, projectName, relative, stem } from "../core/path";
 import { fuzzyFilter } from "../core/fuzzy";
 import { isCodeLang, languageLabel } from "../editor/languages";
-import { archivedLine, cycleLine, findTags, findTasks, isDoneStatus, parseDateInput, parseTask, setDueInLine, todayISO } from "../text/tasks";
+import { archivedLine, cycleLine, findTags, findTasks, isDoneStatus, parseDateInput, parseTask, setDueInLine, todayISO, type FoundTask } from "../text/tasks";
 import type { PeriodKind, ReportSource } from "../text/report";
 import { showMenu, toast, type MenuItem } from "../ui/overlay";
 import { openPicker } from "../ui/palette";
@@ -207,6 +207,43 @@ export function showStatusMenu(app: App, lineNo: number, x: number, y: number) {
     });
   }
   showMenu(items, x, y);
+}
+
+/**
+ * Changes one task of a note from a list of the folder's tasks (the sidebar, the
+ * board), whether the note is open or not: a status (or the next one), or the
+ * archive. The note is saved, and closed again if it was opened only for this.
+ * Returns the new text of the note, or null if the task's line changed meanwhile.
+ */
+export async function changeTaskInNote(app: App, path: string, t: FoundTask, change: { status?: string; archive?: boolean }): Promise<string | null> {
+  const wasOpen = !!app.findDoc(path);
+  const doc = await app.openFile(path, { activate: false });
+  if (!doc) return null;
+  const state = doc === app.active ? app.view.state : doc.state;
+  const line = state.doc.lines >= t.line ? state.doc.line(t.line) : null;
+  if (!line || line.text !== t.raw) {
+    if (!wasOpen && doc !== app.active) await app.closeDoc(doc, { force: true });
+    return null;
+  }
+  if (change.archive) await archiveLines(app, doc, [t.line]);
+  else await cycleTasks(app, change.status, doc, [t.line]);
+  await app.save(doc);
+  const text = (doc === app.active ? app.view.state : doc.state).doc.toString();
+  if (!wasOpen && doc !== app.active) await app.closeDoc(doc, { force: true });
+  return text;
+}
+
+/** The tasks of every note of the open folder (not the _done archives), note by note. */
+export async function folderTasks(app: App, limit = 3000): Promise<{ path: string; tasks: FoundTask[] }[]> {
+  if (!app.workspace) return [];
+  const suffix = app.settings.archive_suffix;
+  const files = app.workspaceFiles.filter((p) => app.isNoteFile(p) && !isDoneFile(p, suffix)).slice(0, limit);
+  const texts = await app.readFiles(files);
+  return files.flatMap((path, i) => {
+    const text = texts[i];
+    const tasks = text ? findTasks(text, app.taskCfg) : [];
+    return tasks.length ? [{ path, tasks }] : [];
+  });
 }
 
 export function needFolder(app: App): boolean {
