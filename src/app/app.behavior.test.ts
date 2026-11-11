@@ -16,6 +16,7 @@ import { openNoteLink } from "./links";
 import { provideCommands, provideFiles } from "./pickers";
 import { copyRich, exportHtml, printNote } from "./export";
 import { pinnedNotes, setPinned } from "./pins";
+import { slashMenu } from "../editor/slash";
 import { SECRET_BEGIN, SECRET_END } from "../text/secrets";
 import { encryptSelection, revealSecret } from "./secrets";
 import { secretsField } from "../editor/secrets";
@@ -900,5 +901,34 @@ describe("pinned and recent notes", () => {
     clickButton("Rename");
     await renaming;
     expect(pinnedNotes()).toEqual(["/notes/z.txt"]);
+  });
+});
+
+describe("quick inserts after /", () => {
+  it("the menu does not come back when the note is shown again", async () => {
+    const { app } = await start({ "/notes/a.txt": "", "/notes/b.txt": "" });
+    // (happy-dom: see the archive test; the editor is not focused here.)
+    app.view.contentDOM.blur();
+    app.view.focus = () => {};
+    const a = (await app.openFile("/notes/a.txt"))!;
+    app.view.dispatch({ changes: { from: 0, insert: "/" }, selection: { anchor: 1 }, userEvent: "input.type" });
+    expect(slashMenu(app.view.state)).not.toBeNull();
+    await app.openFile("/notes/b.txt");
+    app.activate(a);
+    expect(slashMenu(app.view.state)).toBeNull();
+    expect(app.view.state.doc.toString()).toBe("/");
+  });
+
+  it("are not offered in code files, nor when turned off", async () => {
+    const { app } = await start({ "/notes/a.json": "", "/notes/b.txt": "" });
+    app.view.contentDOM.blur();
+    app.view.focus = () => {};
+    await app.openFile("/notes/a.json");
+    app.view.dispatch({ changes: { from: 0, insert: "/" }, selection: { anchor: 1 }, userEvent: "input.type" });
+    expect(slashMenu(app.view.state)).toBeNull();
+    await app.updateSetting("slash_commands", false);
+    await app.openFile("/notes/b.txt");
+    app.view.dispatch({ changes: { from: 0, insert: "/" }, selection: { anchor: 1 }, userEvent: "input.type" });
+    expect(slashMenu(app.view.state)).toBeNull();
   });
 });

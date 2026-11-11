@@ -20,6 +20,7 @@ import { basename, dirname, extname, isInside, isProbablyBinary, join, samePath 
 import { mergeSettings, setSettingInText, SETTINGS_TEMPLATE, type Settings } from "../core/settings";
 import { applyMascot, applyTheme, findTheme } from "../core/themes";
 import { editorHooks } from "../editor/decorations";
+import { closeSlashMenu } from "../editor/slash";
 import { createEditorState, langForPath, languageReady, loadLanguage, reconfigureLanguage, settingsCompartment, settingsExtensions, type LangId } from "../editor/setup";
 import { makeTaskConfig, type TaskConfig } from "../text/tasks";
 import { debounce } from "../ui/dom";
@@ -547,6 +548,7 @@ export class App {
     }
     const prev = this.active;
     if (prev && this.docs.includes(prev)) {
+      closeSlashMenu(this.view);
       prev.state = this.view.state;
       prev.scroll = this.view.scrollSnapshot();
     }

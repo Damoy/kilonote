@@ -44,6 +44,7 @@ function appSlashItems(app: App, state: EditorState): SlashItem[] {
       name: "secret",
       label: "Encrypt this line…",
       keywords: "password private lock",
+      wholeLine: true,
       run: (view) => {
         const l = view.state.doc.lineAt(view.state.selection.main.head);
         if (!l.text.trim()) {
@@ -58,7 +59,7 @@ function appSlashItems(app: App, state: EditorState): SlashItem[] {
   ];
   // (The line as it will be once "/due" is removed: a task already.)
   if (parseTask(line.text.replace(/\s*\/\S*$/, "").replace(/\s\/\S*(?=\s)/, ""), app.taskCfg)) {
-    items.push({ name: "due", label: "Due date…", detail: "@date", keywords: "deadline task", run: () => setDueDate(app) });
+    items.push({ name: "due", label: "Due date…", detail: "@date", keywords: "deadline task", wholeLine: true, run: () => setDueDate(app) });
   }
   for (const t of knownTemplates) {
     items.push({ name: t.name.toLowerCase().replace(/\s+/g, "-"), label: `Template · ${t.name}`, keywords: "template", edit: insertTemplate(app, t) });

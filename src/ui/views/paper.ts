@@ -165,6 +165,8 @@ const HR = /^\s*(?:-{3,}|={3,}|\*{3,}|_{3,})\s*$/;
 const FENCE = /^\s*(```|~~~)/;
 const INLINE = /`[^`\n]+`|\*\*[^*\n]+\*\*|\bhttps?:\/\/[^\s<>"'`)\]]+[^\s<>"'`)\].,;:!?]|\[\[[^[\]\n]+\]\]/g;
 const SECRET_LINE = /^🔒 Encrypted secret\s*$/;
+/** `![description](images/shot.png)` (the path may be written `<with spaces.png>`). */
+const IMAGE = /!\[([^\]\n]*)\]\((?:<([^>\n]+)>|([^)\s]+))(?:\s+"[^"\n]*")?\)/g;
 
 /** A plain note, line by line: a line stays a line, as in the editor. */
 export function renderPlainNote(text: string, cfg: TaskConfig): HTMLElement {
@@ -176,7 +178,8 @@ export function renderPlainNote(text: string, cfg: TaskConfig): HTMLElement {
   };
   /** The lists being filled: one per indentation level. */
   let lists: { indent: number; ordered: boolean; list: HTMLElement }[] = [];
-  let code: HTMLElement | null = null;
+  /** The lines of the code block being read (null: not in one). */
+  let code: string[] | null = null;
 
   const content = (parent: HTMLElement, line: string) => {
     const task = line.length > 4 ? parseTask(line, cfg) : null;
@@ -208,19 +211,23 @@ export function renderPlainNote(text: string, cfg: TaskConfig): HTMLElement {
     if (pos < s.length) parent.append(s.slice(pos));
   };
 
+  const blocks: (() => void)[] = [];
+
   /** Leading spaces kept (a plain note uses them to indent). */
   const indented = (line: string) => line.replace(/^[ \t]+/, (ws) => " ".repeat(ws.replace(/\t/g, "    ").length));
 
   for (const line of text.split("\n")) {
     if (code) {
       if (FENCE.test(line)) code = null;
-      else code.textContent += (code.textContent ? "\n" : "") + line;
+      else code.push(line);
       continue;
     }
     if (FENCE.test(line)) {
       lists = [];
-      code = root.appendChild(el("pre"));
-      code.textContent = "";
+      const lines: string[] = (code = []);
+      // (Filled as the lines come; written once the note is read.)
+      const pre = root.appendChild(el("pre"));
+      blocks.push(() => (pre.textContent = lines.join("\n")));
       continue;
     }
     const bullet = BULLET.exec(line);
@@ -252,14 +259,15 @@ export function renderPlainNote(text: string, cfg: TaskConfig): HTMLElement {
       const refs = imageRefs(line);
       if (refs.length && !line.replace(/!\[[^\]\n]*\]\([^)\n]*\)/g, "").trim()) {
         const p = root.appendChild(el("p", "md-line"));
-        for (const ref of refs) {
+        for (const m of line.matchAll(IMAGE)) {
           const img = p.appendChild(el("img")) as HTMLImageElement;
-          img.alt = /!\[([^\]\n]*)\]/.exec(line)?.[1] || "image";
-          img.dataset.ref = ref;
+          img.alt = m[1] || "image";
+          img.dataset.ref = m[2] ?? m[3];
         }
       } else content(root.appendChild(el("p", "md-line")), indented(line));
     }
   }
+  for (const fill of blocks) fill();
   return root;
 }
 

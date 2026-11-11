@@ -23,6 +23,8 @@ export interface SlashItem {
   edit?: (state: EditorState, from: number, to: number) => TransactionSpec;
   /** Run once "/name" is removed (or after `edit`). */
   run?: (view: EditorView) => void;
+  /** The item works on the whole line: "/name" at its end goes with the spaces before it. */
+  wholeLine?: boolean;
 }
 
 /** The items the app adds (links, secrets, due date, templates). */
@@ -110,7 +112,8 @@ export function slashItems(state: EditorState, now = new Date()): SlashItem[] {
     { name: "today", label: "Today's date", detail: today, keywords: "date day", edit: insertText(today) },
     { name: "tomorrow", label: "Tomorrow's date", detail: tomorrow, keywords: "date day", edit: insertText(tomorrow) },
     { name: "now", label: "Time", detail: time, keywords: "time hour clock", edit: insertText(time) },
-    ...cfg.cycle.map((s) => ({ name: s, label: `Task · ${s}`, detail: `- … - ${s}`, keywords: "task status", edit: taskStatus(s) })),
+    // (A status with a space, "in progress", is typed with a dash: /in-progress.)
+    ...cfg.cycle.map((s) => ({ name: s.replace(/\s+/g, "-"), label: `Task · ${s}`, detail: `- … - ${s}`, keywords: "task status", edit: taskStatus(s) })),
     { name: "h1", label: "Heading 1", detail: "# ", keywords: "title heading", edit: heading(1) },
     { name: "h2", label: "Heading 2", detail: "## ", keywords: "title heading", edit: heading(2) },
     { name: "h3", label: "Heading 3", detail: "### ", keywords: "title heading", edit: heading(3) },
@@ -188,8 +191,12 @@ function tooltipAt(pos: number): Tooltip {
 function pick(view: EditorView, item: SlashItem) {
   const s = view.state.field(slashField, false);
   if (!s) return;
-  const from = s.from;
+  let from = s.from;
   const to = view.state.selection.main.head;
+  const line = view.state.doc.lineAt(from);
+  if (!item.edit && item.wholeLine && !view.state.sliceDoc(to, line.to).trim()) {
+    from = line.from + view.state.sliceDoc(line.from, from).trimEnd().length;
+  }
   const spec = item.edit ? item.edit(view.state, from, to) : { changes: { from, to, insert: "" }, selection: { anchor: from } };
   view.dispatch({ ...spec, effects: closeMenu.of(null), userEvent: "input.complete", scrollIntoView: true });
   item.run?.(view);
@@ -248,7 +255,14 @@ class SlashMenu implements TooltipView {
         return row;
       }),
     );
-    this.dom.querySelector(".selected")?.scrollIntoView({ block: "nearest" });
+    // The chosen item in sight, inside the menu only (never the note behind it).
+    const sel = this.dom.querySelector<HTMLElement>(".selected");
+    if (sel) {
+      const top = sel.offsetTop;
+      const bottom = top + sel.offsetHeight;
+      if (top < this.dom.scrollTop) this.dom.scrollTop = top;
+      else if (bottom > this.dom.scrollTop + this.dom.clientHeight) this.dom.scrollTop = bottom - this.dom.clientHeight;
+    }
   }
 }
 
@@ -288,9 +302,11 @@ const slashKeys = Prec.highest(
     {
       key: "Escape",
       run: (view) => {
-        if (!view.state.field(slashField, false)) return false;
+        const s = view.state.field(slashField, false);
+        if (!s) return false;
         view.dispatch({ effects: closeMenu.of(null) });
-        return true;
+        // A menu that showed nothing (no match) does not take the key.
+        return matching(view.state, s).length > 0;
       },
     },
   ]),
@@ -309,6 +325,11 @@ const closeOnBlur = EditorView.domEventHandlers({
 /** Quick inserts after "/" (the `slash_commands` setting), in notes only. */
 export function slashCommands(on: boolean): Extension {
   return on ? [slashField, slashKeys, closeOnBlur] : [];
+}
+
+/** Closes the menu (the note is left for another tab: it must not come back open). */
+export function closeSlashMenu(view: EditorView) {
+  if (view.state.field(slashField, false)) view.dispatch({ effects: closeMenu.of(null) });
 }
 
 /** Opens the menu at the cursor, as if "/" had been typed (tests, and the command). */

@@ -68,7 +68,15 @@ describe("a plain note on paper", () => {
     expect(root.textContent).toContain("the other");
   });
 
+  it("keeps a code block as written, blank lines included", async () => {
+    const root = await paper("before\n```\n\n  x = 1\n\n```\nafter");
+    expect(root.querySelector("pre")?.textContent).toBe("\n  x = 1\n");
+    expect(root.textContent).toContain("after");
+  });
+
   it("puts images in when they can be read, their description otherwise", async () => {
+    const two = await paper("![first](a.png) ![second](<b c.png>)", "text", { image: async () => null });
+    expect(two.textContent).toBe("[first][second]");
     const withImage = await paper("![shot](images/a.png)", "text", { image: async () => "data:image/png;base64,AAAA" });
     expect(withImage.querySelector("img")?.getAttribute("src")).toBe("data:image/png;base64,AAAA");
     const without = await paper("![shot](images/a.png)", "text", { image: async () => null });

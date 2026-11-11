@@ -7,7 +7,7 @@ import { DEFAULT_SETTINGS } from "../core/settings";
 import { makeTaskConfig } from "../text/tasks";
 import { isoDate } from "../text/templates";
 import { codeDocFacet, plainNotesFacet, taskConfigFacet } from "./decorations";
-import { setSlashHost, slashCommands, slashMenu } from "./slash";
+import { closeSlashMenu, setSlashHost, slashCommands, slashMenu } from "./slash";
 
 const taskCfg = makeTaskConfig({
   statuses: DEFAULT_SETTINGS.task_statuses, cycle: DEFAULT_SETTINGS.task_cycle, done: DEFAULT_SETTINGS.task_done_statuses,
@@ -21,14 +21,14 @@ afterEach(() => {
   setSlashHost(() => []);
 });
 
-function editor(doc = "", opts: { markdown?: boolean; code?: boolean; on?: boolean } = {}) {
+function editor(doc = "", opts: { markdown?: boolean; code?: boolean; on?: boolean; cfg?: typeof taskCfg } = {}) {
   view = new EditorView({
     parent: document.body,
     state: EditorState.create({
       doc,
       selection: { anchor: doc.length },
       extensions: [
-        taskConfigFacet.of(taskCfg),
+        taskConfigFacet.of(opts.cfg ?? taskCfg),
         plainNotesFacet.of(!opts.markdown),
         codeDocFacet.of(!!opts.code),
         slashCommands(opts.on ?? true),
@@ -148,11 +148,44 @@ describe("quick inserts after /", () => {
 
   it("offers the app's items, which run once /name is gone", () => {
     const run = vi.fn();
-    setSlashHost(() => [{ name: "link", label: "Link to a note…", run }]);
+    setSlashHost(() => [
+      { name: "link", label: "Link to a note…", run },
+      { name: "due", label: "Due date…", run, wholeLine: true },
+    ]);
     const v = editor("see ");
     type(v, "/lin");
     press(v, "Enter");
     expect(text(v)).toBe("see ");
     expect(run).toHaveBeenCalledOnce();
+    // An item for the whole line takes the space typed before "/" too.
+    const due = editor("- send it - todo ");
+    type(due, "/due");
+    press(due, "Enter");
+    expect(text(due)).toBe("- send it - todo");
+  });
+
+  it("a status with a space is typed with a dash", () => {
+    const cfg = makeTaskConfig({ statuses: { todo: "blue", "in progress": "orange", done: "green" }, cycle: ["todo", "in progress", "done"], done: ["done"], archiveStatus: "done", archiveDate: false });
+    const v = editor("write it ", { cfg });
+    type(v, "/in-pro");
+    expect(names(v)![0]).toBe("in-progress");
+    press(v, "Enter");
+    expect(text(v)).toBe("- write it - in progress");
+  });
+
+  it("a menu with nothing to offer lets Escape through, and closes", () => {
+    const v = editor("");
+    type(v, "/zzzz");
+    expect(slashMenu(v.state)?.items).toEqual([]);
+    expect(press(v, "Escape")).toBe(false);
+    expect(slashMenu(v.state)).toBeNull();
+  });
+
+  it("closes for good when the note is left", () => {
+    const v = editor("");
+    type(v, "/to");
+    closeSlashMenu(v);
+    expect(slashMenu(v.state)).toBeNull();
+    expect(text(v)).toBe("/to");
   });
 });
