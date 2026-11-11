@@ -945,3 +945,89 @@ body.resizing .pv-frame { pointer-events: none; }
 .kn-secret-ask .kn-check input { accent-color: var(--kn-accent); margin: 0; }
 .kn-modal:has(.kn-secret-show) { width: min(600px, 92vw); }
 .kn-secret-text { width: 100%; height: auto; min-height: 80px; padding: 8px 10px; resize: vertical; font-family: var(--kn-font); line-height: 1.5; }
+
+/* ------------------------------------------------------------------ Kilo, the assistant */
+
+/* In the bottom right corner of the editor (left of the scrollbar), never in the way of a click elsewhere. */
+.kn-kilo {
+  position: absolute; right: 20px; bottom: 6px; z-index: 6;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 4px; pointer-events: none;
+}
+body.zen .kn-kilo { display: none; }
+/* 40×40 drawn pixels at 2 screen pixels each: crisp; every move is a whole number of pixels. */
+.kn-kilo-body {
+  width: 80px; height: 80px; margin: -4px -6px -14px 0; pointer-events: auto; cursor: pointer;
+  opacity: 0.92; transition: opacity 0.35s;
+  filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.14));
+  animation: kilo-idle 9s steps(1) infinite;
+}
+.kn-kilo-body:hover { opacity: 1; }
+.kn-kilo-body svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.kn-kilo .kilo-mouth, .kn-kilo .kilo-pencil { transform-box: fill-box; }
+@keyframes kilo-idle {
+  0%, 88%, 100% { transform: translateY(0); }
+  90%, 94% { transform: translateY(-4px); }
+  92% { transform: translateY(-8px); }
+}
+
+/* Writing along while you type: faded, his pencil busy. */
+.kn-kilo.writing .kn-kilo-body { opacity: 0.4; animation: none; }
+.kn-kilo.writing .kilo-pencil { transform-origin: 50% 100%; animation: kilo-write 0.3s steps(1) infinite; }
+@keyframes kilo-write { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(-1px, 1px) rotate(-10deg); } }
+
+/* Talking: his mouth opens and closes, a little hop. */
+.kn-kilo.talking .kn-kilo-body { opacity: 1; animation: kilo-hop2 0.7s steps(1) 1; }
+.kn-kilo.talking .kilo-mouth { transform-origin: 50% 0; animation: kilo-talk 0.26s steps(1) 6; }
+@keyframes kilo-talk { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(2.4); } }
+@keyframes kilo-hop2 { 0%, 100% { transform: translateY(0); } 20%, 60% { transform: translateY(-4px); } 40% { transform: translateY(-8px); } }
+
+/* Hello: a wiggle when he arrives. */
+.kn-kilo.hello .kn-kilo-body { animation: kilo-hello 1.1s steps(1) 1; }
+@keyframes kilo-hello {
+  0%, 100% { transform: rotate(0); } 15%, 55% { transform: rotate(-6deg) translateY(-2px); }
+  35%, 75% { transform: rotate(6deg) translateY(-2px); }
+}
+
+/* A task done: two jumps, and sparkles. */
+.kn-kilo.cheer .kn-kilo-body { opacity: 1; animation: kilo-cheer 1s steps(1) 1; }
+@keyframes kilo-cheer {
+  0%, 100% { transform: translateY(0); } 10%, 30% { transform: translateY(-8px); } 20% { transform: translateY(-14px); }
+  40% { transform: translateY(0); } 50%, 70% { transform: translateY(-6px); } 60% { transform: translateY(-10px); }
+}
+.kn-kilo.cheer::after {
+  content: ""; position: absolute; right: 38px; bottom: 74px; width: 4px; height: 4px; pointer-events: none;
+  background: transparent; animation: kilo-sparkle 1s steps(4) 1 forwards;
+  box-shadow: -26px 6px 0 var(--kn-yellow), 26px 2px 0 var(--kn-accent), -14px -14px 0 var(--kn-green), 16px -12px 0 var(--kn-pink), 0 -22px 0 var(--kn-yellow);
+}
+@keyframes kilo-sparkle { 0% { opacity: 1; transform: scale(0.6); } 60% { opacity: 1; transform: scale(1.4); } 100% { opacity: 0; transform: scale(1.8); } }
+
+/* Asleep after a long time without anything happening: eyes closed, breathing, a few z. */
+.kn-kilo.sleeping .kn-kilo-body { opacity: 0.75; animation: kilo-breathe 3.2s steps(1) infinite; }
+.kn-kilo.sleeping .kilo-eyes { animation: none; transform: scaleY(0.12); }
+@keyframes kilo-breathe { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(2px); } }
+.kn-kilo-zz {
+  position: absolute; right: 8px; bottom: 70px; display: none; pointer-events: none;
+  font: 700 13px var(--kn-font); color: var(--kn-fg-muted);
+}
+.kn-kilo.sleeping .kn-kilo-zz { display: block; animation: kilo-zz 3.2s steps(8) infinite; }
+@keyframes kilo-zz { 0% { opacity: 0; transform: translate(0, 0); } 30% { opacity: 1; } 100% { opacity: 0; transform: translate(10px, -22px); } }
+
+/* His speech bubble, above him. */
+.kn-kilo-bubble {
+  position: relative; width: min(345px, 72vw); margin-right: 8px; padding: 10px 12px 8px;
+  pointer-events: auto; background: var(--kn-bg-alt); color: var(--kn-fg);
+  border: 1px solid color-mix(in srgb, var(--kn-accent) 45%, var(--kn-border)); border-radius: 10px;
+  box-shadow: var(--shadow); font-family: var(--kn-ui-font); font-size: calc(var(--kn-ui-size) - 0.5px); line-height: 1.45;
+  animation: pop 140ms var(--ease);
+}
+.kn-kilo-bubble::after {
+  content: ""; position: absolute; right: 34px; bottom: -6px; width: 10px; height: 10px; transform: rotate(45deg);
+  background: var(--kn-bg-alt); border-right: 1px solid color-mix(in srgb, var(--kn-accent) 45%, var(--kn-border));
+  border-bottom: 1px solid color-mix(in srgb, var(--kn-accent) 45%, var(--kn-border));
+}
+.kn-kilo-bubble[hidden] { display: none; }
+.kn-kilo-text strong { color: var(--kn-accent); }
+.kn-kilo-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 9px; }
+.kn-kilo-actions .kn-btn { height: 26px; padding: 0 10px; font-size: calc(var(--kn-ui-size) - 1px); white-space: nowrap; }
+.kn-kilo-never { margin-right: auto; padding: 0; white-space: nowrap; color: var(--kn-fg-faint); font-size: calc(var(--kn-ui-size) - 2px); text-decoration: underline; text-underline-offset: 2px; }
+.kn-kilo-never:hover { color: var(--kn-fg-muted); }

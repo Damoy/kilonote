@@ -175,6 +175,10 @@ npx tauri build --no-bundle
   command that only writes image types, only to a new file (never over an existing
   one), in the images folder next to the note. Unused images are only moved to the
   system trash (recoverable), after a confirmation that lists them.
+- Kilo, the assistant (a setting, on by default): its hints come from fixed rules run in
+  the page on the note being edited (the cursor's line, the tasks); nothing is sent
+  anywhere, and the only thing kept is the list of hints turned off (in the web view's
+  local storage).
 - Secrets in notes ("Edit: Encrypt selection with a password"): the selected text is
   encrypted in the page with the browser engine's Web Crypto API (AES-256-GCM, key
   stretched from the password with PBKDF2-SHA-256, 600 000 rounds, random salt and nonce

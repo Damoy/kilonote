@@ -30,7 +30,7 @@ import { Sidebar } from "../ui/sidebar";
 import { StatusBar } from "../ui/statusbar";
 import { Welcome } from "../ui/welcome";
 import { Preview } from "../ui/views/preview";
-import { openCheatSheet, openSettingsView } from "../ui/lazy";
+import { openCheatSheet, openSettingsView, syncAssistant } from "../ui/lazy";
 import { setIconPack, type IconPack } from "../ui/icons";
 import { historyDir, historyName, keepVersion } from "./history";
 import { beforeClose, restoreOtherWindows, restoreSession, saveSessionNow, sessionFileName, sessionTab, type SessionTab } from "./session";
@@ -175,6 +175,7 @@ export class App {
       // Browser demo: the main window opens the demo folder.
       if (startup.length && !this.workspace) await this.openFolder(startup[0]);
     } else if (startup.length) await this.openPaths(startup);
+    this.on("settings", () => syncAssistant(this));
     this.renderAll();
     if (this.backend.windowLabel === "main") {
       void restoreOtherWindows(this);

@@ -41,6 +41,7 @@ export interface Settings {
   mascot: string;
   icon_pack: string;
   show_shortcuts_at_startup: boolean;
+  assistant: boolean;
   keybindings: Record<string, string>;
 }
 
@@ -61,6 +62,9 @@ export const SETTINGS_TEMPLATE = `// KiloNote settings
   "icon_pack": "line",
   // Show the keyboard shortcuts cheat sheet when KiloNote starts
   "show_shortcuts_at_startup": true,
+  // Kilo, the assistant: in a corner of the editor, hints about what you are writing
+  // and tips, once the typing pauses (read on this computer only)
+  "assistant": true,
   // Custom accent color (e.g. "#ff8a65"), or null to use the theme's
   "accent": null,
   // Override any theme color. Available keys:

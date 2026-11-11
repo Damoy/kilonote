@@ -15,3 +15,10 @@ export function openBoard(app: App): Promise<void> {
 export function openSettingsView(app: App, section?: SettingsSection): Promise<void> {
   return import("./settings-view").then((m) => m.showSettingsView(app, section));
 }
+
+/** Kilo the assistant, as the settings say (his code is loaded only when he is on). */
+let assistant: Promise<typeof import("./assistant")> | null = null;
+export function syncAssistant(app: App): void {
+  if (!app.settings.assistant && !assistant) return;
+  void (assistant ??= import("./assistant")).then((m) => m.syncAssistant(app));
+}

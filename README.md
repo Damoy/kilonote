@@ -87,6 +87,12 @@ open it as a folder and follow its `README.md`.
   matches as you type: "3 of 12"
 - **Marks along the scrollbar**: the headings and the open tasks of the note (in their status
   color), the other occurrences of the selection and the search matches
+- **Kilo, the assistant**: the mascot sits in a corner of the editor and, once the typing
+  pauses, offers a hint about what you are writing (a private line to encrypt, a list item
+  that could be a task, a date that could be its due date, a note to link…) or a tip when
+  clicked. Each hint once, never while typing, dismissable for good; he blinks, writes along,
+  cheers when a task is done and dozes off. Read on your computer only; off in Settings →
+  Appearance, or *Hide Kilo* in his menu (right-click)
 - **Secrets**: *Edit: Encrypt selection with a password* turns a private line (an access, a
   password…) into an encrypted block of the note, shown as a 🔒 *Secret* box: click it and
   type the password to see, copy or change it (AES-256-GCM, never stored in clear)

@@ -120,6 +120,15 @@ into the images folder under their own name, or just referenced if they already 
 in the note's folder. Command palette → "File: Delete unused images…" moves the
 images that no note shows any more to the system trash, after listing them.
 
+## Kilo, the assistant
+
+Kilo sits in the bottom right corner of the editor. When you pause, he may offer a
+hint about what you are writing: a private line he can encrypt, a list item that could
+be a task, a date that could be its due date, the name of a note you could link… Each
+hint comes once, never while you type; "Don't show again" turns one off for good.
+Click Kilo for a tip about KiloNote; right-click him for his menu ("Hide Kilo").
+He only reads the note on your computer. Settings → Appearance turns him off or on.
+
 ## Secrets
 
 Select a private piece of a note (an access, a password…), then command palette →

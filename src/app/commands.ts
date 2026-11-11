@@ -141,6 +141,7 @@ export function registerAllCommands(app: App) {
     { id: "view.files", title: "View: File explorer", run: () => app.sidebar.show("files") },
     { id: "view.tasks", title: "View: Folder tasks", run: () => app.sidebar.show("tasks") },
     { id: "view.board", title: "View: Task board", run: () => openBoard(app) },
+    { id: "view.assistant", title: "View: Kilo, the assistant (show / hide)", run: () => app.updateSetting("assistant", !app.settings.assistant) },
     { id: "view.search", title: "View: Search in files", run: () => app.sidebar.show("search") },
     { id: "view.zen", title: "View: Zen mode", run: () => app.setZen(!app.zen) },
     { id: "view.fullscreen", title: "View: Full screen", run: () => app.backend.toggleFullscreen() },

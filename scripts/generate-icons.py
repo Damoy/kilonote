@@ -259,11 +259,14 @@ def ico_bytes(images: list[tuple[int, bytes]]) -> bytes:
 THEMABLE = {"P": "kb", "p": "kbs", "L": "kbh"}
 
 
-def svg(rows: list[str], label: str, palette: dict = PALETTE, eyes_class: str | None = None, themable: bool = False) -> str:
+def svg(rows: list[str], label: str, palette: dict = PALETTE, eyes_class: str | None = None, themable: bool = False,
+        groups: dict[str, str] | None = None) -> str:
     """One <rect> per horizontal run of same-colored pixels, crisp rendering.
 
     With `eyes_class`, the eye pixels ("E") are grouped so that CSS can
     animate them (blinking). With `themable`, body colors carry a class.
+    `groups` puts the pixels of some colors in a group of their own ({class:
+    colors}), for CSS to animate (Kilo's mouth, his pencil).
     """
     w = len(rows[0])
     by_color: dict[str, list[str]] = {}
@@ -283,11 +286,19 @@ def svg(rows: list[str], label: str, palette: dict = PALETTE, eyes_class: str | 
                     by_color.setdefault(ch, []).append(rect + "/>")
             x += run
     parts = []
+    grouped: dict[str, list[str]] = {}
+    owner = {ch: cls for cls, chars in (groups or {}).items() for ch in chars}
     for ch, rects in by_color.items():
         cls = f' class="{THEMABLE[ch]}"' if themable and ch in THEMABLE else ""
         color = palette[ch]
         opacity = f' fill-opacity="{color[3] / 255:.2f}"' if len(color) == 4 else ""  # type: ignore[arg-type]
-        parts.append(f'<g{cls} fill="{hexa(ch, palette)}"{opacity}>{"".join(rects)}</g>')
+        part = f'<g{cls} fill="{hexa(ch, palette)}"{opacity}>{"".join(rects)}</g>'
+        if ch in owner:
+            grouped.setdefault(owner[ch], []).append(part)
+        else:
+            parts.append(part)
+    for cls, inner in grouped.items():
+        parts.append(f'<g class="{cls}">{"".join(inner)}</g>')
     if eyes:
         parts.append(f'<g class="{eyes_class}">{"".join(eyes)}</g>')
     h = len(rows)
@@ -429,7 +440,9 @@ def main() -> None:
     (ROOT / "docs").mkdir(exist_ok=True)
     (ROOT / "docs" / "kilo-1024.png").write_bytes(pngs[1024])
     # The in-app mascot stays classic: the app recolors it (theme accent or chosen variant).
-    (ROOT / "src" / "assets" / "kilo.svg").write_text(svg(mascot, "Kilo, the KiloNote mascot", eyes_class="kilo-eyes", themable=True))
+    (ROOT / "src" / "assets" / "kilo.svg").write_text(
+        svg(mascot, "Kilo, the KiloNote mascot", eyes_class="kilo-eyes", themable=True, groups={"kilo-mouth": "M", "kilo-pencil": "YyRTQ"})
+    )
     logo_pack(icon32, icon24, icon16, mascot)
 
     # `tauri icon` makes the macOS and store images from the largest size; then

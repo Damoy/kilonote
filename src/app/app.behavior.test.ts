@@ -796,3 +796,16 @@ describe("tabs restored from the session", () => {
   });
 });
 
+describe("Kilo, the assistant", () => {
+  it("is in a corner of the editor, and leaves when the setting is turned off", async () => {
+    const { app } = await start({ "/notes/a.txt": "text" });
+    await app.openFile("/notes/a.txt");
+    await vi.waitFor(() => expect(document.querySelector("#editor-host .kn-kilo .kn-kilo-body svg")).not.toBeNull());
+    await app.updateSetting("assistant", false);
+    await vi.waitFor(() => expect(document.querySelector(".kn-kilo")).toBeNull());
+    await app.updateSetting("assistant", true);
+    await vi.waitFor(() => expect(document.querySelectorAll(".kn-kilo")).toHaveLength(1));
+    await app.updateSetting("assistant", false);
+  });
+});
+
