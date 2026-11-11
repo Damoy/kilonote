@@ -53,3 +53,18 @@ describe("links between notes", () => {
     expect(linkName("/n/projects/alpha/plan.txt", "/n", NOTES, isNote)).toBe("plan");
   });
 });
+
+describe("links between notes, with Windows paths", () => {
+  const WIN = ["C:\\Notes\\Work.txt", "C:\\Notes\\projects\\Report.txt", "C:\\Notes\\archive\\work.txt"];
+  const isNoteW = (p: string) => /\.(txt|md)$/i.test(p) || !/\.[a-z0-9]+$/i.test(p.split(/[\\/]/).pop()!);
+
+  it("point to the right note, in any case and with either slash", () => {
+    expect(resolveNoteLink("work", "C:\\Notes\\projects\\Report.txt", WIN, isNoteW)).toBe("C:\\Notes\\Work.txt");
+    expect(resolveNoteLink("projects/report", "C:\\Notes\\Work.txt", WIN, isNoteW)).toBe("C:\\Notes\\projects\\Report.txt");
+    expect(resolveNoteLink("projects\\REPORT", "C:\\Notes\\Work.txt", WIN, isNoteW)).toBe("C:\\Notes\\projects\\Report.txt");
+    expect(resolveNoteLink("work", "C:\\Notes\\archive\\x.txt", WIN, isNoteW)).toBe("C:\\Notes\\archive\\work.txt");
+    expect(resolveNoteLink("..\\Work", "C:\\Notes\\projects\\Report.txt", WIN, isNoteW)).toBeNull();
+    expect(linkName("C:\\Notes\\projects\\Report.txt", "C:\\Notes", WIN, isNoteW)).toBe("Report");
+    expect(linkName("C:\\Notes\\Work.txt", "C:\\Notes", WIN, isNoteW)).toBe("Work");
+  });
+});
