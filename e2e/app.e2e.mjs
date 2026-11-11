@@ -250,7 +250,7 @@ try {
   });
 
   await test("the selected text and the search are counted in the whole note", async () => {
-    writeFileSync(join(notes, "count.txt"), `-- Stockviz\n${"filler\n".repeat(300)}-- Stockviz\n`);
+    writeFileSync(join(notes, "count.txt"), `-- Bluebird\n${"filler\n".repeat(300)}-- Bluebird\n`);
     await run(`await app.openFile(args[0]); app.focusEditor();
       const l = app.view.state.doc.line(1); app.view.dispatch({ selection: { anchor: l.from, head: l.to } });`, join(notes, "count.txt"));
     await until(() => run("return document.querySelector('.st-occ')?.textContent === '2 occurrences';"), "the count in the status bar");

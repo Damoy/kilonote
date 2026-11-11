@@ -47,7 +47,7 @@ describe("Kilo's hints", () => {
     expect(ids(ctx({ line: "developer notes_devices", notes: ["notes_dev"] }))).not.toContain("link-note");
     // Everyday words are not taken for links (a note called "work"), distinctive names are.
     expect(ids(ctx({ line: "back to work tomorrow", notes: ["work"] }))).not.toContain("link-note");
-    expect(ids(ctx({ line: "check Stockviz first", notes: ["Stockviz"] }))).toContain("link-note");
+    expect(ids(ctx({ line: "check Bluebird first", notes: ["Bluebird"] }))).toContain("link-note");
   });
 
   it("read the note: late tasks, done tasks to archive, a long note without headings", () => {

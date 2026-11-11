@@ -7,7 +7,7 @@ import { getSearchQuery } from "@codemirror/search";
 import { scrollbarMarks } from "./ruler";
 import { countLabel, goToOccurrence, MAX_MATCHES, matchesInNote, occurrences, openFind, searchCount, searchMatches, selectedText } from "./matches";
 
-const NOTE = "-- Stockviz\nssh host\n-- Stockviz\nnotes about Stockviz\n-- Stockviz\n";
+const NOTE = "-- Bluebird\nssh host\n-- Bluebird\nnotes about Bluebird\n-- Bluebird\n";
 const select = (doc: string, from: number, to: number) => EditorState.create({ doc, selection: EditorSelection.single(from, to) });
 
 let views: EditorView[] = [];
@@ -30,18 +30,18 @@ describe("the other occurrences of the selected text", () => {
     expect(m.from).toEqual([0, 21, 54]);
     expect(countLabel(m)).toBe("3");
     expect(occurrences(select(NOTE, 12, 15))!.from).toEqual([12]); // "ssh": only here
-    expect(occurrences(select(NOTE, 3, 11))!.from).toHaveLength(4); // "Stockviz", case and all
+    expect(occurrences(select(NOTE, 3, 11))!.from).toHaveLength(4); // "Bluebird", case and all
   });
 
   it("are looked for only for a real selection", () => {
     expect(occurrences(select(NOTE, 4, 4))).toBeNull();
     expect(selectedText(select("a   b", 1, 4))).toBeNull(); // only spaces
     // A whole line selected from its number: its line break is left out.
-    expect(selectedText(select(NOTE, 0, 12))).toBe("-- Stockviz");
+    expect(selectedText(select(NOTE, 0, 12))).toBe("-- Bluebird");
     expect(occurrences(select(NOTE, 0, 12))!.from).toHaveLength(3);
     // Several selections of the same text (Ctrl+D…), but not of different texts.
     const same = EditorState.create({ doc: NOTE, selection: EditorSelection.create([EditorSelection.range(0, 11), EditorSelection.range(21, 32)]), extensions: EditorState.allowMultipleSelections.of(true) });
-    expect(selectedText(same)).toBe("-- Stockviz");
+    expect(selectedText(same)).toBe("-- Bluebird");
     const different = EditorState.create({ doc: NOTE, selection: EditorSelection.create([EditorSelection.range(0, 11), EditorSelection.range(12, 15)]), extensions: EditorState.allowMultipleSelections.of(true) });
     expect(selectedText(different)).toBeNull();
   });
@@ -61,14 +61,14 @@ describe("the other occurrences of the selected text", () => {
     expect(at()).toBe(0);
     goToOccurrence(view, false);
     expect(at()).toBe(54);
-    expect(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)).toBe("-- Stockviz");
+    expect(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)).toBe("-- Bluebird");
     view.dispatch({ selection: { anchor: 12, head: 15 } });
     expect(goToOccurrence(view, true)).toBe(false); // nowhere else
   });
 
   it("are highlighted and marked along the scrollbar", async () => {
     const view = open(NOTE, 0, 11);
-    expect([...view.dom.querySelectorAll(".cm-selectionMatch")].map((e) => e.textContent)).toEqual(["-- Stockviz", "-- Stockviz"]);
+    expect([...view.dom.querySelectorAll(".cm-selectionMatch")].map((e) => e.textContent)).toEqual(["-- Bluebird", "-- Bluebird"]);
     await vi.waitFor(() => expect(view.dom.querySelectorAll(".cm-ruler i.occ").length).toBeGreaterThan(0));
     view.dispatch({ selection: { anchor: 12, head: 15 } });
     expect(view.dom.querySelectorAll(".cm-selectionMatch")).toHaveLength(0);
@@ -84,9 +84,9 @@ describe("the search panel's count", () => {
     const view = open(NOTE);
     expect(searchMatches(view.state)).toBeNull(); // panel closed
     openSearchPanel(view);
-    find(view, { search: "stockviz" });
+    find(view, { search: "bluebird" });
     expect(searchCount(view.state)).toBe("4 matches");
-    find(view, { search: "stockviz", caseSensitive: true });
+    find(view, { search: "bluebird", caseSensitive: true });
     expect(searchCount(view.state)).toBe("no results");
     find(view, { search: "^-- \\w+$", regexp: true });
     expect(searchCount(view.state)).toBe("3 matches");
@@ -101,7 +101,7 @@ describe("the search panel's count", () => {
   it("looks for a whole line selected from its number without its line break", () => {
     const view = open(NOTE, 21, 33);
     openFind(view);
-    expect(getSearchQuery(view.state).search).toBe("-- Stockviz");
+    expect(getSearchQuery(view.state).search).toBe("-- Bluebird");
     expect(searchCount(view.state)).toBe("3 matches");
     view.dispatch({ selection: { anchor: 12, head: 15 } });
     openFind(view);
@@ -111,14 +111,14 @@ describe("the search panel's count", () => {
   it("says which match is selected, next to the field", async () => {
     const view = open(NOTE);
     openSearchPanel(view);
-    find(view, { search: "-- Stockviz" });
+    find(view, { search: "-- Bluebird" });
     view.dispatch({ selection: { anchor: 21, head: 32 } });
     expect(searchCount(view.state)).toBe("2 of 3");
     await vi.waitFor(() => expect(view.dom.querySelector(".cm-search [main-field] + .cm-search-count")?.textContent).toBe("2 of 3"));
     const label = view.dom.querySelector(".cm-search [main-field] + .cm-search-count");
     await vi.waitFor(() => expect(view.dom.querySelectorAll(".cm-ruler i.found.current")).toHaveLength(1));
     // Edited meanwhile: counted again.
-    view.dispatch({ changes: { from: view.state.doc.length, insert: "-- Stockviz\n" } });
+    view.dispatch({ changes: { from: view.state.doc.length, insert: "-- Bluebird\n" } });
     await vi.waitFor(() => expect(label?.textContent).toBe("2 of 4"));
     find(view, { search: "nowhere" });
     await vi.waitFor(() => expect(label?.textContent).toBe("no results"));
