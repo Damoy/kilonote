@@ -25,6 +25,8 @@ describe("links between notes", () => {
     expect(go("plan")).toBe("/n/projects/alpha/plan.txt");
     expect(go("missing")).toBeNull();
     expect(go("ework")).toBeNull(); // not a part of "homework"
+    expect(go("projects/report#Goals")).toBe("/n/projects/report.txt");
+    expect(go("#Goals")).toBe("/n/work.txt"); // a heading of the same note
   });
 
   it("never point outside the folder", () => {

@@ -5,7 +5,7 @@
 import { fuzzyFilter } from "../core/fuzzy";
 import { dirname, extname, join, relative } from "../core/path";
 import { editorHooks } from "../editor/decorations";
-import { isSafeTarget, linkName, linksTo, resolveNoteLink } from "../text/links";
+import { isSafeTarget, linkName, linksTo, resolveNoteLink, splitLink } from "../text/links";
 import { confirm, toast } from "../ui/overlay";
 import { openPicker } from "../ui/palette";
 import type { App } from "./app";
@@ -22,17 +22,20 @@ async function linkableNotes(app: App): Promise<string[]> {
 const isNote = (app: App) => (p: string) => app.isNoteFile(p);
 
 /** Ctrl+click on `[[target]]`: opens the note, or offers to create it next to the active one. */
-export async function openNoteLink(app: App, target: string): Promise<void> {
+export async function openNoteLink(app: App, link: string): Promise<void> {
   const from = app.active?.path ?? null;
-  if (!isSafeTarget(target)) {
+  const { note: target, heading } = splitLink(link);
+  if (target && !isSafeTarget(target)) {
     toast(`"${target}" is not a note of this folder.`, { kind: "error" });
     return;
   }
-  const found = resolveNoteLink(target, from, await linkableNotes(app), isNote(app));
+  const found = resolveNoteLink(link, from, await linkableNotes(app), isNote(app));
   if (found) {
-    await app.openFile(found);
+    const doc = await app.openFile(found);
+    if (doc && heading) goToHeading(app, heading);
     return;
   }
+  if (!target) return;
   const base = from ? dirname(from) : app.workspace;
   if (!base) {
     toast("Save this note first: a linked note is created next to it.");
@@ -52,6 +55,17 @@ export async function openNoteLink(app: App, target: string): Promise<void> {
   await app.refreshWorkspaceFiles();
   app.sidebar.refreshTree();
   await app.openFile(path);
+}
+
+/** Shows the heading `# text` of the active note (the first one with that text, in any case). */
+function goToHeading(app: App, heading: string) {
+  const doc = app.active;
+  if (!doc) return;
+  const wanted = heading.toLowerCase();
+  const lines = app.view.state.doc.toString().split("\n");
+  const i = lines.findIndex((l) => /^#{1,6}\s/.test(l) && l.replace(/^#{1,6}\s+/, "").trim().toLowerCase() === wanted);
+  if (i >= 0) app.reveal(doc, i + 1);
+  else toast(`No heading "${heading}" in this note.`);
 }
 
 /** Picks a note of the folder; `insert` receives how to write a link to it. */

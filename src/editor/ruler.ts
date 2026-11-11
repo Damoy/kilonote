@@ -22,6 +22,8 @@ export interface Landmark {
 const MAX_LINES = 200_000;
 const HEADING = /^#{1,6}\s+\S/;
 const FENCE = /^\s*(```|~~~)/;
+/** A task has " - status" at its end: lines without a dash and a space are skipped quickly. */
+const TASK_HINT = /[-–—]\s/;
 
 /** The headings (`# Title`) and the tasks not done yet, outside code blocks. */
 export function landmarks(doc: Text, cfg: TaskConfig): Landmark[] {
@@ -34,7 +36,7 @@ export function landmarks(doc: Text, cfg: TaskConfig): Landmark[] {
     if (FENCE.test(text)) code = !code;
     else if (!code && text) {
       if (text[0] === "#" && HEADING.test(text)) out.push({ pos, kind: "heading" });
-      else if (text.length > 4) {
+      else if (text.length > 4 && TASK_HINT.test(text)) {
         const task = parseTask(text, cfg);
         if (task && !isDoneStatus(task.key, cfg)) out.push({ pos, kind: "task", color: resolveColor(cfg.statuses[task.key]) });
       }

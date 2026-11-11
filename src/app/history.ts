@@ -3,6 +3,7 @@
 
 import { basename, isWindowsPath, join } from "../core/path";
 import { fuzzyFilter } from "../core/fuzzy";
+import { secretLines, SECRET_BEGIN } from "../text/secrets";
 import { toast } from "../ui/overlay";
 import { openPicker } from "../ui/palette";
 import type { App, Doc } from "./app";
@@ -82,9 +83,12 @@ export async function replaceInFiles(app: App, paths: string[], re: RegExp, repl
     }
     let n = 0;
     const eol = original.includes("\r\n") ? "\r\n" : "\n";
-    const next = original
-      .split(/\r\n|\r|\n/)
-      .map((line) => {
+    const lines = original.split(/\r\n|\r|\n/);
+    // The encrypted text of a secret is never changed: it would not open any more.
+    const secret = original.includes(SECRET_BEGIN) ? secretLines(lines) : null;
+    const next = lines
+      .map((line, i) => {
+        if (secret?.has(i)) return line;
         for (const m of line.matchAll(global)) if (m[0].length) n++;
         return literal ? line.replace(global, () => replacement) : line.replace(global, replacement);
       })

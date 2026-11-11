@@ -1,8 +1,8 @@
-// Links between notes: `[[work]]`, `[[projects/report]]`, `[[report.md]]` or
-// `[[work|the work note]]`: the name of another note of the folder, its
-// extension optional. A link points to the note next to the one that holds it
-// first, otherwise to the note with that name elsewhere in the folder (the
-// shortest path wins).
+// Links between notes: `[[work]]`, `[[projects/report]]`, `[[report.md]]`,
+// `[[work#Today]]` (a heading of it) or `[[work|the work note]]`: the name of
+// another note of the folder, its extension optional. A link points to the note
+// next to the one that holds it first, otherwise to the note with that name
+// elsewhere in the folder (the shortest path wins).
 
 import { dirname, extname, isWindowsPath, pathKey } from "../core/path";
 
@@ -22,6 +22,13 @@ export function noteLinks(line: string): NoteLink[] {
   return [...line.matchAll(LINK)].map((m) => ({ target: m[1].trim(), from: m.index, to: m.index + m[0].length }));
 }
 
+/** `report#Goals` → the note `report` and its heading `Goals` (`#Goals` alone: a heading of the same note). */
+export function splitLink(target: string): { note: string; heading: string | null } {
+  const i = target.indexOf("#");
+  if (i < 0) return { note: target.trim(), heading: null };
+  return { note: target.slice(0, i).trim(), heading: target.slice(i + 1).trim() || null };
+}
+
 /** A target that stays in the folder: no absolute path, no `..`. */
 export function isSafeTarget(target: string): boolean {
   return !!target && !isWindowsPath(target) && !/^[\\/]/.test(target) && !/(^|[\\/])\.\.([\\/]|$)/.test(target) && !/[:*?"<>|]/.test(target);
@@ -39,8 +46,10 @@ function withoutExt(p: string, isNote: (p: string) => boolean): string {
  * (the shortest path, then in alphabetical order).
  */
 export function resolveNoteLink(target: string, fromNote: string | null, notes: string[], isNote: (p: string) => boolean): string | null {
-  if (!isSafeTarget(target)) return null;
-  const t = target.replace(/\\/g, "/").replace(/^\.\//, "");
+  const { note } = splitLink(target);
+  if (!note) return fromNote; // [[#heading]]: the same note
+  if (!isSafeTarget(note)) return null;
+  const t = note.replace(/\\/g, "/").replace(/^\.\//, "");
   const hasExt = isNote(t) && !!extname(t);
   const key = (p: string) => pathKey(hasExt ? p : withoutExt(p, isNote));
   const wanted = key("/" + t);

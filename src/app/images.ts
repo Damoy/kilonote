@@ -159,7 +159,7 @@ export async function dropImages(app: App, view: EditorView, files: File[], pos:
 export async function dropImageFiles(app: App, paths: string[], at: { x: number; y: number } | undefined): Promise<string[]> {
   const doc = app.active;
   const target = at && document.elementFromPoint(at.x, at.y);
-  const onNote = !!target && app.view.contentDOM.contains(target) && (doc?.lang === "text" || doc?.lang === "markdown");
+  const onNote = !!target && app.view.dom.contains(target) && (doc?.lang === "text" || doc?.lang === "markdown");
   const images = onNote ? paths.filter(isImageFile) : [];
   if (!images.length || !doc) return paths;
   const rest = paths.filter((p) => !images.includes(p));

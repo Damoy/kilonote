@@ -2,14 +2,15 @@
 // as a small "Secret" box instead of its armored text, that the cursor steps
 // over. A click on it asks for the password (app/secrets.ts).
 
-import { type EditorState, type Extension, StateField } from "@codemirror/state";
+import { EditorState, type Extension, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
 import { findSecrets, SECRET_BEGIN, SECRET_END, type SecretBlock } from "../text/secrets";
 import { icon } from "../ui/icons";
 
-/** What the editor needs from the app: showing a secret. */
+/** What the editor needs from the app: showing a secret, saying why an edit was refused. */
 export interface SecretHost {
   reveal(view: EditorView, block: SecretBlock): void;
+  refused(): void;
 }
 
 let host: SecretHost | null = null;
@@ -93,5 +94,26 @@ export const secretsField = StateField.define<Secrets>({
   provide: (f) => [EditorView.decorations.from(f, (s) => s.decorations), EditorView.atomicRanges.of((view) => view.state.field(f).decorations)],
 });
 
-/** Secrets shown as boxes in notes. */
-export const noteSecrets: Extension = secretsField;
+/**
+ * No edit changes a part of a secret (its text would not open any more): a
+ * secret is replaced or deleted as a whole. "Replace all" skips the matches in
+ * secrets; any other edit that would change one is refused.
+ */
+const protectSecrets = EditorState.changeFilter.of((tr) => {
+  const blocks = tr.startState.field(secretsField, false)?.blocks;
+  if (!blocks?.length || !tr.docChanged) return true;
+  const touched: SecretBlock[] = [];
+  tr.changes.iterChangedRanges((fromA, toA) => {
+    for (const b of blocks) {
+      const partly = fromA < b.to && toA > b.from && !(fromA <= b.from && toA >= b.to);
+      if (partly && !touched.includes(b)) touched.push(b);
+    }
+  });
+  if (!touched.length) return true;
+  if (tr.isUserEvent("input.replace.all")) return touched.flatMap((b) => [b.from, b.to]);
+  host?.refused();
+  return false;
+});
+
+/** Secrets shown as boxes in notes, and kept whole. */
+export const noteSecrets: Extension = [secretsField, protectSecrets];

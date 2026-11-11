@@ -17,7 +17,9 @@ export async function loadTemplates(app: App): Promise<Template[]> {
   const entries = await app.backend.listDir(templatesDir(app), false).catch(() => []);
   const files = entries.filter((e) => !e.isDir && app.isNoteFile(e.path));
   const texts = await app.readFiles(files.map((e) => e.path));
-  const user = files.flatMap((e, i) => (texts[i] == null ? [] : [{ name: stem(e.name), text: texts[i]!, ext: extname(e.name) || "txt", path: e.path }]));
+  const user = files.flatMap((e, i) =>
+    texts[i] == null ? [] : [{ name: stem(e.name), text: texts[i]!.replace(/\r\n?/g, "\n"), ext: extname(e.name) || "txt", path: e.path }],
+  );
   return mergeTemplates(user);
 }
 
@@ -54,7 +56,8 @@ async function pickTemplate(app: App, placeholder: string, use: (t: Template) =>
 export function newFromTemplate(app: App) {
   return pickTemplate(app, "New note from template…", (t) => {
     const { text, cursor } = fillTemplate(t.text, new Date());
-    app.newDoc({ text, lang: t.ext === "md" ? "markdown" : "text", title: t.name });
+    // (Its title is the file name offered when it is saved: with the template's extension.)
+    app.newDoc({ text, lang: t.ext === "md" ? "markdown" : "text", title: `${t.name}.${t.ext}` });
     placeCursor(app, cursor);
   });
 }

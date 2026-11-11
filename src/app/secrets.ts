@@ -250,5 +250,13 @@ function showSecret(app: App, doc: Doc, armored: string, near: number, plain: st
 }
 
 export function installSecrets(app: App) {
-  setSecretHost({ reveal: (view, block) => view === app.view && void revealSecret(app, block) });
+  let lastRefusal = 0;
+  setSecretHost({
+    reveal: (view, block) => view === app.view && void revealSecret(app, block),
+    refused: () => {
+      if (Date.now() - lastRefusal < 3000) return;
+      lastRefusal = Date.now();
+      setTimeout(() => toast("A secret only changes as a whole: click it to change its text."));
+    },
+  });
 }

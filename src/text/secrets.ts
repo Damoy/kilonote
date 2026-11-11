@@ -123,6 +123,21 @@ export function findSecrets(lines: Iterable<string>, offset = 0): SecretBlock[] 
   return out;
 }
 
+/** The indexes of the lines that belong to a secret block (its markers included). */
+export function secretLines(lines: string[]): Set<number> {
+  const out = new Set<number>();
+  let begin = -1;
+  lines.forEach((line, i) => {
+    const t = line.trim();
+    if (t === SECRET_BEGIN) begin = i;
+    else if (t === SECRET_END && begin >= 0) {
+      for (let k = begin; k <= i; k++) out.add(k);
+      begin = -1;
+    }
+  });
+  return out;
+}
+
 const SECRET_LABEL = "🔒 Encrypted secret";
 
 /**

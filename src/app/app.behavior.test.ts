@@ -703,3 +703,12 @@ describe("secrets", () => {
   });
 });
 
+describe("secrets and Replace in files", () => {
+  it("the lines of a secret are never changed", async () => {
+    const block = "-----BEGIN KILONOTE SECRET-----\nAAAA10AA\n-----END KILONOTE SECRET-----";
+    const { app, disk } = await start({ "/notes/s.txt": `price 10\n${block}\nend 10\n` });
+    await replaceInFiles(app, ["/notes/s.txt"], /10/g, "20", true);
+    expect(disk.text("/notes/s.txt")).toBe(`price 20\n${block}\nend 20\n`);
+  });
+});
+
