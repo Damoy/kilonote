@@ -120,6 +120,14 @@ into the images folder under their own name, or just referenced if they already 
 in the note's folder. Command palette → "File: Delete unused images…" moves the
 images that no note shows any more to the system trash, after listing them.
 
+## Secrets
+
+Select a private piece of a note (an access, a password…), then command palette →
+"Edit: Encrypt selection with a password". It becomes an encrypted block in the note,
+shown as a **Secret** box: click it and type the password to see the text, copy it,
+change it, or put it back in clear. The password is never saved (tick the box to keep
+it in memory for 10 minutes); a forgotten password cannot be recovered.
+
 ## Links between notes
 
 Write \`[[work]]\` (the name of another note of the folder, its extension optional) or

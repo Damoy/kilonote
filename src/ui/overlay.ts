@@ -118,7 +118,8 @@ export function showMenu(items: MenuItem[], x: number, y: number) {
 
 // ---------------------------------------------------------------------------
 
-function modal(content: HTMLElement, onCancel: () => void): { close: () => void } {
+/** A dialog over the window (closed by a click outside it: `onCancel`). */
+export function modal(content: HTMLElement, onCancel: () => void): { close: () => void } {
   const backdrop = h("div", { class: "kn-modal-backdrop" });
   const box = h("div", { class: "kn-modal", role: "dialog" }, content);
   backdrop.append(box);

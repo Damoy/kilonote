@@ -251,6 +251,30 @@ try {
     await press("Escape");
   });
 
+  await test("a secret is encrypted, saved and revealed with the Web Crypto of the real app", async () => {
+    writeFileSync(join(notes, "secret.txt"), "user: admin\npass: hunter2\n");
+    await run(`await app.openFile(args[0]); app.focusEditor();
+      const l = app.view.state.doc.line(2); app.view.dispatch({ selection: { anchor: l.from, head: l.to } });`, join(notes, "secret.txt"));
+    await press("Control", "Shift", "p");
+    await run("const i = document.querySelector('.kn-palette-input'); i.value = 'encrypt selection'; i.dispatchEvent(new Event('input'));");
+    await press("Enter");
+    const typePassword = (button, count) => run(`const inputs = [...document.querySelectorAll('.kn-modal input[type=password]')];
+      if (inputs.length !== ${count}) throw new Error('password fields: ' + inputs.length);
+      for (const i of inputs) i.value = 'a long password';
+      [...document.querySelectorAll('.kn-modal button')].find((b) => b.textContent === '${button}').click();`);
+    await until(() => run("return document.querySelectorAll('.kn-modal input[type=password]').length === 2;"), "the password dialog");
+    await typePassword("Encrypt", 2);
+    await until(() => run("return app.view.state.doc.toString().includes('-----BEGIN KILONOTE SECRET-----');"), "the encrypted block");
+    await press("Control", "s");
+    await until(() => readFileSync(join(notes, "secret.txt"), "utf8").includes("BEGIN KILONOTE SECRET"), "the note saved");
+    expect(readFileSync(join(notes, "secret.txt"), "utf8").includes("hunter2"), false, "the secret in clear on disk");
+    await run("document.querySelector('#editor-host .cm-secret').dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }));");
+    await until(() => run("return document.querySelectorAll('.kn-modal input[type=password]').length === 1;"), "the reveal dialog");
+    await typePassword("Reveal", 1);
+    await until(() => run("return document.querySelector('.kn-secret-text')?.value === 'pass: hunter2';"), "the secret shown again");
+    await run("[...document.querySelectorAll('.kn-modal button')].find((b) => b.textContent === 'Close').click();");
+  });
+
   await test("the text of a page can be edited in its preview, and lands escaped in the HTML", async () => {
     await run("await app.openFile(args[0]); app.preview.open = new Set(['html']); app.preview.setHtmlEdit(true);", join(notes, "page.html"));
     await until(() => run("return !!document.querySelector('.pv-frame').contentDocument.querySelector('kn-t[contenteditable]');"), "the editable page");

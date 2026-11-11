@@ -17,6 +17,7 @@ import { noteImages } from "./images";
 import { isCodeLang, languageForPath, languageInfo } from "./languages";
 import { matchesInNote, openFind } from "./matches";
 import { scrollbarMarks } from "./ruler";
+import { noteSecrets } from "./secrets";
 import type { TaskConfig } from "../text/tasks";
 
 /** A document type id of LANGUAGES ("text", "markdown", "jsonc", "python"…). */
@@ -305,6 +306,7 @@ export function createEditorState(
       notesHighlighter,
       notesClickHandler,
       linkTrigger,
+      noteSecrets,
       treeHighlight,
       syntaxHighlighting(highlight),
       theme,

@@ -37,6 +37,7 @@ import { beforeClose, restoreOtherWindows, restoreSession, saveSessionNow, sessi
 import { defaultKeybindings, registerAllCommands, registerStatusCommands } from "./commands";
 import { dropImageFiles, installImages } from "./images";
 import { installLinks } from "./links";
+import { installSecrets } from "./secrets";
 import { showStatusMenu } from "./tasks";
 
 export interface Doc {
@@ -154,6 +155,7 @@ export class App {
     registerAllCommands(this);
     installImages(this);
     installLinks(this);
+    installSecrets(this);
     this.applySettings();
     this.systemDark.addEventListener("change", () => this.settings.theme === "auto" && this.applySettings());
 

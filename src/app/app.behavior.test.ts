@@ -13,6 +13,8 @@ import { renamePath } from "./files";
 import { deleteUnusedImages, dropImages, pasteImage, loadNoteImage } from "./images";
 import { openDailyNote } from "./templates";
 import { openNoteLink } from "./links";
+import { encryptSelection, revealSecret } from "./secrets";
+import { secretsField } from "../editor/secrets";
 import { saveSessionNow } from "./session";
 import { archiveLines, changeTaskInNote, cycleTasks } from "./tasks";
 
@@ -645,6 +647,59 @@ describe("tasks changed from a list (sidebar, board)", () => {
     // The line changed meanwhile: nothing is done.
     expect(await changeTaskInNote(app, "/notes/work.txt", t, { status: "done" })).toBeNull();
     expect(disk.text("/notes/work.txt")).toBe("- call the bank - ongoing\n- write - ongoing\n");
+  });
+});
+
+describe("secrets", () => {
+  const fill = (values: string[], button: string) => {
+    const inputs = [...document.querySelectorAll<HTMLInputElement>(".kn-modal input[type=password]")];
+    values.forEach((v, i) => (inputs[i].value = v));
+    clickButton(button);
+  };
+  const until = async (fn: () => boolean) => {
+    for (let i = 0; i < 200 && !fn(); i++) await tick(20);
+  };
+
+  it("the selection is encrypted in the note, and shown again with its password only", async () => {
+    const { app, disk } = await start({ "/notes/a.txt": "server: db1\nuser: admin password: hunter2\nend" });
+    await app.openFile("/notes/a.txt");
+    // (happy-dom: see the archive test; the dialogs give the focus back to the editor.)
+    app.view.contentDOM.blur();
+    app.view.focus = () => {};
+    app.focusEditor = () => {};
+    const line = app.view.state.doc.line(2);
+    app.view.dispatch({ selection: { anchor: line.from + 12, head: line.to } });
+    const encrypting = encryptSelection(app);
+    await tick(10);
+    fill(["short", "short"], "Encrypt");
+    expect(document.querySelector(".kn-modal-error")?.textContent).toContain("At least 8");
+    fill(["a good password", "a good password"], "Encrypt");
+    await encrypting;
+    const text = app.view.state.doc.toString();
+    expect(text).not.toContain("hunter2");
+    expect(text).toMatch(/^server: db1\nuser: admin \n-----BEGIN KILONOTE SECRET-----\n[\s\S]+\n-----END KILONOTE SECRET-----\nend$/);
+    const [block] = app.view.state.field(secretsField).blocks;
+    await app.save(app.active!);
+    expect(disk.text("/notes/a.txt")).not.toContain("hunter2");
+
+    const revealing = revealSecret(app, block);
+    await tick(10);
+    fill(["wrong password"], "Reveal");
+    await until(() => !!document.querySelector(".kn-modal-error")?.textContent);
+    expect(document.querySelector(".kn-modal-error")?.textContent).toContain("Wrong password");
+    fill(["a good password"], "Reveal");
+    await revealing;
+    await until(() => !!document.querySelector(".kn-secret-text"));
+    expect(document.querySelector<HTMLTextAreaElement>(".kn-secret-text")?.value).toBe("password: hunter2");
+    // Changed, then saved: encrypted again, with the same password.
+    const area = document.querySelector<HTMLTextAreaElement>(".kn-secret-text")!;
+    area.value = "password: hunter3";
+    area.dispatchEvent(new Event("input"));
+    clickButton("Save");
+    await until(() => !document.querySelector(".kn-secret-text"));
+    const [again] = app.view.state.field(secretsField).blocks;
+    const { decryptSecret } = await import("../text/secrets");
+    expect(await decryptSecret(app.view.state.sliceDoc(again.from, again.to), "a good password")).toBe("password: hunter3");
   });
 });
 

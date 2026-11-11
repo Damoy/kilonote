@@ -87,6 +87,9 @@ open it as a folder and follow its `README.md`.
   matches as you type: "3 of 12"
 - **Marks along the scrollbar**: the headings and the open tasks of the note (in their status
   color), the other occurrences of the selection and the search matches
+- **Secrets**: *Edit: Encrypt selection with a password* turns a private line (an access, a
+  password…) into an encrypted block of the note, shown as a 🔒 *Secret* box: click it and
+  type the password to see, copy or change it (AES-256-GCM, never stored in clear)
 - **Links between notes**: `[[work]]` or `[[projects/report]]` (the name of another note of the
   folder); typing `[[` offers the notes, **Ctrl+click** opens the linked note (or creates it),
   **Ctrl+Alt+B** lists the notes linking to the current one

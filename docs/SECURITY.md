@@ -175,6 +175,13 @@ npx tauri build --no-bundle
   command that only writes image types, only to a new file (never over an existing
   one), in the images folder next to the note. Unused images are only moved to the
   system trash (recoverable), after a confirmation that lists them.
+- Secrets in notes ("Edit: Encrypt selection with a password"): the selected text is
+  encrypted in the page with the browser engine's Web Crypto API (AES-256-GCM, key
+  stretched from the password with PBKDF2-SHA-256, 600 000 rounds, random salt and nonce
+  per secret; the parameters are authenticated too) and kept in the note as a block of
+  text. The password is never written anywhere (on request, it stays in memory for
+  10 minutes); the Markdown preview never shows the block. No native code is involved,
+  and nothing is sent anywhere. A forgotten password cannot be recovered.
 - The HTML and SVG preview shows the page in a sandboxed frame that is not allowed to run
   scripts, submit forms, open windows or navigate; the frame's own policy only allows
   inline styles and embedded (data:) images and fonts, so nothing is loaded from the

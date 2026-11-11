@@ -13,6 +13,7 @@ import type { App, Doc } from "../../app/app";
 import { handleKeydown } from "../../core/commands";
 import { extname, stem } from "../../core/path";
 import { findTheme } from "../../core/themes";
+import { maskSecrets } from "../../text/secrets";
 import { h, icon } from "../dom";
 import { toast } from "../overlay";
 import type { DiagramView } from "./diagram-view";
@@ -321,7 +322,8 @@ export class Preview {
       if (kind === "markdown") {
         // The editor keeps the note parsed as you type: its tree is reused (when it covers the text).
         const tree = ensureSyntaxTree(this.app.view.state, text.length, 40) ?? undefined;
-        views.markdown!.render(text, this.dark(), { tree, fresh });
+        // Secrets stay hidden: their armored text is blanked out (at the same length, for the tree).
+        views.markdown!.render(maskSecrets(text), this.dark(), { tree, fresh });
       }
       else if (kind === "diagram") void views.diagram!.render(text, { dark: this.dark(), title: "MERMAID", name });
       else if (kind === "sql") views.sql!.render(text, { dark: this.dark(), name });
