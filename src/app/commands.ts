@@ -1,8 +1,7 @@
 // Every command of the app (the palette lists them) and the default shortcuts.
 
-import { openSearchPanel } from "@codemirror/search";
 import { registerCommands, type Command } from "../core/commands";
-import { goToOccurrence } from "../editor/matches";
+import { goToOccurrence, openFind } from "../editor/matches";
 import { confirm } from "../ui/overlay";
 import { openCheatSheet } from "../ui/lazy";
 import type { App } from "./app";
@@ -114,8 +113,8 @@ export function registerAllCommands(app: App) {
     { id: "palette.files", title: "Go to file…", run: () => openQuickOpen(app) },
     { id: "palette.line", title: "Go to line…", run: () => openQuickOpen(app, ":") },
     { id: "palette.symbol", title: "Go to heading or task…", run: () => openQuickOpen(app, "@") },
-    { id: "edit.find", title: "Edit: Find", run: () => app.active && openSearchPanel(app.view) },
-    { id: "edit.replace", title: "Edit: Find and replace", run: () => app.active && openSearchPanel(app.view) },
+    { id: "edit.find", title: "Edit: Find", run: () => app.active && openFind(app.view) },
+    { id: "edit.replace", title: "Edit: Find and replace", run: () => app.active && openFind(app.view) },
     { id: "edit.nextOccurrence", title: "Edit: Next occurrence of the selected text", run: () => app.active && goToOccurrence(app.view, true) },
     { id: "edit.prevOccurrence", title: "Edit: Previous occurrence of the selected text", run: () => app.active && goToOccurrence(app.view, false) },
     { id: "edit.format", title: "Edit: Format document (JSON, XML, HTML, CSS, SQL, Markdown tables)", run: () => formatDocument(app) },

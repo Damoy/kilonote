@@ -4,7 +4,7 @@
 // shows its count next to the field ("3 of 12"); the status bar shows the
 // selection's (app side).
 
-import { getSearchQuery, type SearchQuery, searchPanelOpen } from "@codemirror/search";
+import { getSearchQuery, openSearchPanel, SearchQuery, searchPanelOpen, setSearchQuery } from "@codemirror/search";
 import { EditorSelection, type EditorState, type Extension, type Range, type Text } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 
@@ -137,6 +137,23 @@ export function searchMatches(state: EditorState): Matches | null {
   const matches = { from, to, more };
   lastSearch.set(state.doc, { query, matches });
   return matches;
+}
+
+/** Opens the search panel (Ctrl+F); a whole line selected from its number is looked for without its line break. */
+export function openFind(view: EditorView): boolean {
+  const { main } = view.state.selection;
+  const wholeLine = !main.empty && view.state.sliceDoc(main.to - 1, main.to) === "\n";
+  const before = searchPanelOpen(view.state) ? getSearchQuery(view.state) : null;
+  if (!openSearchPanel(view)) return false;
+  const q = getSearchQuery(view.state);
+  const lineBreak = q.literal ? "\n" : "\\n";
+  // Only when the search was just taken from the selection (not typed in the field).
+  if (wholeLine && q !== before && q.search.length > lineBreak.length && q.search.endsWith(lineBreak)) {
+    const { caseSensitive, literal, regexp, wholeWord, replace } = q;
+    const search = q.search.slice(0, -lineBreak.length);
+    view.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search, caseSensitive, literal, regexp, wholeWord, replace })) });
+  }
+  return true;
 }
 
 /** What the search panel shows next to its field: "3 of 12", "12 matches", "no results"… */

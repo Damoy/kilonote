@@ -15,7 +15,7 @@ import type { Settings } from "../core/settings";
 import { codeDocFacet, notesClickHandler, notesHighlighter, plainNotesFacet, taskConfigFacet } from "./decorations";
 import { noteImages } from "./images";
 import { isCodeLang, languageForPath, languageInfo } from "./languages";
-import { matchesInNote } from "./matches";
+import { matchesInNote, openFind } from "./matches";
 import type { TaskConfig } from "../text/tasks";
 
 /** A document type id of LANGUAGES ("text", "markdown", "jsonc", "python"…). */
@@ -300,7 +300,7 @@ export function createEditorState(
       search({ top: true }),
       matchesInNote(),
       scrollPastEnd(),
-      keymap.of([{ key: "Enter", run: continueList }, ...moveWithViewKeys, ...searchKeymap, ...historyKeymap, ...defaultKeymap, indentWithTab]),
+      keymap.of([{ key: "Enter", run: continueList }, ...moveWithViewKeys, { key: "Mod-f", run: openFind, scope: "editor search-panel", preventDefault: true }, ...searchKeymap, ...historyKeymap, ...defaultKeymap, indentWithTab]),
       languageCompartment.of(languageExtension(lang)),
       settingsCompartment.of(settingsExtensions(s, taskCfg, lang)),
       notesHighlighter,

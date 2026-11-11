@@ -3,7 +3,8 @@ import { openSearchPanel, search, SearchQuery, setSearchQuery } from "@codemirro
 import { EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { afterEach, describe, expect, it } from "vitest";
-import { countLabel, goToOccurrence, MAX_MATCHES, matchesInNote, occurrences, searchCount, searchMatches, selectedText } from "./matches";
+import { getSearchQuery } from "@codemirror/search";
+import { countLabel, goToOccurrence, MAX_MATCHES, matchesInNote, occurrences, openFind, searchCount, searchMatches, selectedText } from "./matches";
 
 const NOTE = "-- Stockviz\nssh host\n-- Stockviz\nnotes about Stockviz\n-- Stockviz\n";
 const select = (doc: string, from: number, to: number) => EditorState.create({ doc, selection: EditorSelection.single(from, to) });
@@ -96,6 +97,16 @@ describe("the search panel's count", () => {
     expect(searchCount(view.state)).toBe("");
     find(view, { search: "ssh" });
     expect(searchCount(view.state)).toBe("1 match");
+  });
+
+  it("looks for a whole line selected from its number without its line break", () => {
+    const view = open(NOTE, 21, 33);
+    openFind(view);
+    expect(getSearchQuery(view.state).search).toBe("-- Stockviz");
+    expect(searchCount(view.state)).toBe("3 matches");
+    view.dispatch({ selection: { anchor: 12, head: 15 } });
+    openFind(view);
+    expect(getSearchQuery(view.state).search).toBe("ssh");
   });
 
   it("says which match is selected, next to the field", async () => {
