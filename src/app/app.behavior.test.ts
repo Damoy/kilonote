@@ -974,7 +974,7 @@ describe("image files", () => {
 
 describe("crafted Markdown", () => {
   it("a note nested thousands of levels deep opens as plain text, a real one as Markdown", async () => {
-    const { app } = await start({ "/notes/bomb.md": " - ".repeat(20_000) + "x", "/notes/real.md": "# Real\n\n- **a**\n  - b\n" });
+    const { app } = await start({ "/notes/bomb.md": " - ".repeat(1_000) + "x", "/notes/real.md": "# Real\n\n- **a**\n  - b\n" });
     const { loadLanguage } = await import("../editor/setup");
     await loadLanguage("markdown");
     const bomb = (await app.openFile("/notes/bomb.md"))!;

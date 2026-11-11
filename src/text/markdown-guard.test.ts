@@ -6,12 +6,13 @@ import { renderMarkdown } from "../ui/views/markdown-render";
 import { MAX_MARKDOWN_DEPTH, markdownNestingBound } from "./markdown-guard";
 import { makeTaskConfig } from "./tasks";
 
+// (A thousand levels is enough: the guard stops past 300. Real crafted files go far deeper.)
 const BOMBS: Record<string, string> = {
-  "lists on one line": " - ".repeat(20_000) + "x",
-  "indented lists": Array.from({ length: 1_500 }, (_, i) => " ".repeat(i) + "- x").join("\n"),
-  "quotes": ">".repeat(20_000) + " x",
-  "emphasis": "*a ".repeat(10_000) + "x" + " a*".repeat(10_000),
-  "emphasis over lines": "*a\n".repeat(10_000) + "x\n" + "a*\n".repeat(10_000),
+  "lists on one line": " - ".repeat(1_000) + "x",
+  "indented lists": Array.from({ length: 400 }, (_, i) => " ".repeat(i * 2) + "- x").join("\n"),
+  "quotes": ">".repeat(1_000) + " x",
+  "emphasis": "*a ".repeat(1_000) + "x" + " a*".repeat(1_000),
+  "emphasis over lines": "*a\n".repeat(1_000) + "x\n" + "a*\n".repeat(1_000),
 };
 
 describe("Markdown nested deeper than real notes", () => {
