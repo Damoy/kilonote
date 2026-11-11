@@ -2,14 +2,13 @@
 import { openSearchPanel, search, SearchQuery, setSearchQuery } from "@codemirror/search";
 import { EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { getSearchQuery } from "@codemirror/search";
 import { scrollbarMarks } from "./ruler";
 import { countLabel, goToOccurrence, MAX_MATCHES, matchesInNote, occurrences, openFind, searchCount, searchMatches, selectedText } from "./matches";
 
 const NOTE = "-- Stockviz\nssh host\n-- Stockviz\nnotes about Stockviz\n-- Stockviz\n";
 const select = (doc: string, from: number, to: number) => EditorState.create({ doc, selection: EditorSelection.single(from, to) });
-const frame = () => new Promise((r) => setTimeout(r, 40));
 
 let views: EditorView[] = [];
 afterEach(() => {
@@ -69,12 +68,11 @@ describe("the other occurrences of the selected text", () => {
 
   it("are highlighted and marked along the scrollbar", async () => {
     const view = open(NOTE, 0, 11);
-    await frame();
     expect([...view.dom.querySelectorAll(".cm-selectionMatch")].map((e) => e.textContent)).toEqual(["-- Stockviz", "-- Stockviz"]);
-    expect(view.dom.querySelectorAll(".cm-ruler i.occ").length).toBeGreaterThan(0);
+    await vi.waitFor(() => expect(view.dom.querySelectorAll(".cm-ruler i.occ").length).toBeGreaterThan(0));
     view.dispatch({ selection: { anchor: 12, head: 15 } });
-    await frame();
-    expect(view.dom.querySelectorAll(".cm-selectionMatch, .cm-ruler i")).toHaveLength(0);
+    expect(view.dom.querySelectorAll(".cm-selectionMatch")).toHaveLength(0);
+    await vi.waitFor(() => expect(view.dom.querySelectorAll(".cm-ruler i")).toHaveLength(0));
   });
 });
 
@@ -116,17 +114,14 @@ describe("the search panel's count", () => {
     find(view, { search: "-- Stockviz" });
     view.dispatch({ selection: { anchor: 21, head: 32 } });
     expect(searchCount(view.state)).toBe("2 of 3");
-    await frame();
+    await vi.waitFor(() => expect(view.dom.querySelector(".cm-search [main-field] + .cm-search-count")?.textContent).toBe("2 of 3"));
     const label = view.dom.querySelector(".cm-search [main-field] + .cm-search-count");
-    expect(label?.textContent).toBe("2 of 3");
-    expect(view.dom.querySelectorAll(".cm-ruler i.found.current")).toHaveLength(1);
+    await vi.waitFor(() => expect(view.dom.querySelectorAll(".cm-ruler i.found.current")).toHaveLength(1));
     // Edited meanwhile: counted again.
     view.dispatch({ changes: { from: view.state.doc.length, insert: "-- Stockviz\n" } });
-    await frame();
-    expect(label?.textContent).toBe("2 of 4");
+    await vi.waitFor(() => expect(label?.textContent).toBe("2 of 4"));
     find(view, { search: "nowhere" });
-    await frame();
-    expect(label?.textContent).toBe("no results");
+    await vi.waitFor(() => expect(label?.textContent).toBe("no results"));
     expect(label?.classList.contains("none")).toBe(true);
   });
 });

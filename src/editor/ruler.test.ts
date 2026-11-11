@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { EditorState, Text } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_SETTINGS } from "../core/settings";
 import { makeTaskConfig } from "../text/tasks";
 import { codeDocFacet, taskConfigFacet } from "./decorations";
@@ -32,9 +32,9 @@ describe("the marks along the scrollbar", () => {
       });
     const note = view(false);
     const code = view(true);
-    await new Promise((r) => setTimeout(r, 40));
-    // (No layout here: every mark is at the same height, one per kind and color.)
-    expect(new Set([...note.dom.querySelectorAll(".cm-ruler i")].map((i) => i.className))).toEqual(new Set(["heading", "task"]));
+    // (Read once the note is shown, drawn in the next frame. No layout here: every
+    // mark is at the same height, one per kind and color.)
+    await vi.waitFor(() => expect(new Set([...note.dom.querySelectorAll(".cm-ruler i")].map((i) => i.className))).toEqual(new Set(["heading", "task"])));
     expect(code.dom.querySelectorAll(".cm-ruler i")).toHaveLength(0);
     note.destroy();
     code.destroy();
