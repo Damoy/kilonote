@@ -239,6 +239,7 @@ export class App {
     this.taskCfg = this.makeTaskCfg();
     registerStatusCommands(this);
     for (const doc of this.docs) {
+      if (!this.stateMade(doc)) continue; // (made with the settings of the moment)
       const effects = settingsCompartment.reconfigure(settingsExtensions(s, this.taskCfg, doc.lang));
       if (doc === this.active) this.view.dispatch({ effects });
       else doc.state = doc.state.update({ effects }).state;
@@ -321,12 +322,10 @@ export class App {
     mtime?: number; title?: string; lang?: LangId; color?: string | null; groupId?: string | null; cursor?: number; scrollTop?: number;
   }): Doc {
     const lang = init.lang ?? langForPath(init.path);
-    const doc: Doc = {
+    const doc = {
       id: this.nextId++,
       path: init.path,
       title: init.title ?? (init.path ? basename(init.path) : this.untitledTitle()),
-      state: null as unknown as EditorState,
-      savedText: Text.empty,
       dirty: false,
       eol: init.eol ?? this.defaultEol(),
       encoding: init.encoding ?? "UTF-8",
@@ -339,15 +338,68 @@ export class App {
       scroll: null,
       pendingScrollTop: init.scrollTop ?? 0,
       saving: null,
-    };
-    let state = createEditorState(init.text, lang, this.settings, this.taskCfg, (u) => this.onEditorUpdate(u));
-    if (init.cursor) state = state.update({ selection: { anchor: Math.min(init.cursor, state.doc.length) } }).state;
-    doc.state = state;
+    } as Doc;
+    // The editor state is made when the tab is first needed (shown, edited…): a
+    // session restores many tabs at once, and most are not looked at right away.
     const saved = init.savedText ?? (init.path ? init.text : "");
-    doc.savedText = saved === init.text ? state.doc : Text.of(saved.split(/\r\n|\r|\n/));
-    doc.dirty = !state.doc.eq(doc.savedText);
+    let state: EditorState | null = null;
+    let savedText: Text | null = null;
+    const make = () => {
+      this.unmade.delete(doc);
+      let s = createEditorState(init.text, doc.lang, this.settings, this.taskCfg, (u) => this.onEditorUpdate(u));
+      if (init.cursor) s = s.update({ selection: { anchor: Math.min(init.cursor, s.doc.length) } }).state;
+      // Saved as it is: the saved text is the editor's first one (shared, not copied).
+      if (savedText === null && saved === init.text) savedText = s.doc;
+      return s;
+    };
+    Object.defineProperty(doc, "state", {
+      get: () => (state ??= make()),
+      set: (s: EditorState) => {
+        this.unmade.delete(doc);
+        state = s;
+      },
+      enumerable: true,
+      configurable: true,
+    });
+    this.unmade.set(doc, { text: init.text, cursor: init.cursor ?? 0 });
+    Object.defineProperty(doc, "savedText", {
+      get: () => {
+        if (savedText === null) {
+          if (saved === init.text) void doc.state; // (sets it)
+          else savedText = Text.of(saved.split(/\r\n|\r|\n/));
+        }
+        return savedText!;
+      },
+      set: (t: Text) => void (savedText = t),
+      enumerable: true,
+      configurable: true,
+    });
+    // (Line endings aside, as the editor reads them.)
+    doc.dirty = saved !== init.text && saved.replace(/\r\n?/g, "\n") !== init.text.replace(/\r\n?/g, "\n");
     this.ensureLanguage(doc);
     return doc;
+  }
+
+  /** The tabs whose editor state is not made yet: their text and cursor. */
+  private unmade = new WeakMap<Doc, { text: string; cursor: number }>();
+
+  /** Whether a tab's editor state is made (it is made when first needed). */
+  stateMade(doc: Doc): boolean {
+    return !this.unmade.has(doc);
+  }
+
+  /** The text of a tab, without making its editor state. */
+  docText(doc: Doc): string {
+    const pending = this.unmade.get(doc);
+    if (pending) return pending.text;
+    return (doc === this.active ? this.view.state : doc.state).doc.toString();
+  }
+
+  /** The cursor of a tab, without making its editor state. */
+  docCursor(doc: Doc): number {
+    const pending = this.unmade.get(doc);
+    if (pending) return pending.cursor;
+    return (doc === this.active ? this.view.state : doc.state).selection.main.head;
   }
 
   /** Sets the document type of a tab: its coloring and the note features. */
@@ -363,7 +415,8 @@ export class App {
     const lang = doc.lang;
     if (languageReady(lang)) return;
     void loadLanguage(lang).then((ok) => {
-      if (ok && doc.lang === lang) this.applyToDoc(doc, { effects: reconfigureLanguage(lang) });
+      // (A tab whose state is not made yet gets the language when it is made.)
+      if (ok && doc.lang === lang && this.stateMade(doc)) this.applyToDoc(doc, { effects: reconfigureLanguage(lang) });
     });
   }
 
@@ -1006,18 +1059,61 @@ export class App {
     return this.settings.note_extensions.includes(ext) || (!ext && !isProbablyBinary(path));
   }
 
-  /** File contents: the in-memory version if the tab is open, otherwise read from disk. */
+  /**
+   * The texts of the files read lately for the whole folder (search, tasks, board…),
+   * with their stamp: a file is read again only when it changed. Bounded in size.
+   */
+  private fileTexts = new Map<string, { mtime: number; size: number; text: string | null }>();
+  private fileTextsChars = 0;
+  private static FILE_TEXTS_MAX = 16_000_000;
+
+  private keepFileText(path: string, entry: { mtime: number; size: number; text: string | null } | null) {
+    const old = this.fileTexts.get(path);
+    if (old) {
+      this.fileTexts.delete(path);
+      this.fileTextsChars -= old.text?.length ?? 0;
+    }
+    if (!entry) return;
+    this.fileTexts.set(path, entry);
+    this.fileTextsChars += entry.text?.length ?? 0;
+    // The ones not needed for the longest time go first.
+    for (const [p, e] of this.fileTexts) {
+      if (this.fileTextsChars <= App.FILE_TEXTS_MAX || p === path) break;
+      this.fileTexts.delete(p);
+      this.fileTextsChars -= e.text?.length ?? 0;
+    }
+  }
+
+  /** File contents: the in-memory version if the tab is open, otherwise from disk (only what changed is read again). */
   async readFiles(paths: string[]): Promise<(string | null)[]> {
     const out: (string | null)[] = new Array(paths.length).fill(null);
-    const toRead: number[] = [];
+    let toRead: number[] = [];
     paths.forEach((p, i) => {
       const d = this.findDoc(p);
-      if (d) out[i] = d.state.doc.toString();
+      if (d) out[i] = this.docText(d);
       else toRead.push(i);
     });
-    if (toRead.length) {
-      const texts = await this.backend.readMany(toRead.map((i) => paths[i]), 2_000_000);
-      toRead.forEach((i, k) => (out[i] = texts[k]));
+    // Twice at most: a file known when asked may have been forgotten meanwhile (read again, whole).
+    for (let pass = 0; pass < 2 && toRead.length; pass++) {
+      const known = toRead.map((i): [number, number] | null => {
+        const k = pass ? undefined : this.fileTexts.get(paths[i]);
+        return k ? [k.mtime, k.size] : null;
+      });
+      const fresh = await this.backend.readChanged(toRead.map((i) => paths[i]), known, 2_000_000);
+      const missed: number[] = [];
+      toRead.forEach((i, k) => {
+        const f = fresh[k];
+        const path = paths[i];
+        if (!f) this.keepFileText(path, null);
+        else if (!f.same) this.keepFileText(path, { mtime: f.mtime, size: f.size, text: f.text });
+        else {
+          const kept = this.fileTexts.get(path);
+          if (!kept) return void missed.push(i);
+          this.keepFileText(path, kept); // (now the most recent)
+        }
+        out[i] = this.fileTexts.get(path)?.text ?? null;
+      });
+      toRead = missed;
     }
     return out;
   }

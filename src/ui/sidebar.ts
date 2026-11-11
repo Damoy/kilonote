@@ -526,7 +526,7 @@ export class Sidebar {
     // Notes that are gone (or another folder): their tasks are forgotten.
     if (full) for (const p of this.taskCache.keys()) if (!this.taskTexts.has(p)) this.taskCache.delete(p);
     // Open notes win (their in-memory content is the most recent).
-    for (const d of app.docs) if (d.path && this.taskTexts.has(d.path)) this.taskTexts.set(d.path, d.state.doc.toString());
+    for (const d of app.docs) if (d.path && this.taskTexts.has(d.path)) this.taskTexts.set(d.path, app.docText(d));
     const texts = files.map((f) => this.taskTexts.get(f) ?? null);
     const cfg = app.taskCfg;
     const today = todayISO();

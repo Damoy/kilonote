@@ -56,16 +56,19 @@ fn err<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
 }
 
-fn meta_of(p: &Path) -> Option<Meta> {
-    let m = fs::metadata(p).ok()?;
-    let mtime = m
-        .modified()
+/// Modification time in milliseconds since 1970 (0 when unknown).
+fn mtime_ms(m: &fs::Metadata) -> f64 {
+    m.modified()
         .ok()
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
         .map(|d| d.as_millis() as f64)
-        .unwrap_or(0.0);
+        .unwrap_or(0.0)
+}
+
+fn meta_of(p: &Path) -> Option<Meta> {
+    let m = fs::metadata(p).ok()?;
     Some(Meta {
-        mtime,
+        mtime: mtime_ms(&m),
         size: m.len(),
         is_dir: m.is_dir(),
     })
@@ -368,23 +371,44 @@ async fn walk(root: String, show_hidden: bool, max: usize) -> Result<Vec<String>
     Ok(files)
 }
 
-/// Batch read (a single IPC round trip) used to scan tasks.
+/// A text file of a batch read: its stamp, and its text unless the caller has it already.
+#[derive(Serialize)]
+struct Fresh {
+    mtime: f64,
+    size: u64,
+    /// None: unchanged since the caller read it (`same`), too large, or not text.
+    text: Option<String>,
+    same: bool,
+}
+
+/// Batch read (a single IPC round trip) of the notes of a folder: search, tasks,
+/// board. A file whose modification time and size are the ones the caller
+/// already knows is not read again, so only what changed crosses over.
 #[tauri::command]
-async fn read_many(paths: Vec<String>, max_size: u64) -> Vec<Option<String>> {
+async fn read_changed(paths: Vec<String>, known: Vec<Option<(f64, u64)>>, max_size: u64) -> Vec<Option<Fresh>> {
     paths
         .iter()
-        .map(|p| {
-            let m = fs::metadata(p).ok()?;
-            if !m.is_file() || m.len() > max_size {
-                return None;
-            }
-            let bytes = fs::read(p).ok()?;
-            if looks_binary(&bytes) {
-                return None;
-            }
-            Some(decode(bytes).0)
-        })
+        .enumerate()
+        .map(|(i, p)| read_fresh(Path::new(p), known.get(i).copied().flatten(), max_size))
         .collect()
+}
+
+fn read_fresh(p: &Path, known: Option<(f64, u64)>, max_size: u64) -> Option<Fresh> {
+    let m = fs::metadata(p).ok()?;
+    if !m.is_file() {
+        return None;
+    }
+    let (mtime, size) = (mtime_ms(&m), m.len());
+    if known == Some((mtime, size)) {
+        return Some(Fresh { mtime, size, text: None, same: true });
+    }
+    let text = if size > max_size {
+        None
+    } else {
+        let bytes = fs::read(p).ok()?;
+        (!looks_binary(&bytes)).then(|| decode(bytes).0)
+    };
+    Some(Fresh { mtime, size, text, same: false })
 }
 
 #[tauri::command]
@@ -783,7 +807,7 @@ fn main() {
             stat,
             list_dir,
             walk,
-            read_many,
+            read_changed,
             create_dir,
             create_file,
             rename_path,
@@ -837,6 +861,33 @@ mod tests {
         }
         assert!(is_image_path(Path::new("C:/a/Shot.PNG")));
         assert!(!is_image_path(Path::new("C:/a/shot.png.lnk")));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn unchanged_files_are_not_read_again() {
+        let dir = std::env::temp_dir().join(format!("kilonote-fresh-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let note = dir.join("note.txt");
+        fs::write(&note, "first").unwrap();
+        let first = read_fresh(&note, None, 1000).unwrap();
+        assert_eq!(first.text.as_deref(), Some("first"));
+        assert!(!first.same);
+        // Known as it is: not read again.
+        let again = read_fresh(&note, Some((first.mtime, first.size)), 1000).unwrap();
+        assert!(again.same && again.text.is_none());
+        // Changed (another size): read again.
+        fs::write(&note, "changed!").unwrap();
+        let changed = read_fresh(&note, Some((first.mtime, first.size)), 1000).unwrap();
+        assert_eq!(changed.text.as_deref(), Some("changed!"));
+        // Too large, binary, missing, a folder.
+        assert!(read_fresh(&note, None, 3).unwrap().text.is_none());
+        let bin = dir.join("bin.dat");
+        fs::write(&bin, b"a\0b").unwrap();
+        assert!(read_fresh(&bin, None, 1000).unwrap().text.is_none());
+        assert!(read_fresh(&dir.join("gone.txt"), None, 1000).is_none());
+        assert!(read_fresh(&dir, None, 1000).is_none());
         let _ = fs::remove_dir_all(&dir);
     }
 

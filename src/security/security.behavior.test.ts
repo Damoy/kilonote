@@ -61,8 +61,9 @@ describe("opening files never runs a program", () => {
   it("scripts are only ever opened as text", async () => {
     const { backend, calls } = recordingBackend({ "C:\\notes\\run.bat": "@echo off\r\ndel *.*" });
     const app = new App(backend);
-    // A text file needs an initialized editor: only check what reaches the backend.
+    // Only check what reaches the backend: reads (and the window's title, the note's name).
     await app.openFile("C:\\notes\\run.bat").catch(() => null);
-    expect(calls.every((c) => READ_ONLY.has(c.method))).toBe(true);
+    expect(calls.some((c) => c.method === "readText")).toBe(true);
+    expect(calls.every((c) => READ_ONLY.has(c.method) || c.method === "setTitle")).toBe(true);
   });
 });

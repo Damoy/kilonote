@@ -32,6 +32,8 @@ interface Disk {
   /** Encoding of the last write of each file. */
   encodings: Map<string, string>;
   clock: number;
+  /** Files read by the batch read (unchanged ones are not). */
+  reads: number;
   /** Simulates another program changing a file. */
   external(path: string, text: string): void;
   text(path: string): string | undefined;
@@ -47,6 +49,7 @@ function memoryBackend(init: Record<string, string> = {}, opts: { savePath?: str
     sizes: new Map(),
     encodings: new Map(),
     clock: 1_000,
+    reads: 0,
     external(path, text) {
       disk.clock += 5_000;
       disk.files.set(path, { text, mtime: disk.clock });
@@ -94,7 +97,14 @@ function memoryBackend(init: Record<string, string> = {}, opts: { savePath?: str
       return out;
     },
     walk: async (root) => [...disk.files.keys(), ...disk.images.keys()].filter((f) => isInside(f, root)),
-    readMany: async (paths) => paths.map((p) => disk.files.get(p)?.text ?? null),
+    readChanged: async (paths, known) =>
+      paths.map((p, i) => {
+        const f = disk.files.get(p);
+        if (!f) return null;
+        const same = known[i]?.[0] === f.mtime && known[i]?.[1] === f.text.length;
+        if (!same) disk.reads++;
+        return { mtime: f.mtime, size: f.text.length, text: same ? null : f.text, same };
+      }),
     createDir: async (p) => void disk.dirs.add(p),
     createFile: async (p) => void write(p, ""),
     rename: async () => {},
@@ -723,6 +733,66 @@ describe("command palette", () => {
     localStorage.setItem("kilonote-recent-commands", "not json");
     expect(ids("").length).toBeGreaterThan(10);
     localStorage.removeItem("kilonote-recent-commands");
+  });
+});
+
+describe("reading the notes of the folder", () => {
+  it("reads again only the files that changed", async () => {
+    const { app, disk } = await start({ "/notes/a.txt": "A", "/notes/b.txt": "B", "/notes/c.txt": "C" });
+    const paths = ["/notes/a.txt", "/notes/b.txt", "/notes/c.txt", "/notes/gone.txt"];
+    expect(await app.readFiles(paths)).toEqual(["A", "B", "C", null]);
+    expect(disk.reads).toBe(3);
+    expect(await app.readFiles(paths)).toEqual(["A", "B", "C", null]);
+    expect(disk.reads).toBe(3); // nothing changed: nothing read
+    disk.external("/notes/b.txt", "B changed");
+    expect(await app.readFiles(paths)).toEqual(["A", "B changed", "C", null]);
+    expect(disk.reads).toBe(4);
+    // An open note: its text in the editor, unsaved edits included.
+    await app.openFile("/notes/c.txt");
+    app.view.contentDOM.blur();
+    app.view.dispatch({ changes: { from: 1, insert: "!" } });
+    expect((await app.readFiles(paths))[2]).toBe("C!");
+  });
+});
+
+describe("tabs restored from the session", () => {
+  const tab = (path: string | null, extra: Record<string, unknown> = {}) => ({ path, title: path ?? "Untitled 1", color: null, group: null, eol: "\n", cursor: 0, scrollTop: 0, ...extra });
+  const session = (tabs: unknown[], active: number) =>
+    JSON.stringify({ version: 1, workspace: null, recent: [], tabs, active, groups: [], sidebar: { visible: false, width: 260, panel: "files", expanded: [] } });
+
+  it("get their editor only when they are first needed", async () => {
+    const { app, disk } = await start({
+      "/notes/a.txt": "- call the bank - todo\n",
+      "/notes/b.txt": "b on disk",
+      "/notes/c.md": "# C",
+      "/config/session.json": session([tab("/notes/a.txt"), tab("/notes/b.txt", { content: "b draft", mtime: 1000 }), tab("/notes/c.md", { cursor: 2 }), tab(null, { content: "a new idea" })], 2),
+    });
+    const [a, b, c, draft] = app.docs;
+    expect(app.active).toBe(c);
+    expect(app.docs.map((d) => app.stateMade(d))).toEqual([false, false, true, false]);
+    // Their text, their state of saving, the session: without making their editor.
+    expect([app.docText(a), app.docText(b), app.docText(draft)]).toEqual(["- call the bank - todo\n", "b draft", "a new idea"]);
+    expect([a.dirty, b.dirty, draft.dirty]).toEqual([false, true, true]);
+    expect(await app.readFiles(["/notes/a.txt", "/notes/b.txt"])).toEqual(["- call the bank - todo\n", "b draft"]);
+    await saveSessionNow(app);
+    const saved = JSON.parse(disk.text("/config/session.json")!);
+    expect(saved.tabs.map((t: { content?: string }) => t.content ?? null)).toEqual([null, "b draft", null, "a new idea"]);
+    // A change of settings does not make them either.
+    await app.updateSetting("tab_size", 2);
+    expect(app.docs.map((d) => app.stateMade(d))).toEqual([false, false, true, false]);
+    // Shown: made, with its text and the settings of the moment.
+    app.activate(a);
+    expect(app.stateMade(a)).toBe(true);
+    expect(app.view.state.doc.toString()).toBe("- call the bank - todo\n");
+    expect(app.view.state.tabSize).toBe(2);
+    // Edited in the background (a task from the board): made, changed, saved.
+    const { changeTaskInNote } = await import("./tasks");
+    const { findTasks } = await import("../text/tasks");
+    app.activate(c);
+    const [t] = findTasks(app.docText(a), app.taskCfg);
+    expect(await changeTaskInNote(app, "/notes/a.txt", t, { status: "done" })).toContain("- call the bank - done");
+    expect(disk.text("/notes/a.txt")).toContain("- call the bank - done");
+    expect(a.dirty).toBe(false);
   });
 });
 

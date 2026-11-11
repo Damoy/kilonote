@@ -18,6 +18,14 @@ export interface Meta {
   size: number;
   isDir: boolean;
 }
+/** A file of a batch read: its stamp, and its text (null: unchanged since read, too large, or not text). */
+export interface FreshText {
+  mtime: number;
+  size: number;
+  text: string | null;
+  /** Unchanged: same modification time and size as the stamp given. */
+  same: boolean;
+}
 export interface Entry {
   name: string;
   path: string;
@@ -42,7 +50,8 @@ export interface Backend {
   stat(path: string): Promise<Meta | null>;
   listDir(path: string, showHidden: boolean): Promise<Entry[]>;
   walk(root: string, showHidden: boolean, max: number): Promise<string[]>;
-  readMany(paths: string[], maxSize: number): Promise<(string | null)[]>;
+  /** Reads text files in one go; those whose stamp (mtime, size) is given and unchanged are not read again. */
+  readChanged(paths: string[], known: ([number, number] | null)[], maxSize: number): Promise<(FreshText | null)[]>;
   createDir(path: string): Promise<void>;
   createFile(path: string): Promise<void>;
   rename(from: string, to: string): Promise<void>;
@@ -115,7 +124,7 @@ export async function createTauriBackend(): Promise<Backend> {
     stat: (path) => invoke<Meta | null>("stat", { path }),
     listDir: (path, showHidden) => invoke<Entry[]>("list_dir", { path, showHidden }),
     walk: (root, showHidden, max) => invoke<string[]>("walk", { root, showHidden, max }),
-    readMany: (paths, maxSize) => invoke<(string | null)[]>("read_many", { paths, maxSize }),
+    readChanged: (paths, known, maxSize) => invoke<(FreshText | null)[]>("read_changed", { paths, known, maxSize }),
     createDir: (path) => invoke("create_dir", { path }),
     createFile: (path) => invoke("create_file", { path }),
     rename: (from, to) => invoke("rename_path", { from, to }),
@@ -316,8 +325,14 @@ export function createWebBackend(): Backend {
         .filter((p) => isInside(p, root) && (showHidden || !p.slice(root.length).includes("/.")))
         .slice(0, max);
     },
-    async readMany(paths) {
-      return paths.map((p) => files.get(p)?.text ?? null);
+    async readChanged(paths, known, maxSize) {
+      return paths.map((p, i) => {
+        const f = files.get(p);
+        if (!f) return null;
+        const size = f.text.length;
+        if (known[i]?.[0] === f.mtime && known[i]?.[1] === size) return { mtime: f.mtime, size, text: null, same: true };
+        return { mtime: f.mtime, size, text: size > maxSize ? null : f.text, same: false };
+      });
     },
     async createDir(path) {
       dirs.add(path);

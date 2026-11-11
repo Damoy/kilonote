@@ -48,16 +48,15 @@ export const sessionFileName = (label: string) => (label === "main" ? "session.j
 const SESSION_FILE_RE = /^session-(kn-[a-zA-Z0-9-]+)\.json$/;
 
 export function sessionTab(app: App, d: Doc): SessionTab {
-  const state = d === app.active ? app.view.state : d.state;
   const keepContent = app.settings.hot_exit && (d.dirty || !d.path);
   return {
     path: d.path,
     title: d.title,
     color: d.color,
     group: d.groupId,
-    content: keepContent ? state.doc.toString() : undefined,
+    content: keepContent ? app.docText(d) : undefined,
     eol: d.eol,
-    cursor: state.selection.main.head,
+    cursor: app.docCursor(d),
     scrollTop: d === app.active ? app.view.scrollDOM.scrollTop : 0,
     lang: d.path ? undefined : d.lang,
     mtime: keepContent && d.path ? d.mtime : undefined,
@@ -66,7 +65,7 @@ export function sessionTab(app: App, d: Doc): SessionTab {
 }
 
 export function sessionData(app: App): Session {
-  const tabs = app.docs.filter((d) => d.path || (app.settings.hot_exit && d.state.doc.length > 0));
+  const tabs = app.docs.filter((d) => d.path || (app.settings.hot_exit && app.docText(d).length > 0));
   return {
     version: 1,
     workspace: app.workspace,
