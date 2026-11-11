@@ -10,6 +10,9 @@ import { dueState, isDoneStatus, parseTask, type TaskConfig } from "../../text/t
 
 const parser = baseParser.configure(GFM);
 
+/** Blocks nested deeper than this are shown as text (the call stack has its limits). */
+const MAX_DEPTH = 100;
+
 /** Nodes that only carry syntax (*, #, [, `…): never shown. */
 const MARKS = new Set([
   "EmphasisMark", "HeaderMark", "LinkMark", "CodeMark", "QuoteMark", "ListMark", "TaskMarker",
@@ -130,6 +133,16 @@ function prepare(src: string, opts: RenderOptions): { tree: Tree; renderTop: (no
   };
 
   function renderInline(node: SyntaxNode, parent: HTMLElement) {
+    if (depth >= MAX_DEPTH * 2) return text(parent, src.slice(node.from, node.to));
+    depth++;
+    try {
+      renderOneInline(node, parent);
+    } finally {
+      depth--;
+    }
+  }
+
+  function renderOneInline(node: SyntaxNode, parent: HTMLElement) {
     const name = node.name;
     if (MARKS.has(name)) return;
     switch (name) {
@@ -214,7 +227,24 @@ function prepare(src: string, opts: RenderOptions): { tree: Tree; renderTop: (no
     }
   };
 
+  /** How deep the blocks being rendered are nested (lists in lists, quotes in quotes…). */
+  let depth = 0;
+
+  /** A block; nested too deep (a crafted note: thousands of lists in lists), the rest is shown as text. */
   function renderBlock(node: SyntaxNode, parent: HTMLElement, tight = false) {
+    if (depth >= MAX_DEPTH) {
+      text(parent.appendChild(el("p")), src.slice(node.from, node.to));
+      return;
+    }
+    depth++;
+    try {
+      renderOneBlock(node, parent, tight);
+    } finally {
+      depth--;
+    }
+  }
+
+  function renderOneBlock(node: SyntaxNode, parent: HTMLElement, tight: boolean) {
     const name = node.name;
     const heading = /^(?:ATX|Setext)Heading(\d)$/.exec(name);
     if (heading) {

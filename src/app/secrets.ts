@@ -9,7 +9,6 @@ import type { Doc, App } from "./app";
 import { decryptSecret, encryptSecret, SECRET_BEGIN, type SecretBlock } from "../text/secrets";
 import { h, icon } from "../ui/dom";
 import { confirm, modal, toast } from "../ui/overlay";
-import { copyText } from "./files";
 
 const MIN_PASSWORD = 8;
 const REMEMBER_MS = 10 * 60 * 1000;
@@ -41,6 +40,30 @@ interface PasswordOptions {
   twice?: boolean;
   /** Checks the password while the dialog stays open: an error message, or null when it is right. */
   check?: (password: string) => Promise<string | null>;
+}
+
+/**
+ * A secret on the clipboard: it stays there (and in the Windows clipboard history,
+ * when it is turned on) until something else is copied. "Clear now" empties it.
+ */
+async function copySecret(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    toast("Could not copy", { kind: "error" });
+    return;
+  }
+  toast("Secret copied. Paste it, then clear the clipboard.", {
+    timeout: 30_000,
+    action: {
+      label: "Clear now",
+      run: () =>
+        navigator.clipboard.writeText("").then(
+          () => toast("Clipboard cleared", { timeout: 1500 }),
+          () => toast("Could not clear the clipboard", { kind: "error" }),
+        ),
+    },
+  });
 }
 
 /** Asks for a password (in a dialog of the page, never stored). */
@@ -237,7 +260,7 @@ function showSecret(app: App, doc: Doc, armored: string, near: number, plain: st
     h("div", { class: "kn-modal-title kn-secret-title" }, icon("lock"), "Secret"),
     area,
     h("div", { class: "kn-modal-actions" },
-      h("button", { class: "kn-btn subtle", onclick: () => void copyText(area.value, "Secret copied") }, "Copy"),
+      h("button", { class: "kn-btn subtle", onclick: () => void copySecret(area.value) }, "Copy"),
       h("button", { class: "kn-btn subtle", onclick: () => void clear() }, "Decrypt into the note…"),
       h("span", { class: "kn-spacer" }),
       h("button", { class: "kn-btn", onclick: () => void close() }, "Close"),

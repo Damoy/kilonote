@@ -47,7 +47,13 @@ export interface HintContext {
 /** Words that announce a secret on a line: a password, a key, a token… (several languages). */
 const SECRET_LINE = /\b(pass(word|wd)?|pwd|mdp|mot de passe|contrase[ñn]a|passwort|token|secret|api[_ -]?key|private[_ -]?key|client[_ -]?secret)\b\s*[:=]\s*\S{3,}/i;
 const BEARER = /\b([Bb]earer\s+[A-Za-z0-9._~+/-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16})\b/;
-const SSH_WITH_PASSWORD = /\bssh\s+\S+@\S+.*\b(-p\s*\S+\s+)?(pass|pwd|mdp)\b/i;
+/** `ssh user@host`, then a password word further on the line (two simple tests: no slow backtracking). */
+const SSH_LOGIN = /\bssh\s+[^\s@]+@[^\s@]+/i;
+const PASSWORD_WORD = /\b(pass|pwd|mdp)\b/i;
+const sshWithPassword = (line: string) => {
+  const m = SSH_LOGIN.exec(line);
+  return !!m && PASSWORD_WORD.test(line.slice(m.index + m[0].length));
+};
 
 /** A bullet line with text and no status yet. */
 const BULLET = /^\s*([-*+•]|\d{1,3}[.)])\s+\S.{2,}$/;
@@ -56,16 +62,18 @@ const DATE_IN_TEXT = /\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b|\b\d{4}-\d{2}-\d{2}\b/;
 
 /** Notes larger than this are not scanned as a whole (only the cursor's line). */
 const MAX_SCAN = 400_000;
+/** Longer lines (a pasted minified file…) get no hint about their content. */
+const MAX_LINE = 4_000;
 
 /** The hints for this moment, the most useful first. */
 export function contextHints(ctx: HintContext): Hint[] {
   const out: Hint[] = [];
   const isNote = ctx.lang === "text" || ctx.lang === "markdown";
-  const line = ctx.line;
+  const line = ctx.line.length <= MAX_LINE ? ctx.line : "";
   const task = line.length > 4 ? parseTask(line, ctx.cfg) : null;
 
   // A private line in clear, in a note: offer to encrypt it (in code, it would break the code).
-  if (isNote && !line.includes("KILONOTE SECRET") && (SECRET_LINE.test(line) || BEARER.test(line) || SSH_WITH_PASSWORD.test(line))) {
+  if (isNote && !line.includes("KILONOTE SECRET") && (SECRET_LINE.test(line) || BEARER.test(line) || sshWithPassword(line))) {
     out.push({
       id: "secret-line",
       text: "This line looks private (a password, a key…). Encrypt it: only your password will show it again, and it stays encrypted on the disk.",
@@ -142,7 +150,7 @@ export function contextHints(ctx: HintContext): Hint[] {
   if (ctx.lang === "markdown" && !ctx.previewOpen && text != null && text.length > 300) {
     out.push({ id: "md-preview", text: `${ctx.key("view.preview")} shows this Markdown note rendered, beside the text.`, action: { label: "Show the preview", command: "view.preview" } });
   }
-  if ((ctx.lang === "json" || ctx.lang === "jsonc") && line.length > 200) {
+  if ((ctx.lang === "json" || ctx.lang === "jsonc") && ctx.line.length > 200) {
     out.push({ id: "format-json", text: `A long JSON line: ${ctx.key("edit.format")} formats the document (comments kept).`, action: { label: "Format", command: "edit.format" } });
   }
   if (!ctx.path && text != null && text.split("\n").length > 15) {

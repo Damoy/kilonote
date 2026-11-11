@@ -198,6 +198,13 @@ npx tauri build --no-bundle
   are never put in it (neither in the rich text nor in the plain text of a copy). The
   copy goes to the system clipboard; the page is written where the user chooses; the
   print dialog is the WebView2 one. Nothing is sent anywhere.
+- Crafted notes: a Markdown note nested thousands of levels deep (lists in lists,
+  emphasis in emphasis…), which would make the Markdown parser and the coloring run out
+  of stack or take seconds, opens as plain text, with a message; real notes are never
+  nested that deep (a quick scan clears them without parsing). The preview and the
+  rendering for export never recurse without a limit. The rules of Kilo's hints run in
+  linear time and skip lines over 4 000 characters: a long or crafted line cannot
+  freeze the window. Tests check both.
 - Quick inserts after `/`: a menu of the editor; its items write text in the note (a
   date, a heading, a template) or run a command of the app (link a note, encrypt the
   line, set a due date).
@@ -271,3 +278,7 @@ npx tauri build --no-bundle
    fall under the company's IT policy.
 3. **Downloads.** A web security gateway may scan or hold an unsigned executable
    downloaded from GitHub. Building from source only fetches source code and packages.
+4. **A secret copied to the clipboard** (*Copy* in its dialog) stays there until
+   something else is copied, and in the Windows clipboard history when that history is
+   turned on (Win+V). The message that confirms the copy has a *Clear now* button: use it
+   once the secret is pasted.

@@ -85,8 +85,14 @@ const CLASS_STYLE: Record<string, string> = {
 export async function renderPaper(src: string, opts: PaperOptions): Promise<HTMLElement> {
   const text = maskSecrets(src.replace(/\r\n?/g, "\n"));
   let body: HTMLElement;
-  if (opts.lang === "markdown") body = renderMarkdown(text, { taskCfg: opts.taskCfg, today: opts.today });
-  else if (opts.lang === "text") body = renderPlainNote(text, opts.taskCfg);
+  if (opts.lang === "markdown") {
+    try {
+      body = renderMarkdown(text, { taskCfg: opts.taskCfg, today: opts.today });
+    } catch {
+      // Nested too deep to be parsed (a crafted note): line by line, as a plain note.
+      body = renderPlainNote(text, opts.taskCfg);
+    }
+  } else if (opts.lang === "text") body = renderPlainNote(text, opts.taskCfg);
   else {
     body = document.createElement("div");
     body.appendChild(document.createElement("pre")).textContent = text;

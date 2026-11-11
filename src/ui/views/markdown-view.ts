@@ -21,6 +21,8 @@ export class MarkdownView {
   readonly el = h("div", { class: "pv-md", tabindex: "-1" });
   private root = h("div", { class: "md" });
   private shown: Shown[] = [];
+  /** The last rendering failed: the next one starts from scratch. */
+  private failed = false;
   /** Code blocks whose diagram is being drawn. */
   private drawing = new WeakSet<Element>();
 
@@ -41,8 +43,20 @@ export class MarkdownView {
    * settings).
    */
   render(text: string, dark: boolean, opts: { tree?: Tree; fresh?: boolean } = {}) {
-    const blocks = markdownBlocks(text, { taskCfg: this.app.taskCfg, today: todayISO(), tree: opts.tree });
-    const old = opts.fresh ? [] : this.shown;
+    let blocks: ReturnType<typeof markdownBlocks>;
+    try {
+      blocks = markdownBlocks(text, { taskCfg: this.app.taskCfg, today: todayISO(), tree: opts.tree });
+    } catch (e) {
+      // Nested too deep to be parsed (a note turned into a crafted one): a message, the editor stays usable.
+      console.error("Markdown preview:", e);
+      this.shown = [];
+      this.root.replaceChildren(h("div", { class: "md-diagram-error" }, "This note is nested too deep to be previewed."));
+      this.failed = true;
+      return;
+    }
+    const fresh = opts.fresh || this.failed;
+    this.failed = false;
+    const old = fresh ? [] : this.shown;
     // The unchanged blocks at the start and at the end stay as they are.
     let start = 0;
     while (start < old.length && start < blocks.length && old[start].source === blocks[start].source) start++;
@@ -54,7 +68,7 @@ export class MarkdownView {
     for (const r of removed) pool.set(r.source, [...(pool.get(r.source) ?? []), r.nodes]);
     const middle = blocks.slice(start, blocks.length - end).map((b) => ({ source: b.source, nodes: pool.get(b.source)?.shift() ?? b.render() }));
     const top = this.el.scrollTop;
-    if (opts.fresh) this.root.replaceChildren();
+    if (fresh) this.root.replaceChildren();
     else for (const r of removed) for (const n of r.nodes) n.parentNode?.removeChild(n);
     // Before the first element of the unchanged end (a link definition shows nothing).
     let anchor: Node | null = null;

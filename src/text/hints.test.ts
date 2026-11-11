@@ -68,3 +68,28 @@ describe("Kilo's hints", () => {
     expect(ids(ctx({ selection: "abc", occurrences: 1 }))).not.toContain("occurrences");
   });
 });
+
+describe("hints never freeze the app", () => {
+  it("long or crafted lines are read in a moment", () => {
+    const lines = [
+      "ssh a@" + "@b".repeat(20_000),
+      "ssh root@" + "x ".repeat(20_000) + "pass",
+      "- x" + " - y".repeat(20_000),
+      "a" + " ".repeat(40_000) + "b - todo",
+      "password" + " ".repeat(40_000) + ":",
+      "Bearer aaa".repeat(10_000),
+      "[[" + "a|".repeat(20_000),
+      "12/".repeat(20_000),
+    ];
+    for (const line of lines) {
+      const t = performance.now();
+      contextHints(ctx({ line, text: line }));
+      expect(performance.now() - t, line.slice(0, 20)).toBeLessThan(300);
+    }
+  });
+
+  it("still finds an ssh access with its password", () => {
+    expect(ids(ctx({ line: "ssh admin@10.0.0.1 -p 2222 pass: hunter2" }))).toContain("secret-line");
+    expect(ids(ctx({ line: "ssh admin@10.0.0.1 then look around" }))).not.toContain("secret-line");
+  });
+});

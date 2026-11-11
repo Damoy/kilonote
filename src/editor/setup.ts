@@ -62,8 +62,22 @@ const jsonc = StreamLanguage.define<{ inComment: boolean }>({
 
 /** Languages with a parser of their own (not a stream parser), loaded with their first note. */
 const LANGUAGE_MODULES: Record<string, () => Promise<Extension>> = {
-  markdown: () => import("./markdown-language").then((m) => m.markdownLanguage),
+  markdown: () =>
+    import("./markdown-language").then((m) => {
+      tooDeep = m.markdownTooDeep;
+      return m.markdownLanguage;
+    }),
 };
+
+let tooDeep: ((text: string) => boolean) | null = null;
+
+/**
+ * Whether a Markdown note is built too deep to be colored as Markdown (a crafted
+ * file: see text/markdown-guard.ts); null while the Markdown support is not loaded.
+ */
+export function markdownTooDeep(text: string): boolean | null {
+  return tooDeep ? tooDeep(text) : null;
+}
 
 /** Languages already loaded (their module is fetched on first use). */
 const loaded = new Map<string, Extension>();

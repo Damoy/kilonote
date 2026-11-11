@@ -21,7 +21,7 @@ import { mergeSettings, setSettingInText, SETTINGS_TEMPLATE, type Settings } fro
 import { applyMascot, applyTheme, findTheme } from "../core/themes";
 import { editorHooks } from "../editor/decorations";
 import { closeSlashMenu } from "../editor/slash";
-import { createEditorState, langForPath, languageReady, loadLanguage, reconfigureLanguage, settingsCompartment, settingsExtensions, type LangId } from "../editor/setup";
+import { createEditorState, langForPath, languageReady, loadLanguage, markdownTooDeep, reconfigureLanguage, settingsCompartment, settingsExtensions, type LangId } from "../editor/setup";
 import { makeTaskConfig, type TaskConfig } from "../text/tasks";
 import { debounce } from "../ui/dom";
 import { confirm, prompt, setFocusRestorer, toast } from "../ui/overlay";
@@ -359,6 +359,7 @@ export class App {
     let savedText: Text | null = null;
     const make = () => {
       this.unmade.delete(doc);
+      if (doc.lang === "markdown" && markdownTooDeep(init.text)) this.plainMarkdown(doc);
       let s = createEditorState(init.text, doc.lang, this.settings, this.taskCfg, (u) => this.onEditorUpdate(u));
       if (init.cursor) s = s.update({ selection: { anchor: Math.min(init.cursor, s.doc.length) } }).state;
       // Saved as it is: the saved text is the editor's first one (shared, not copied).
@@ -417,6 +418,10 @@ export class App {
 
   /** Sets the document type of a tab: its coloring and the note features. */
   setLang(doc: Doc, lang: LangId) {
+    if (lang === "markdown" && markdownTooDeep(this.docText(doc))) {
+      this.plainMarkdown(doc);
+      return;
+    }
     doc.lang = lang;
     this.applyToDoc(doc, { effects: [reconfigureLanguage(lang), settingsCompartment.reconfigure(settingsExtensions(this.settings, this.taskCfg, lang))] });
     this.ensureLanguage(doc);
@@ -429,8 +434,24 @@ export class App {
     if (languageReady(lang)) return;
     void loadLanguage(lang).then((ok) => {
       // (A tab whose state is not made yet gets the language when it is made.)
-      if (ok && doc.lang === lang && this.stateMade(doc)) this.applyToDoc(doc, { effects: reconfigureLanguage(lang) });
+      if (!ok || doc.lang !== lang || !this.stateMade(doc)) return;
+      if (lang === "markdown" && markdownTooDeep(this.docText(doc))) {
+        this.plainMarkdown(doc);
+        this.applyToDoc(doc, { effects: settingsCompartment.reconfigure(settingsExtensions(this.settings, this.taskCfg, "text")) });
+        this.emit("docs");
+        return;
+      }
+      this.applyToDoc(doc, { effects: reconfigureLanguage(lang) });
     });
+  }
+
+  /**
+   * A Markdown note nested deeper than real notes ever are (a crafted file):
+   * shown as plain text, since coloring it would freeze the editor.
+   */
+  private plainMarkdown(doc: Doc) {
+    doc.lang = "text";
+    toast(`"${this.docName(doc)}" is nested unusually deep: it is shown as plain text, without Markdown coloring or preview.`, { timeout: 6000 });
   }
 
   /** "Untitled N" with the smallest N that no open draft uses (closed drafts free their number). */
