@@ -4,7 +4,7 @@ import type { App } from "../app/app";
 import { titleWithKey } from "../core/commands";
 import { resolveColor } from "../core/themes";
 import { isCodeLang, languageLabel } from "../editor/languages";
-import { countLabel, goToOccurrence, occurrences } from "../editor/matches";
+import { countLabel, goToOccurrence, LARGE_DOC, occurrences } from "../editor/matches";
 import { findTasks } from "../text/tasks";
 import { debounce, h, icon } from "./dom";
 import { showMenu } from "./overlay";
@@ -83,9 +83,13 @@ export class StatusBar {
     this.updateMeta();
   }
 
+  /** The occurrences of a selection in a large note: counted once selecting pauses. */
+  private occurrencesSoon = debounce(() => this.updateOccurrences(), 150);
+
   private updatePos() {
     const doc = this.app.active;
-    this.updateOccurrences();
+    if (doc && this.app.view.state.doc.length > LARGE_DOC && !this.app.view.state.selection.main.empty) this.occurrencesSoon();
+    else this.updateOccurrences();
     if (!doc) {
       this.pos.textContent = "";
       return;

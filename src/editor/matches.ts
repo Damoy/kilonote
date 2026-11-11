@@ -63,13 +63,18 @@ export function selectedText(state: EditorState): string | null {
   return query.trim() ? query : null;
 }
 
-/** The note as a string, made once per version of the text (searching it is fast). */
-const strings = new WeakMap<Text, string>();
+/** The note as a string (searching it is fast): only the last one, released when selecting stops. */
+let lastString: { doc: Text; text: string } | null = null;
+let releaseTimer: ReturnType<typeof setTimeout> | undefined;
 function docString(doc: Text): string {
-  let s = strings.get(doc);
-  if (s === undefined) strings.set(doc, (s = doc.toString()));
-  return s;
+  if (lastString?.doc !== doc) lastString = { doc, text: doc.toString() };
+  clearTimeout(releaseTimer);
+  releaseTimer = setTimeout(() => (lastString = null), 5000);
+  return lastString.text;
 }
+
+/** Above this size (characters), the whole note is counted once typing or selecting pauses. */
+export const LARGE_DOC = 300_000;
 
 const lastOccurrences = new WeakMap<Text, { text: string; matches: Matches }>();
 
@@ -179,10 +184,22 @@ const searchCounter = ViewPlugin.fromClass(
   class {
     constructor(readonly view: EditorView) {}
 
+    private timer: ReturnType<typeof setTimeout> | undefined;
+
     update(u: ViewUpdate) {
-      if (searchPanelOpen(u.state) && (u.docChanged || u.selectionSet || searchChanged(u))) {
-        this.view.requestMeasure({ key: this, read: () => null, write: () => this.draw() });
-      }
+      if (!searchPanelOpen(u.state) || !(u.docChanged || u.selectionSet || searchChanged(u))) return;
+      clearTimeout(this.timer);
+      // In a large note, typing in the text counts again once typing pauses.
+      if (u.docChanged && u.state.doc.length > LARGE_DOC) this.timer = setTimeout(() => this.schedule(), 200);
+      else this.schedule();
+    }
+
+    schedule() {
+      this.view.requestMeasure({ key: this, read: () => null, write: () => this.draw() });
+    }
+
+    destroy() {
+      clearTimeout(this.timer);
     }
 
     draw() {
@@ -206,21 +223,25 @@ const searchCounter = ViewPlugin.fromClass(
 
 const occurrenceMark = Decoration.mark({ class: "cm-selectionMatch" });
 
-/** The other occurrences of the selected text, highlighted where they are visible. */
+/** The other occurrences of the selected text, highlighted where they are visible (only that part is read). */
 function highlightOccurrences(view: EditorView): DecorationSet {
-  const m = occurrences(view.state);
-  if (!m || m.from.length < 2) return Decoration.none;
+  const text = selectedText(view.state);
+  if (text == null) return Decoration.none;
   const { ranges } = view.state.selection;
   const marks: Range<Decoration>[] = [];
-  let i = 0;
+  let last = -1;
   for (const visible of view.visibleRanges) {
-    for (i = Math.max(i, firstAtOrAfter(m.to, visible.from + 1)); i < m.from.length && m.from[i] < visible.to; i++) {
-      const from = m.from[i];
-      const to = m.to[i];
-      if (!ranges.some((r) => r.from <= from && r.to >= to)) marks.push(occurrenceMark.range(from, to));
+    const from = Math.max(0, visible.from - text.length);
+    const part = view.state.sliceDoc(from, Math.min(view.state.doc.length, visible.to + text.length));
+    for (let i = part.indexOf(text); i >= 0; i = part.indexOf(text, i + text.length)) {
+      const start = from + i;
+      const end = start + text.length;
+      if (start <= last) continue; // (already found in the previous visible range)
+      last = start;
+      if (!ranges.some((r) => r.from <= start && r.to >= end)) marks.push(occurrenceMark.range(start, end));
     }
   }
-  return Decoration.set(marks);
+  return Decoration.set(marks, true);
 }
 
 const occurrenceHighlighter = ViewPlugin.fromClass(

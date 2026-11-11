@@ -8,8 +8,7 @@ import {
 } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { search, searchKeymap } from "@codemirror/search";
-import { defineLanguageFacet, HighlightStyle, indentUnit, Language, StreamLanguage, syntaxHighlighting } from "@codemirror/language";
-import { GFM, parser as markdownParser } from "@lezer/markdown";
+import { HighlightStyle, indentUnit, StreamLanguage, syntaxHighlighting } from "@codemirror/language";
 import { tags as t } from "@lezer/highlight";
 import type { Settings } from "../core/settings";
 import { codeDocFacet, linkTrigger, notesClickHandler, notesHighlighter, plainNotesFacet, taskConfigFacet } from "./decorations";
@@ -60,38 +59,35 @@ const jsonc = StreamLanguage.define<{ inComment: boolean }>({
   languageData: { commentTokens: { line: "//", block: { open: "/*", close: "*/" } } },
 });
 
-// Markdown without embedded languages (HTML/CSS/JS): much lighter.
-const markdownLanguage = new Language(
-  defineLanguageFacet({ commentTokens: { block: { open: "<!--", close: "-->" } } }),
-  markdownParser.configure(GFM),
-  [],
-  "markdown",
-);
+/** Languages with a parser of their own (not a stream parser), loaded with their first note. */
+const LANGUAGE_MODULES: Record<string, () => Promise<Extension>> = {
+  markdown: () => import("./markdown-language").then((m) => m.markdownLanguage),
+};
 
-/** Code languages already loaded (their module is fetched on first use). */
+/** Languages already loaded (their module is fetched on first use). */
 const loaded = new Map<string, Extension>();
 const loading = new Map<string, Promise<boolean>>();
 
 function languageExtension(lang: LangId): Extension {
-  if (lang === "markdown") return markdownLanguage;
   if (lang === "jsonc") return jsonc;
   return loaded.get(lang) ?? [];
 }
 
 /** True once the coloring of `lang` is available (no loading needed). */
 export function languageReady(lang: LangId): boolean {
-  return !languageInfo(lang).load || loaded.has(lang);
+  return loaded.has(lang) || (!LANGUAGE_MODULES[lang] && !languageInfo(lang).load);
 }
 
-/** Loads the coloring of a code language; resolves to false if it failed. */
+/** Loads the coloring of a language; resolves to false if it failed. */
 export function loadLanguage(lang: LangId): Promise<boolean> {
-  const info = languageInfo(lang);
-  if (!info.load || loaded.has(lang)) return Promise.resolve(true);
+  if (languageReady(lang)) return Promise.resolve(true);
   let p = loading.get(lang);
   if (!p) {
-    p = info.load().then(
-      (parser) => {
-        loaded.set(lang, StreamLanguage.define(parser));
+    const info = languageInfo(lang);
+    const load = LANGUAGE_MODULES[lang] ?? (() => info.load!().then((parser) => StreamLanguage.define(parser)));
+    p = load().then(
+      (extension) => {
+        loaded.set(lang, extension);
         return true;
       },
       (e) => {

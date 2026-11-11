@@ -71,29 +71,60 @@ export class TabBar {
     }
   }
 
+  /** What is on screen: the groups and tabs, in order (when it is the same, the tabs are updated in place). */
+  private shown = "";
+  private shownActive: Doc | null = null;
+  private overflowPending = false;
+
   render() {
     if (this.dragging?.active) return;
     const app = this.app;
-    this.scroller.replaceChildren();
-    const seenGroups = new Set<string>();
     // Groups expanded since the last render: their tabs slide in.
     const opened = new Set(app.groups.filter((g) => !g.collapsed && this.wasCollapsed.has(g.id)).map((g) => g.id));
     this.wasCollapsed = new Set(app.groups.filter((g) => g.collapsed).map((g) => g.id));
+    const items: ({ group: TabGroup } | { doc: Doc; group?: TabGroup })[] = [];
+    const seenGroups = new Set<string>();
     for (const doc of app.docs) {
       const group = doc.groupId ? app.groups.find((g) => g.id === doc.groupId) : undefined;
       if (group && !seenGroups.has(group.id)) {
         seenGroups.add(group.id);
-        this.scroller.append(this.renderGroupChip(group));
+        items.push({ group });
       }
       if (group?.collapsed && doc !== app.active) continue;
-      const tab = this.renderTab(doc, group);
-      if (group && opened.has(group.id) && doc !== app.active) tab.classList.add("appearing");
-      this.scroller.append(tab);
+      items.push({ doc, group });
+    }
+    const shown = items.map((i) => ("doc" in i ? `t${i.doc.id}` : `g${i.group.id}`)).join(",");
+    const els = [...this.scroller.children].filter((e) => e !== this.marker) as HTMLElement[];
+    if (shown === this.shown && !opened.size && els.length === items.length) {
+      // The same tabs: only their state changes (dirty, active, name…), no new elements.
+      items.forEach((it, i) => {
+        if ("doc" in it) this.applyTab(els[i], it.doc, it.group);
+        else els[i].replaceWith(this.renderGroupChip(it.group));
+      });
+    } else {
+      this.scroller.replaceChildren(
+        ...items.map((it) => {
+          if (!("doc" in it)) return this.renderGroupChip(it.group);
+          const tab = this.renderTab(it.doc, it.group);
+          if (it.group && opened.has(it.group.id) && it.doc !== app.active) tab.classList.add("appearing");
+          return tab;
+        }),
+      );
+      this.shown = shown;
     }
     this.updateSideBtn();
-    const activeEl = this.scroller.querySelector<HTMLElement>(".kn-tab.active");
-    activeEl?.scrollIntoView({ block: "nearest", inline: "nearest" });
-    this.updateOverflow();
+    if (app.active !== this.shownActive) {
+      this.shownActive = app.active;
+      this.scroller.querySelector<HTMLElement>(".kn-tab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+    // Measured once per frame (reading the widths forces a layout).
+    if (!this.overflowPending) {
+      this.overflowPending = true;
+      requestAnimationFrame(() => {
+        this.overflowPending = false;
+        this.updateOverflow();
+      });
+    }
   }
 
   private updateOverflow() {
@@ -148,22 +179,34 @@ export class TabBar {
     return chip;
   }
 
+  /** Shows the state of a document on its tab (made by renderTab). */
+  private applyTab(tab: HTMLElement, doc: Doc, group?: TabGroup) {
+    const app = this.app;
+    const cls = `kn-tab${doc === app.active ? " active" : ""}${doc.dirty ? " dirty" : ""}${doc.missing ? " missing" : ""}${group ? " grouped" : ""}${doc.color ? " colored" : ""}`;
+    if (tab.className !== cls) tab.className = cls;
+    const tabColor = doc.color ? resolveColor(doc.color) : "";
+    const groupColor = group ? resolveColor(group.color) : "";
+    if (tab.style.getPropertyValue("--tab-c") !== tabColor) tab.style.setProperty("--tab-c", tabColor || null);
+    if (tab.style.getPropertyValue("--g") !== groupColor) tab.style.setProperty("--g", groupColor || null);
+    const title = doc.path ? relative(app.workspace, doc.path) : `${doc.title} (unsaved)`;
+    if (tab.title !== title) tab.title = title;
+    const name = tab.querySelector(".kn-tab-name")!;
+    if (name.textContent !== app.docName(doc)) name.textContent = app.docName(doc);
+    const done = !!doc.path && isDoneFile(doc.path, app.settings.archive_suffix);
+    const doneIcon = tab.querySelector(".kn-tab-icon");
+    if (done && !doneIcon) tab.prepend(icon("fileDone", "kn-tab-icon"));
+    else if (!done) doneIcon?.remove();
+  }
+
   private renderTab(doc: Doc, group?: TabGroup) {
     const app = this.app;
-    const isActive = doc === app.active;
-    const done = doc.path && isDoneFile(doc.path, app.settings.archive_suffix);
     const tab = h(
       "div",
-      {
-        class: `kn-tab${isActive ? " active" : ""}${doc.dirty ? " dirty" : ""}${doc.missing ? " missing" : ""}${group ? " grouped" : ""}${doc.color ? " colored" : ""}`,
-        style: { "--tab-c": doc.color ? resolveColor(doc.color) : null, "--g": group ? resolveColor(group.color) : null },
-        title: doc.path ? relative(app.workspace, doc.path) : `${doc.title} (unsaved)`,
-        role: "tab",
-      },
-      done ? icon("fileDone", "kn-tab-icon") : null,
-      h("span", { class: "kn-tab-name" }, app.docName(doc)),
+      { role: "tab" },
+      h("span", { class: "kn-tab-name" }),
       h("button", { class: "kn-tab-close", title: "Close", tabindex: "-1" }, h("span", { class: "kn-tab-dirty" }), icon("x")),
     );
+    this.applyTab(tab, doc, group);
     tab.querySelector(".kn-tab-close")!.addEventListener("click", (e) => {
       e.stopPropagation();
       void app.closeDoc(doc);

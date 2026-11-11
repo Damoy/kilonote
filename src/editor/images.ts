@@ -97,8 +97,26 @@ function lineDecorations(state: EditorState, from: number, to: number): Range<De
 }
 
 /** The image blocks, kept up to date line by line (only the edited lines are read again). */
+/** The image blocks of a whole note (line by line, without making a Line object for each). */
+function allDecorations(state: EditorState): DecorationSet {
+  const out: Range<Decoration>[] = [];
+  let pos = 0;
+  for (const iter = state.doc.iterLines(); !iter.next().done; ) {
+    const text = iter.value;
+    if (text.includes("![")) {
+      const refs = imageRefs(text);
+      if (refs.length) {
+        out.push(imageLine.range(pos));
+        out.push(Decoration.widget({ widget: new ImagesWidget(refs), block: true, side: 1 }).range(pos + text.length));
+      }
+    }
+    pos += text.length + 1;
+  }
+  return Decoration.set(out);
+}
+
 export const imagesField = StateField.define<DecorationSet>({
-  create: (state) => Decoration.set(lineDecorations(state, 0, state.doc.length)),
+  create: allDecorations,
   update(decos, tr) {
     if (!tr.docChanged) return decos;
     decos = decos.map(tr.changes);

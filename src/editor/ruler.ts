@@ -52,75 +52,110 @@ interface Mark {
   color?: string;
 }
 
-/** The marks, in pixels from the top of the ruler (one per pixel row and kind). */
-function measure(view: EditorView, outline: Landmark[]): { top: number; height: number; marks: Mark[] } {
-  const scroller = view.scrollDOM;
-  const height = scroller.clientHeight;
-  const scale = height / Math.max(scroller.scrollHeight, 1);
-  const pad = view.documentPadding.top;
-  const y = (pos: number) => Math.min(height - 2, Math.round((pad + view.lineBlockAt(Math.min(pos, view.state.doc.length)).top) * scale));
+interface Geometry {
+  top: number;
+  height: number;
+  scale: number;
+  pad: number;
+}
+
+/** Where a position of the note is on the ruler (px from its top): where the scrollbar thumb would be to show it. */
+function rulerY(view: EditorView, g: Geometry, pos: number): number {
+  return Math.min(g.height - 2, Math.round((g.pad + view.lineBlockAt(Math.min(pos, view.state.doc.length)).top) * g.scale));
+}
+
+/** Marks for positions (one per pixel row, kind and color). */
+function marksAt(view: EditorView, g: Geometry, items: { pos: number; kind: string; color?: string }[]): Mark[] {
   const marks: Mark[] = [];
   const seen = new Set<string>();
-  const add = (pos: number, kind: string, color?: string) => {
-    const m = { y: y(pos), kind, color };
-    const key = `${m.y}|${kind}|${color ?? ""}`;
-    if (seen.has(key)) return;
+  for (const { pos, kind, color } of items) {
+    const y = rulerY(view, g, pos);
+    const key = `${y}|${kind}|${color ?? ""}`;
+    if (seen.has(key)) continue;
     seen.add(key);
-    marks.push(m);
-  };
-  for (const l of outline) add(l.pos, l.kind, l.color);
-  const found = searchMatches(view.state);
-  const occ = found ? null : occurrences(view.state); // while searching, the search's marks
-  const addAll = (m: Matches, kind: string) => m.from.forEach((pos) => add(pos, kind));
-  if (found) {
-    addAll(found, "found");
-    const i = currentMatch(found, view.state);
-    if (i >= 0) add(found.from[i], "found current");
-  } else if (occ && occ.from.length > 1) addAll(occ, "occ");
-  return { top: scroller.offsetTop, height, marks };
+    marks.push({ y, kind, color });
+  }
+  return marks;
 }
+
+/** The marks of the matches: the search's while searching, otherwise the other occurrences of the selection. */
+function matchItems(view: EditorView): { pos: number; kind: string }[] {
+  const found = searchMatches(view.state);
+  if (found) {
+    const i = currentMatch(found, view.state);
+    const items = found.from.map((pos) => ({ pos, kind: "found" }));
+    return i >= 0 ? [...items, { pos: found.from[i], kind: "found current" }] : items;
+  }
+  const occ: Matches | null = occurrences(view.state);
+  return occ && occ.from.length > 1 ? occ.from.map((pos) => ({ pos, kind: "occ" })) : [];
+}
+
+/** How long typing must pause before the marks move with the text (they barely do while typing). */
+const SETTLE_MS = 250;
 
 const ruler = ViewPlugin.fromClass(
   class {
     readonly dom = document.createElement("div");
     private outline: Landmark[] = [];
-    private timer: ReturnType<typeof setTimeout> | undefined;
+    /** The outline's marks, kept while the outline and the geometry stay the same. */
+    private outlineMarks: { geometry: string; marks: Mark[] } | null = null;
+    private drawn = "";
+    private outlineTimer: ReturnType<typeof setTimeout> | undefined;
+    private settleTimer: ReturnType<typeof setTimeout> | undefined;
 
     constructor(readonly view: EditorView) {
       this.dom.className = "cm-ruler";
       this.dom.setAttribute("aria-hidden", "true");
       view.dom.append(this.dom);
-      this.outline = this.readOutline();
-      this.schedule();
+      // Read once the note is on screen: opening a note never waits for its outline.
+      this.outlineTimer = setTimeout(() => this.readOutline());
     }
 
     update(u: ViewUpdate) {
       const { startState: before, state } = u;
       if (before.facet(taskConfigFacet) !== state.facet(taskConfigFacet) || before.facet(codeDocFacet) !== state.facet(codeDocFacet)) {
-        this.outline = this.readOutline();
-        this.schedule();
+        this.readOutline();
       }
       if (u.docChanged) {
-        // The outline is read again once typing pauses (the marks of the matches right away).
-        clearTimeout(this.timer);
-        this.timer = setTimeout(() => {
-          this.outline = this.readOutline();
-          this.schedule();
-        }, 400);
+        clearTimeout(this.outlineTimer);
+        this.outlineTimer = setTimeout(() => this.readOutline(), 400);
       }
-      if (u.docChanged || u.selectionSet || u.geometryChanged || u.heightChanged || searchChanged(u)) this.schedule();
+      if (u.docChanged || u.heightChanged || u.geometryChanged) {
+        // Typing, a resize, heights measured while scrolling: once things settle.
+        this.outlineMarks = null;
+        clearTimeout(this.settleTimer);
+        this.settleTimer = setTimeout(() => this.schedule(), SETTLE_MS);
+      } else if (u.selectionSet || searchChanged(u)) this.schedule();
     }
 
-    readOutline(): Landmark[] {
+    readOutline() {
       const { state } = this.view;
-      return state.facet(codeDocFacet) ? [] : landmarks(state.doc, state.facet(taskConfigFacet));
+      this.outline = state.facet(codeDocFacet) ? [] : landmarks(state.doc, state.facet(taskConfigFacet));
+      this.outlineMarks = null;
+      this.schedule();
     }
 
     schedule() {
-      this.view.requestMeasure({ key: this, read: (view) => measure(view, this.outline), write: (m) => this.draw(m) });
+      this.view.requestMeasure({ key: this, read: (view) => this.measure(view), write: (m) => this.draw(m) });
     }
 
-    draw({ top, height, marks }: ReturnType<typeof measure>) {
+    measure(view: EditorView) {
+      const scroller = view.scrollDOM;
+      const g: Geometry = {
+        top: scroller.offsetTop,
+        height: scroller.clientHeight,
+        scale: scroller.clientHeight / Math.max(scroller.scrollHeight, 1),
+        pad: view.documentPadding.top,
+      };
+      const geometry = `${g.height}|${g.scale}|${g.pad}`;
+      if (this.outlineMarks?.geometry !== geometry) this.outlineMarks = { geometry, marks: marksAt(view, g, this.outline) };
+      return { top: g.top, height: g.height, marks: [...this.outlineMarks.marks, ...marksAt(view, g, matchItems(view))] };
+    }
+
+    draw({ top, height, marks }: { top: number; height: number; marks: Mark[] }) {
+      const key = `${top}|${height}|${marks.map((m) => `${m.y}${m.kind}${m.color ?? ""}`).join(",")}`;
+      if (key === this.drawn) return;
+      this.drawn = key;
       this.dom.style.top = `${top}px`;
       this.dom.style.height = `${height}px`;
       this.dom.replaceChildren(
@@ -135,7 +170,8 @@ const ruler = ViewPlugin.fromClass(
     }
 
     destroy() {
-      clearTimeout(this.timer);
+      clearTimeout(this.outlineTimer);
+      clearTimeout(this.settleTimer);
       this.dom.remove();
     }
   },

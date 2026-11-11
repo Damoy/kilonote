@@ -13,14 +13,32 @@ import {
 import { confirm, toast } from "../ui/overlay";
 import type { App, Doc } from "./app";
 
-/** The images shown lately, by file (a few dozen at most). */
+/** The images shown lately, by file: 40 at most, and 24 MB of data at most (screenshots are large). */
 const cache = new Map<string, Promise<string | null>>();
-const CACHE_SIZE = 40;
+const sizes = new Map<string, number>();
+const CACHE_COUNT = 40;
+const CACHE_BYTES = 24 * 1024 * 1024;
 
 function remember(path: string, url: Promise<string | null>) {
-  cache.delete(path);
+  forget(path);
   cache.set(path, url);
-  while (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value!);
+  void url.then((u) => {
+    if (cache.get(path) !== url || u == null) return;
+    sizes.set(path, u.length);
+    let total = [...sizes.values()].reduce((a, b) => a + b, 0);
+    // The oldest go first (never the one just shown).
+    for (const old of cache.keys()) {
+      if (total <= CACHE_BYTES || old === path) break;
+      total -= sizes.get(old) ?? 0;
+      forget(old);
+    }
+  });
+  while (cache.size > CACHE_COUNT) forget(cache.keys().next().value!);
+}
+
+function forget(path: string) {
+  cache.delete(path);
+  sizes.delete(path);
 }
 
 function dataUrl(bytes: Uint8Array, mime: string): Promise<string> {
@@ -43,7 +61,7 @@ export function loadNoteImage(app: App, ref: string): Promise<string | null> {
   const url = app.backend.readImage(path).then((bytes) => dataUrl(bytes, mimeOf(path))).catch(() => null);
   remember(path, url);
   // A missing image may appear later (copied in): not remembered as missing.
-  void url.then((u) => u === null && cache.get(path) === url && cache.delete(path));
+  void url.then((u) => u === null && cache.get(path) === url && forget(path));
   return url;
 }
 

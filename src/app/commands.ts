@@ -7,14 +7,16 @@ import { openBoard, openCheatSheet } from "../ui/lazy";
 import type { App } from "./app";
 import { formatDocument } from "./editing";
 import { deleteUnusedImages } from "./images";
-import { editTemplates, newFromTemplate, openDailyNote } from "./templates";
-import { insertNoteLink, showBacklinks } from "./links";
-import { encryptSelection, forgetPassword } from "./secrets";
 import { copyText, renamePath } from "./files";
 import { showLocalHistory } from "./history";
 import { openCommandPalette, openQuickOpen, selectAccent, selectLanguage, selectMascot, selectTheme } from "./pickers";
 import { archiveAllDone, archiveSelection, cycleTasks, generateReport, generateTagReport, setDueDate, toggleDoneFile } from "./tasks";
 import { moveToNewWindow } from "./windows";
+
+// Features loaded on first use (their code stays out of the start-up bundle).
+const templates = () => import("./templates");
+const links = () => import("./links");
+const secrets = () => import("./secrets");
 
 export function showAbout() {
   void confirm({
@@ -120,18 +122,18 @@ export function registerAllCommands(app: App) {
     { id: "palette.commands", title: "Command palette", run: () => openCommandPalette(app) },
     { id: "palette.files", title: "Go to file…", run: () => openQuickOpen(app) },
     { id: "palette.line", title: "Go to line…", run: () => openQuickOpen(app, ":") },
-    { id: "palette.backlinks", title: "Go to: Notes linking here", run: () => showBacklinks(app) },
-    { id: "edit.encrypt", title: "Edit: Encrypt selection with a password…", run: () => encryptSelection(app) },
-    { id: "edit.forgetPassword", title: "Edit: Forget the remembered secrets password", run: () => forgetPassword() },
-    { id: "edit.linkNote", title: "Edit: Link to a note…", run: () => insertNoteLink(app) },
+    { id: "palette.backlinks", title: "Go to: Notes linking here", run: () => links().then((m) => m.showBacklinks(app)) },
+    { id: "edit.encrypt", title: "Edit: Encrypt selection with a password…", run: () => secrets().then((m) => m.encryptSelection(app)) },
+    { id: "edit.forgetPassword", title: "Edit: Forget the remembered secrets password", run: () => secrets().then((m) => m.forgetPassword()) },
+    { id: "edit.linkNote", title: "Edit: Link to a note…", run: () => links().then((m) => m.insertNoteLink(app)) },
     { id: "palette.symbol", title: "Go to heading or task…", run: () => openQuickOpen(app, "@") },
     { id: "edit.find", title: "Edit: Find", run: () => app.active && openFind(app.view) },
     { id: "edit.replace", title: "Edit: Find and replace", run: () => app.active && openFind(app.view) },
     { id: "edit.nextOccurrence", title: "Edit: Next occurrence of the selected text", run: () => app.active && goToOccurrence(app.view, true) },
     { id: "edit.prevOccurrence", title: "Edit: Previous occurrence of the selected text", run: () => app.active && goToOccurrence(app.view, false) },
-    { id: "file.newFromTemplate", title: "File: New note from template…", run: () => newFromTemplate(app) },
-    { id: "file.dailyNote", title: "File: Today's note", run: () => openDailyNote(app) },
-    { id: "template.edit", title: "Template: Edit templates…", run: () => editTemplates(app) },
+    { id: "file.newFromTemplate", title: "File: New note from template…", run: () => templates().then((m) => m.newFromTemplate(app)) },
+    { id: "file.dailyNote", title: "File: Today's note", run: () => templates().then((m) => m.openDailyNote(app)) },
+    { id: "template.edit", title: "Template: Edit templates…", run: () => templates().then((m) => m.editTemplates(app)) },
     { id: "file.deleteUnusedImages", title: "File: Delete unused images…", run: () => deleteUnusedImages(app) },
     { id: "edit.format", title: "Edit: Format document (JSON, XML, HTML, CSS, SQL, Markdown tables)", run: () => formatDocument(app) },
     { id: "edit.minify", title: "Edit: Minify JSON", run: () => formatDocument(app, "minify") },

@@ -33,20 +33,34 @@ export function selectLanguage(app: App, doc = app.active) {
   });
 }
 
+// The commands run lately from the palette come first (kept by the window's web view).
+const RECENT_KEY = "kilonote-recent-commands";
+const RECENT_MAX = 6;
+
+function recentCommands(): string[] {
+  try {
+    const list: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+    return Array.isArray(list) ? list.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function runFromPalette(id: string) {
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify([id, ...recentCommands().filter((x) => x !== id)].slice(0, RECENT_MAX)));
+  } catch {
+    /* storage unavailable: no recent commands */
+  }
+  runCommand(id);
+}
+
 export function openCommandPalette(app: App, query = "") {
   openPicker({
     placeholder: "Command…",
     query,
-    provide: (q) => {
-      const cmds = paletteCommands(app);
-      return {
-        items: fuzzyFilter(q, cmds, (c) => c.title).map(({ item, result }) => ({
-          label: item.title, hint: shortcutFor(item.id), icon: "command", positions: result.positions, value: item.id,
-        })),
-        empty: "No matching command",
-      };
-    },
-    pick: (it) => runCommand(it.value as string),
+    provide: (q) => provideCommands(app, q),
+    pick: (it) => runFromPalette(it.value as string),
   });
 }
 
@@ -73,7 +87,7 @@ export function openQuickOpen(app: App, prefix = "") {
       return provideFiles(app, q);
     },
     pick: (it, q) => {
-      if (q.startsWith(">")) return runCommand(it.value as string);
+      if (q.startsWith(">")) return runFromPalette(it.value as string);
       if (q.startsWith("@")) return app.active && app.reveal(app.active, it.value as number);
       const v = it.value as { doc?: Doc; path?: string };
       if (v.doc) app.activate(v.doc);
@@ -90,10 +104,17 @@ export function openQuickOpen(app: App, prefix = "") {
   });
 }
 
+/** The commands matching `q`: with nothing typed, the ones run lately first. */
 export function provideCommands(app: App, q: string) {
+  let cmds = paletteCommands(app);
+  const recent = q.trim() ? [] : recentCommands();
+  if (recent.length) {
+    const rank = (c: Command) => (recent.includes(c.id) ? recent.indexOf(c.id) : RECENT_MAX);
+    cmds = [...cmds].sort((a, b) => rank(a) - rank(b));
+  }
   return {
-    items: fuzzyFilter(q, paletteCommands(app), (c) => c.title).map(({ item, result }) => ({
-      label: item.title, hint: shortcutFor(item.id), icon: "command", positions: result.positions, value: item.id,
+    items: fuzzyFilter(q, cmds, (c) => c.title).map(({ item, result }) => ({
+      label: item.title, hint: shortcutFor(item.id) || (recent.includes(item.id) ? "recent" : undefined), icon: "command", positions: result.positions, value: item.id,
     })),
     empty: "No matching command",
   };

@@ -4,7 +4,6 @@
 
 import { fuzzyFilter } from "../core/fuzzy";
 import { dirname, extname, join, relative } from "../core/path";
-import { editorHooks } from "../editor/decorations";
 import { isSafeTarget, linkName, linksTo, resolveNoteLink, splitLink } from "../text/links";
 import { confirm, toast } from "../ui/overlay";
 import { openPicker } from "../ui/palette";
@@ -144,9 +143,4 @@ export async function showBacklinks(app: App) {
       void app.openFile(f.path, { line: f.line });
     },
   });
-}
-
-export function installLinks(app: App) {
-  editorHooks.openNote = (target) => void openNoteLink(app, target);
-  editorHooks.linkNote = () => completeNoteLink(app);
 }

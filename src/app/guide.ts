@@ -72,7 +72,7 @@ it to the tasks of one tag (a client, a topic…).
 
 - **Ctrl+P**: go to any file of the folder (fuzzy search).
   - \`:42\` goes to line 42, \`@\` lists headings and tasks, \`>\` runs commands.
-- **Ctrl+Shift+P**: command palette.
+- **Ctrl+Shift+P**: command palette (the commands you ran lately come first).
 - **Ctrl+Shift+F**: search in all files; the ⇄ button adds a replace field (with undo).
 - **Ctrl+Shift+V** (or the *Preview* / *Tree* button at the right of the tabs): a second
   view next to the editor. Markdown, HTML and SVG files get a preview (pages run no

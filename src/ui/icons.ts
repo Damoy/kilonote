@@ -181,14 +181,28 @@ export function iconSvg(name: string, pack: IconPack = current): string {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 }
 
+/** Each icon is parsed once, then copied (much cheaper than parsing its markup again). */
+const parsed = new Map<string, Node>();
+function svgNode(name: string, pack: IconPack): Node {
+  const key = `${pack}|${name}`;
+  let node = parsed.get(key);
+  if (!node) {
+    const t = document.createElement("template");
+    // Static, home-made markup (never user input).
+    t.innerHTML = iconSvg(name, pack);
+    node = t.content.firstChild ?? document.createTextNode("");
+    parsed.set(key, node);
+  }
+  return node.cloneNode(true);
+}
+
 /** An icon; with `pack`, it keeps that pack (previews in the settings). */
 export function icon(name: string, cls = "", pack?: IconPack): HTMLSpanElement {
   const span = document.createElement("span");
-  span.className = `kn-icon ${cls}`.trim();
+  span.className = cls ? `kn-icon ${cls}` : "kn-icon";
   span.dataset.i = name;
   if (pack) span.dataset.pack = pack;
-  // Static, home-made markup (never user input).
-  span.innerHTML = iconSvg(name, pack ?? current);
+  span.append(svgNode(name, pack ?? current));
   return span;
 }
 
@@ -198,6 +212,6 @@ export function setIconPack(pack: IconPack) {
   if (pack === current) return;
   current = pack;
   document.querySelectorAll<HTMLElement>(".kn-icon[data-i]:not([data-pack])").forEach((el) => {
-    el.innerHTML = iconSvg(el.dataset.i!, pack);
+    el.replaceChildren(svgNode(el.dataset.i!, pack));
   });
 }

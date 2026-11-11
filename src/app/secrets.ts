@@ -6,7 +6,6 @@
 // only when asked to.
 
 import type { Doc, App } from "./app";
-import { setSecretHost } from "../editor/secrets";
 import { decryptSecret, encryptSecret, SECRET_BEGIN, type SecretBlock } from "../text/secrets";
 import { h, icon } from "../ui/dom";
 import { confirm, modal, toast } from "../ui/overlay";
@@ -247,16 +246,4 @@ function showSecret(app: App, doc: Doc, armored: string, near: number, plain: st
   const m = modal(content, () => void close());
   document.addEventListener("keydown", onKey, true);
   requestAnimationFrame(() => area.focus());
-}
-
-export function installSecrets(app: App) {
-  let lastRefusal = 0;
-  setSecretHost({
-    reveal: (view, block) => view === app.view && void revealSecret(app, block),
-    refused: () => {
-      if (Date.now() - lastRefusal < 3000) return;
-      lastRefusal = Date.now();
-      setTimeout(() => toast("A secret only changes as a whole: click it to change its text."));
-    },
-  });
 }

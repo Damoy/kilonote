@@ -13,6 +13,7 @@ import { renamePath } from "./files";
 import { deleteUnusedImages, dropImages, pasteImage, loadNoteImage } from "./images";
 import { openDailyNote } from "./templates";
 import { openNoteLink } from "./links";
+import { provideCommands } from "./pickers";
 import { encryptSelection, revealSecret } from "./secrets";
 import { secretsField } from "../editor/secrets";
 import { saveSessionNow } from "./session";
@@ -709,6 +710,19 @@ describe("secrets and Replace in files", () => {
     const { app, disk } = await start({ "/notes/s.txt": `price 10\n${block}\nend 10\n` });
     await replaceInFiles(app, ["/notes/s.txt"], /10/g, "20", true);
     expect(disk.text("/notes/s.txt")).toBe(`price 20\n${block}\nend 20\n`);
+  });
+});
+
+describe("command palette", () => {
+  it("lists the commands run lately first, until something is typed", async () => {
+    const { app } = await start({});
+    localStorage.setItem("kilonote-recent-commands", JSON.stringify(["view.board", "file.dailyNote"]));
+    const ids = (q: string) => provideCommands(app, q).items.map((i) => i.value);
+    expect(ids("").slice(0, 2)).toEqual(["view.board", "file.dailyNote"]);
+    expect(ids("save")[0]).not.toBe("view.board");
+    localStorage.setItem("kilonote-recent-commands", "not json");
+    expect(ids("").length).toBeGreaterThan(10);
+    localStorage.removeItem("kilonote-recent-commands");
   });
 });
 

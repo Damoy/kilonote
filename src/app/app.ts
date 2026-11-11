@@ -36,8 +36,7 @@ import { historyDir, historyName, keepVersion } from "./history";
 import { beforeClose, restoreOtherWindows, restoreSession, saveSessionNow, sessionFileName, sessionTab, type SessionTab } from "./session";
 import { defaultKeybindings, registerAllCommands, registerStatusCommands } from "./commands";
 import { dropImageFiles, installImages } from "./images";
-import { installLinks } from "./links";
-import { installSecrets } from "./secrets";
+import { installEditorHooks } from "./hooks";
 import { showStatusMenu } from "./tasks";
 
 export interface Doc {
@@ -154,8 +153,7 @@ export class App {
 
     registerAllCommands(this);
     installImages(this);
-    installLinks(this);
-    installSecrets(this);
+    installEditorHooks(this);
     this.applySettings();
     this.systemDark.addEventListener("change", () => this.settings.theme === "auto" && this.applySettings());
 

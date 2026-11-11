@@ -112,7 +112,8 @@ export function findSecrets(lines: Iterable<string>, offset = 0): SecretBlock[] 
   let pos = offset;
   let start = -1;
   for (const line of lines) {
-    const t = line.trim();
+    // (Most lines are not markers: skipped without copying them.)
+    const t = line.length >= SECRET_END.length && line.includes("-----") ? line.trim() : "";
     if (t === SECRET_BEGIN) start = pos;
     else if (t === SECRET_END && start >= 0) {
       out.push({ from: start, to: pos + line.length });
