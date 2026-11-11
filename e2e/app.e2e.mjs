@@ -266,7 +266,7 @@ try {
     await typePassword("Encrypt", 2);
     await until(() => run("return app.view.state.doc.toString().includes('-----BEGIN KILONOTE SECRET-----');"), "the encrypted block");
     await press("Control", "s");
-    await until(() => readFileSync(join(notes, "secret.txt"), "utf8").includes("BEGIN KILONOTE SECRET"), "the note saved");
+    await until(async () => readFileSync(join(notes, "secret.txt"), "utf8").includes("BEGIN KILONOTE SECRET"), "the note saved");
     expect(readFileSync(join(notes, "secret.txt"), "utf8").includes("hunter2"), false, "the secret in clear on disk");
     await run("document.querySelector('#editor-host .cm-secret').dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }));");
     await until(() => run("return document.querySelectorAll('.kn-modal input[type=password]').length === 1;"), "the reveal dialog");
