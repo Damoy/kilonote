@@ -2,7 +2,8 @@
 
 import type { App } from "../app/app";
 import { shortcutFor } from "../core/commands";
-import { basename } from "../core/path";
+import { basename, dirname, isInside, samePath } from "../core/path";
+import { forgetRecent, pinnedNotes, recentNotes } from "../app/pins";
 import kiloSvg from "../assets/kilo.svg?raw";
 import { h, icon } from "./dom";
 import { openCommandPalette, openQuickOpen } from "../app/pickers";
@@ -19,6 +20,9 @@ const TIPS = [
   "{file.toggleDone} switches between a note and its _done archive.",
 ];
 
+/** A path shown right-aligned (cut on its left): marks keep "/notes" from showing as "notes/". */
+const ltr = (path: string) => `\u200e${path}\u200e`;
+
 export function mascot(cls = "kilo"): HTMLElement {
   const wrap = h("div", { class: cls });
   // Static, home-made pixel art SVG (scripts/generate-icons.py): safe to insert.
@@ -30,6 +34,7 @@ export class Welcome {
   constructor(private app: App, private el: HTMLElement) {
     app.on("active", () => this.render());
     app.on("workspace", () => this.render());
+    app.on("pins", () => this.render());
   }
 
   render() {
@@ -42,6 +47,11 @@ export class Welcome {
     const action = (label: string, ic: string, id: string, run: () => unknown) =>
       h("button", { class: "wl-action", onclick: run }, icon(ic), h("span", {}, label), h("kbd", {}, key(id)));
     const recent = app.recent.filter((r) => r !== app.workspace).slice(0, 4);
+    // The pinned notes, then the ones opened lately (outside the settings folder).
+    const pins = pinnedNotes();
+    const lately = recentNotes().filter((p) => !pins.some((q) => samePath(p, q)) && !isInside(p, app.configDir));
+    const notes = [...pins.map((p) => ({ p, ic: "pin" })), ...lately.map((p) => ({ p, ic: "file" }))].slice(0, 6);
+    const openNote = (p: string) => void app.openFile(p).then((d) => d || forgetRecent(p));
     const tip = TIPS[Math.floor(Date.now() / 86_400_000) % TIPS.length];
     this.el.replaceChildren(
       h(
@@ -59,9 +69,13 @@ export class Welcome {
           action("Ongoing tasks", "tasks", "view.tasks", () => app.sidebar.show("tasks")),
           action("Commands", "command", "palette.commands", () => openCommandPalette(app)),
         ),
+        notes.length
+          ? h("div", { class: "wl-recent" }, h("div", { class: "wl-section" }, pins.length ? "Pinned and recent notes" : "Recent notes"),
+              ...notes.map(({ p, ic }) => h("button", { class: "wl-recent-item", title: p, onclick: () => openNote(p) }, icon(ic), h("span", {}, basename(p)), h("small", {}, ltr(dirname(p))))))
+          : null,
         recent.length
           ? h("div", { class: "wl-recent" }, h("div", { class: "wl-section" }, "Recent folders"),
-              ...recent.map((r) => h("button", { class: "wl-recent-item", title: r, onclick: () => app.openFolder(r) }, icon("folder"), h("span", {}, basename(r)), h("small", {}, r))))
+              ...recent.map((r) => h("button", { class: "wl-recent-item", title: r, onclick: () => app.openFolder(r) }, icon("folder"), h("span", {}, basename(r)), h("small", {}, ltr(r)))))
           : null,
         h("div", { class: "wl-tip" }, h("strong", {}, "Tip · "), tip.replace(/\{([\w.]+)\}/g, (_m, id: string) => key(id) || id)),
       ),

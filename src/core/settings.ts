@@ -17,6 +17,7 @@ export interface Settings {
   word_wrap: boolean;
   highlight_active_line: boolean;
   scrollbar_marks: boolean;
+  slash_commands: boolean;
   show_images: boolean;
   images_folder: string;
   daily_notes_folder: string;
@@ -83,6 +84,9 @@ export const SETTINGS_TEMPLATE = `// KiloNote settings
   // Marks along the scrollbar: headings and open tasks, the other occurrences of
   // the selected text, the search matches
   "scrollbar_marks": true,
+  // Quick inserts: "/" at the start of a line or after a space, in a note, offers
+  // /today, /todo, /h1, /table, /link, /secret, your templates…
+  "slash_commands": true,
   // Show the images of a note under their line: ![image](images/shot.png)
   "show_images": true,
   // Where a pasted image is saved, next to the note (Ctrl+V a screenshot in a note)

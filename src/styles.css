@@ -287,6 +287,14 @@ body.zen .cm-gutters { display: none !important; }
 .sb-empty p { margin: 0 0 12px; }
 .sb-empty.error { color: var(--kn-red); }
 .sb-hint { font-size: 12px; color: var(--kn-fg-faint); }
+/* Pinned notes, above the tree (app/pins.ts). */
+.sb-pins { flex: none; max-height: 40%; overflow: auto; padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px solid var(--kn-border); }
+.sb-pins-title { padding: 2px 12px 3px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--kn-fg-faint); }
+.sb-pin { padding-left: 12px; }
+.sb-pin .sb-name { overflow: hidden; text-overflow: ellipsis; }
+.sb-pin-icon { color: var(--kn-accent) !important; }
+.sb-pin-where { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 0.88em; color: var(--kn-fg-faint); }
+.sb-pin-mark { width: 12px; height: 12px; margin-left: 4px; flex: none; color: var(--kn-accent); opacity: 0.8; }
 .sb-recent-title { margin: 18px 0 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--kn-fg-faint); }
 .sb-recent { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 6px; border-radius: 6px; color: var(--kn-fg-muted); text-align: left; }
 .sb-recent:hover { background: var(--kn-hover); color: var(--kn-fg); }
@@ -1031,3 +1039,33 @@ body.zen .kn-kilo { display: none; }
 .kn-kilo-actions .kn-btn { height: 26px; padding: 0 10px; font-size: calc(var(--kn-ui-size) - 1px); white-space: nowrap; }
 .kn-kilo-never { margin-right: auto; padding: 0; white-space: nowrap; color: var(--kn-fg-faint); font-size: calc(var(--kn-ui-size) - 2px); text-decoration: underline; text-underline-offset: 2px; }
 .kn-kilo-never:hover { color: var(--kn-fg-muted); }
+
+/* Printing (File: Print or save as PDF): only the note on paper (app/export.ts). */
+#kn-print { display: none; }
+@media print {
+  @page { margin: 16mm 15mm; }
+  html, body { height: auto !important; overflow: visible !important; background: #ffffff !important; }
+  body > :not(#kn-print) { display: none !important; }
+  #kn-print { display: block !important; user-select: text; }
+  /* The status badges keep their colors (browsers leave backgrounds out by default). */
+  #kn-print, #kn-print * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  #kn-print h1, #kn-print h2, #kn-print h3 { break-after: avoid; }
+  #kn-print pre, #kn-print tr, #kn-print img, #kn-print figure { break-inside: avoid; }
+}
+
+/* Quick inserts after "/" (editor/slash.ts): a small menu at the cursor. */
+.cm-tooltip.kn-slash {
+  min-width: 250px; max-width: 380px; max-height: 268px; overflow-y: auto; padding: 4px;
+  background: var(--kn-bg-alt); border: 1px solid var(--kn-border); border-radius: 9px;
+  box-shadow: var(--shadow); font-family: var(--kn-ui-font); font-size: var(--kn-ui-size);
+  animation: pop 110ms var(--ease);
+}
+.kn-slash-item {
+  display: flex; align-items: baseline; gap: 9px; height: 27px; line-height: 27px;
+  padding: 0 8px; border-radius: 6px; color: var(--kn-fg); cursor: default; white-space: nowrap;
+}
+.kn-slash-item:hover { background: var(--kn-hover); }
+.kn-slash-item.selected { background: var(--kn-accent-soft); }
+.kn-slash-name { min-width: 72px; color: var(--kn-accent); font-family: var(--kn-font); font-size: 0.92em; }
+.kn-slash-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.kn-slash-detail { color: var(--kn-fg-faint); font-family: var(--kn-font); font-size: 0.86em; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }

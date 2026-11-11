@@ -80,6 +80,8 @@ export function showCheatSheet(app: App, opts: { startup?: boolean } = {}) {
       cmd("Find", "edit.find"),
       cmd("Find and replace", "edit.replace"),
       cmd("Next occurrence of the selection", "edit.nextOccurrence"),
+      fixed("Quick inserts (/today, /todo…)", "/"),
+      cmd("Copy as rich text", "edit.copyRich"),
       cmd("Format (JSON, XML…)", "edit.format"),
       fixed("Select next match", formatCombo(`${mac ? "Meta" : "Ctrl"}+D`)),
       fixed("Add a cursor", mac ? "⌥Click" : "Alt+Click"),

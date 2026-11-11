@@ -2,7 +2,7 @@
 // color, Kilo's color and document type.
 
 import { runCommand, shortcutFor, type Command } from "../core/commands";
-import { basename, dirname, isDoneFile, relative } from "../core/path";
+import { basename, dirname, isDoneFile, isWindowsPath, relative } from "../core/path";
 import { applyMascot, findTheme, MASCOT_VARIANTS, PALETTE_LABELS, THEMES } from "../core/themes";
 import { fuzzyFilter } from "../core/fuzzy";
 import { type LangId } from "../editor/setup";
@@ -10,6 +10,7 @@ import { LANGUAGES } from "../editor/languages";
 import { parseTask } from "../text/tasks";
 import { openPicker, type PickItem } from "../ui/palette";
 import type { App, Doc } from "./app";
+import { forgetRecent, pinnedNotes, recentNotes } from "./pins";
 
 /** Picker of the document types (status bar, palette). */
 export function selectLanguage(app: App, doc = app.active) {
@@ -91,7 +92,8 @@ export function openQuickOpen(app: App, prefix = "") {
       if (q.startsWith("@")) return app.active && app.reveal(app.active, it.value as number);
       const v = it.value as { doc?: Doc; path?: string };
       if (v.doc) app.activate(v.doc);
-      else if (v.path) return app.openFile(v.path);
+      // A recent note that is gone (deleted, moved by another program) is forgotten.
+      else if (v.path) return app.openFile(v.path).then((d) => d || forgetRecent(v.path!));
     },
     submit: (q) => {
       const n = parseInt(q.slice(1), 10);
@@ -141,28 +143,46 @@ export function provideSymbols(app: App, q: string) {
   };
 }
 
+/**
+ * The notes for "Go to file": the pinned ones first, then the ones opened
+ * lately, the other open tabs, and the notes of the folder. A pinned or recent
+ * note also wins over an equally good match.
+ */
 export function provideFiles(app: App, q: string) {
-  const items: { label: string; detail: string; doc?: Doc; path?: string; open: boolean }[] = [];
+  type FileItem = { label: string; detail: string; doc?: Doc; path?: string; open: boolean; pinned: boolean; recent: number };
+  const items: FileItem[] = [];
   const seen = new Set<string>();
+  const where = (p: string) => relative(app.workspace, dirname(p)) || "·";
+  // (Cheap keys: this runs on every key typed, over every note of the folder.)
+  const keyOf = (p: string) => (isWindowsPath(p) ? p.replace(/\\/g, "/").toLowerCase() : p);
+  const openDocs = new Map(app.docs.flatMap((d) => (d.path ? [[keyOf(d.path), d] as const] : [])));
+  const add = (path: string, extra: { pinned?: boolean; recent?: number }) => {
+    const key = keyOf(path);
+    if (seen.has(key)) return;
+    seen.add(key);
+    const doc = openDocs.get(key);
+    items.push({ label: basename(path), detail: where(path), doc, path, open: !!doc, pinned: !!extra.pinned, recent: extra.recent ?? -1 });
+  };
+  for (const p of pinnedNotes()) add(p, { pinned: true });
+  recentNotes().forEach((p, i) => (app.isNoteFile(p) || openDocs.has(keyOf(p))) && add(p, { recent: i }));
   for (const d of app.docs) {
-    items.push({ label: app.docName(d), detail: d.path ? relative(app.workspace, dirname(d.path)) || "·" : "unsaved", doc: d, open: true });
-    if (d.path) seen.add(d.path);
+    if (d.path) add(d.path, {});
+    else items.push({ label: app.docName(d), detail: "unsaved", doc: d, open: true, pinned: false, recent: -1 });
   }
-  for (const p of app.workspaceFiles) {
-    if (seen.has(p) || !app.isNoteFile(p)) continue;
-    items.push({ label: basename(p), detail: relative(app.workspace, dirname(p)) || "·", path: p, open: false });
-  }
-  const results = fuzzyFilter(q, items, (it) => (it.detail === "·" ? it.label : `${it.detail}/${it.label}`));
+  for (const p of app.workspaceFiles) if (app.isNoteFile(p)) add(p, {});
+  const bonus = (it: FileItem) => (it.pinned ? 60 : 0) + (it.recent >= 0 ? 40 - it.recent : 0) + (it.open ? 10 : 0);
+  const results = fuzzyFilter(q, items, (it) => (it.detail === "·" ? it.label : `${it.detail}/${it.label}`), 10_000);
+  if (q) results.sort((a, b) => b.result.score + bonus(b.item) - (a.result.score + bonus(a.item)));
   return {
-    items: results.map(({ item, result }) => {
+    items: results.slice(0, 200).map(({ item, result }) => {
       const offset = item.detail === "·" ? 0 : item.detail.length + 1;
       return {
         label: item.label,
         detail: item.detail === "·" ? undefined : item.detail,
         positions: result.positions.filter((p) => p >= offset).map((p) => p - offset),
         detailPositions: result.positions.filter((p) => p < offset),
-        icon: isDoneFile(item.label, app.settings.archive_suffix) ? "fileDone" : "file",
-        hint: item.open ? "open" : undefined,
+        icon: item.pinned ? "pin" : isDoneFile(item.label, app.settings.archive_suffix) ? "fileDone" : "file",
+        hint: item.pinned ? "pinned" : item.open ? "open" : item.recent >= 0 ? "recent" : undefined,
         value: { doc: item.doc, path: item.path },
       } satisfies PickItem;
     }),

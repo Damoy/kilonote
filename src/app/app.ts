@@ -16,7 +16,7 @@ import { EditorView, type ViewUpdate } from "@codemirror/view";
 import type { Backend } from "../core/backend";
 import { setKeybindings, setPlatform, type Command } from "../core/commands";
 import { parseJsonc } from "../core/jsonc";
-import { basename, dirname, extname, isProbablyBinary, join, samePath } from "../core/path";
+import { basename, dirname, extname, isInside, isProbablyBinary, join, samePath } from "../core/path";
 import { mergeSettings, setSettingInText, SETTINGS_TEMPLATE, type Settings } from "../core/settings";
 import { applyMascot, applyTheme, findTheme } from "../core/themes";
 import { editorHooks } from "../editor/decorations";
@@ -31,6 +31,7 @@ import { StatusBar } from "../ui/statusbar";
 import { Welcome } from "../ui/welcome";
 import { Preview } from "../ui/views/preview";
 import { openCheatSheet, openSettingsView, syncAssistant } from "../ui/lazy";
+import { noteOpened, onPinsChanged } from "./pins";
 import { setIconPack, type IconPack } from "../ui/icons";
 import { historyDir, historyName, keepVersion } from "./history";
 import { beforeClose, restoreOtherWindows, restoreSession, saveSessionNow, sessionFileName, sessionTab, type SessionTab } from "./session";
@@ -69,7 +70,7 @@ export interface TabGroup {
   collapsed: boolean;
 }
 
-export type AppEvent = "docs" | "active" | "workspace" | "settings" | "saved" | "selection";
+export type AppEvent = "docs" | "active" | "workspace" | "settings" | "saved" | "selection" | "pins";
 
 /** Error of the native backend for a file whose content is binary. */
 export const NOT_TEXT = "not a text file";
@@ -176,6 +177,12 @@ export class App {
       if (startup.length && !this.workspace) await this.openFolder(startup[0]);
     } else if (startup.length) await this.openPaths(startup);
     this.on("settings", () => syncAssistant(this));
+    // Pinned and recent notes: the explorer, "Go to file" and the welcome screen follow.
+    onPinsChanged((change) => change === "pins" && this.emit("pins"));
+    this.on("active", () => {
+      const p = this.active?.path;
+      if (p && !isInside(p, this.configDir)) noteOpened(p);
+    });
     this.renderAll();
     if (this.backend.windowLabel === "main") {
       void restoreOtherWindows(this);

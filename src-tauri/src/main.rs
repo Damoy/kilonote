@@ -758,6 +758,13 @@ fn prune_history(app: AppHandle, keep: usize) -> Result<(), String> {
     Ok(())
 }
 
+/// The print dialog of the window (File: Print or save as PDF). The page's
+/// print styles show only the note being printed.
+#[tauri::command]
+fn print_page(webview: tauri::Webview) -> Result<(), String> {
+    webview.print().map_err(err)
+}
+
 /// The frontend shows a window once it is ready (no white flash).
 /// Safety net: show it anyway after a short delay.
 fn show_soon(window: WebviewWindow) {
@@ -821,7 +828,8 @@ fn main() {
             window_at,
             send_paths,
             delete_session,
-            prune_history
+            prune_history,
+            print_page
         ])
         .build(tauri::generate_context!())
         .expect("failed to start KiloNote")

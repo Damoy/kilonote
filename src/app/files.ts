@@ -5,6 +5,7 @@ import { basename, dirname, extname, isInside, join, relative, samePath } from "
 import { langForPath } from "../editor/setup";
 import { confirm, prompt, toast } from "../ui/overlay";
 import type { App } from "./app";
+import { pathRemoved, pathRenamed } from "./pins";
 
 export async function createFileIn(app: App, dir: string) {
   const r = await prompt({ title: "New note", value: "note.txt", selectStem: true, okLabel: "Create", message: relative(app.workspace, dir) || undefined });
@@ -45,6 +46,7 @@ export async function renamePath(app: App, path: string) {
     toast(`Could not rename: ${e}`, { kind: "error" });
     return;
   }
+  pathRenamed(path, target);
   for (const d of app.docs) {
     if (!d.path) continue;
     if (samePath(d.path, path)) d.path = target;
@@ -77,6 +79,7 @@ export async function trashPath(app: App, path: string) {
     toast(`Could not delete: ${e}`, { kind: "error" });
     return;
   }
+  pathRemoved(path);
   for (const d of [...app.docs]) if (d.path && (samePath(d.path, path) || isInside(d.path, path))) await app.closeDoc(d, { force: true });
   await app.refreshWorkspaceFiles();
   app.sidebar.refreshTree();

@@ -43,6 +43,7 @@ The per-user installer (`KiloNote_<version>_x64-setup.exe`, NSIS) is also availa
 | `msedgewebview2.exe` | the WebView2 rendering engine, started by Windows for the interface, like any other WebView2 application |
 | default browser / mail app | only when the user clicks an `http://`, `https://` or `mailto:` link (handed to Windows; any other kind of address is refused, by the interface and by the window permissions) |
 | File Explorer window | only when the user chooses *Reveal in file manager* (Windows Shell API, the file is selected, never opened) |
+| print dialog | only when the user chooses *File: Print or save as PDF* (the WebView2 print dialog, inside the app) |
 
 KiloNote never starts a command interpreter, a script host, PowerShell or any other
 program.
@@ -70,7 +71,11 @@ program.
 | next to a file being saved | `.<name>.kilonote-tmp`, renamed over the file at once (atomic save, so a file is never left half written) |
 
 - KiloNote only reads and writes the files and folders the user opens, plus the
-  `<name>_done.txt` archive files it creates next to them on request.
+  `<name>_done.txt` archive files it creates next to them on request, and the `.html`
+  page of *File: Export as HTML page*, where the user chooses in the save dialog (never
+  over a note open in a tab).
+- The pinned notes and the notes opened lately (their paths only) are kept in the web
+  view's local storage, in `%LOCALAPPDATA%\dev.damoy.kilonote\`: never in the notes folder.
 - Files are saved one at a time, when the user types or saves. "Replace in files" only
   rewrites the files of the folder the user opened, after a confirmation, keeps a copy of
   each in the local history and can be undone.
@@ -151,7 +156,7 @@ npx tauri build --no-bundle
 - The web interface runs in WebView2, isolated from the system: it can only call a
   closed list of native commands declared in `src-tauri/src/main.rs` (read/write a text
   file, read an image or save a pasted one, list a folder, rename, move to the trash,
-  open a KiloNote window) and the
+  open a KiloNote window, open the print dialog) and the
   permissions of `src-tauri/capabilities/default.json`. The only "opener" permissions are
   opening `http(s)://` and `mailto:` addresses with the default app and revealing a file
   in the file manager: there is no permission to open or execute files, and no shell or
@@ -179,6 +184,17 @@ npx tauri build --no-bundle
   the page on the note being edited (the cursor's line, the tasks); nothing is sent
   anywhere, and the only thing kept is the list of hints turned off (in the web view's
   local storage).
+- Sharing a note (*Edit: Copy as rich text*, *File: Export as HTML page*, *File: Print
+  or save as PDF*): the note is rendered in the page, element by element as in the
+  Markdown preview, with its styles written inline. The result holds no script and no
+  remote address: only http(s)/mailto links keep a target, images are the note's local
+  images embedded as `data:` images, and diagrams are drawn as images. Encrypted secrets
+  are never put in it (neither in the rich text nor in the plain text of a copy). The
+  copy goes to the system clipboard; the page is written where the user chooses; the
+  print dialog is the WebView2 one. Nothing is sent anywhere.
+- Quick inserts after `/`: a menu of the editor; its items write text in the note (a
+  date, a heading, a template) or run a command of the app (link a note, encrypt the
+  line, set a due date).
 - Secrets in notes ("Edit: Encrypt selection with a password"): the selected text is
   encrypted in the page with the browser engine's Web Crypto API (AES-256-GCM, key
   stretched from the password with PBKDF2-SHA-256, 600 000 rounds, random salt and nonce

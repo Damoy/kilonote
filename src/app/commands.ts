@@ -2,7 +2,7 @@
 
 import { registerCommands, type Command } from "../core/commands";
 import { goToOccurrence, openFind } from "../editor/matches";
-import { confirm } from "../ui/overlay";
+import { confirm, toast } from "../ui/overlay";
 import { openBoard, openCheatSheet } from "../ui/lazy";
 import type { App } from "./app";
 import { formatDocument } from "./editing";
@@ -12,11 +12,13 @@ import { showLocalHistory } from "./history";
 import { openCommandPalette, openQuickOpen, selectAccent, selectLanguage, selectMascot, selectTheme } from "./pickers";
 import { archiveAllDone, archiveSelection, cycleTasks, generateReport, generateTagReport, setDueDate, toggleDoneFile } from "./tasks";
 import { moveToNewWindow } from "./windows";
+import { isPinned, setPinned } from "./pins";
 
 // Features loaded on first use (their code stays out of the start-up bundle).
 const templates = () => import("./templates");
 const links = () => import("./links");
 const secrets = () => import("./secrets");
+const exporting = () => import("./export");
 
 export function showAbout() {
   void confirm({
@@ -25,6 +27,18 @@ export function showAbout() {
     okLabel: "Nice!",
     cancelLabel: "Close",
   });
+}
+
+/** File: Pin or unpin this note. */
+function togglePin(app: App) {
+  const path = app.active?.path;
+  if (!path) {
+    toast("Save this note first: a pinned note is a file.");
+    return;
+  }
+  const pinned = !isPinned(path);
+  setPinned(path, pinned);
+  toast(pinned ? "Pinned: at the top of the explorer and of Go to file." : "Unpinned", { timeout: 1800 });
 }
 
 export function defaultKeybindings(app: App): Record<string, string> {
@@ -71,6 +85,7 @@ export function defaultKeybindings(app: App): Record<string, string> {
     "Mod+Alt+B": "palette.backlinks",
     "Mod+Alt+K": "view.board",
     "Mod+Shift+F3": "edit.prevOccurrence",
+    "Mod+Shift+C": "edit.copyRich",
     "Mod+?": "help.shortcuts",
   };
   if (app.backend.platform !== "macos") keys["Mod+H"] = "edit.replace";
@@ -102,7 +117,11 @@ export function registerAllCommands(app: App) {
     { id: "file.saveAll", title: "File: Save all", run: () => app.saveAll() },
     { id: "file.rename", title: "File: Rename…", run: () => app.active?.path && renamePath(app, app.active.path) },
     { id: "file.reveal", title: "File: Reveal in file manager", run: () => app.active?.path && app.backend.reveal(app.active.path) },
+    { id: "file.pin", title: "File: Pin or unpin this note (top of the explorer and of Go to file)", run: () => togglePin(app) },
     { id: "file.copyPath", title: "File: Copy path", run: () => app.active?.path && copyText(app.active.path) },
+    { id: "edit.copyRich", title: "Edit: Copy as rich text (for an e-mail, Outlook, Teams…)", run: () => exporting().then((m) => m.copyRich(app)) },
+    { id: "file.exportHtml", title: "File: Export as HTML page…", run: () => exporting().then((m) => m.exportHtml(app)) },
+    { id: "file.print", title: "File: Print or save as PDF…", run: () => exporting().then((m) => m.printNote(app)) },
     { id: "file.toggleDone", title: "Tasks: Switch between note and its _done archive", run: () => toggleDoneFile(app) },
     { id: "file.reload", title: "File: Reload from disk", run: () => app.active && app.reloadDoc(app.active, true) },
     { id: "file.history", title: "File: Local history (earlier versions)…", run: () => showLocalHistory(app) },

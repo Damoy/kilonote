@@ -13,7 +13,10 @@ import { renamePath } from "./files";
 import { deleteUnusedImages, dropImages, pasteImage, loadNoteImage } from "./images";
 import { openDailyNote } from "./templates";
 import { openNoteLink } from "./links";
-import { provideCommands } from "./pickers";
+import { provideCommands, provideFiles } from "./pickers";
+import { copyRich, exportHtml, printNote } from "./export";
+import { pinnedNotes, setPinned } from "./pins";
+import { SECRET_BEGIN, SECRET_END } from "../text/secrets";
 import { encryptSelection, revealSecret } from "./secrets";
 import { secretsField } from "../editor/secrets";
 import { saveSessionNow } from "./session";
@@ -34,6 +37,8 @@ interface Disk {
   clock: number;
   /** Files read by the batch read (unchanged ones are not). */
   reads: number;
+  /** Print dialogs opened. */
+  prints: number;
   /** Simulates another program changing a file. */
   external(path: string, text: string): void;
   text(path: string): string | undefined;
@@ -50,6 +55,7 @@ function memoryBackend(init: Record<string, string> = {}, opts: { savePath?: str
     encodings: new Map(),
     clock: 1_000,
     reads: 0,
+    prints: 0,
     external(path, text) {
       disk.clock += 5_000;
       disk.files.set(path, { text, mtime: disk.clock });
@@ -133,6 +139,7 @@ function memoryBackend(init: Record<string, string> = {}, opts: { savePath?: str
     pickSavePath: async () => opts.savePath ?? null,
     openUrl: async () => {},
     reveal: async () => {},
+    print: async () => void disk.prints++,
     setTitle: () => {},
     setDark: () => {},
     show: async () => {},
@@ -809,3 +816,89 @@ describe("Kilo, the assistant", () => {
   });
 });
 
+
+describe("notes out of KiloNote: copy, export, print", () => {
+  it("Copy as rich text puts the note, styled, and its plain text on the clipboard", async () => {
+    const { app } = await start({ "/notes/a.txt": `# Week\n- call the bank - todo\n${SECRET_BEGIN}\nQUJD\n${SECRET_END}\n` });
+    await app.openFile("/notes/a.txt");
+    const written: Record<string, string>[] = [];
+    vi.stubGlobal("ClipboardItem", class {
+      constructor(public data: Record<string, Blob>) {}
+    });
+    const write = async (items: { data: Record<string, Blob> }[]) => {
+      for (const it of items) written.push(Object.fromEntries(await Promise.all(Object.entries(it.data).map(async ([k, b]) => [k, await b.text()]))));
+    };
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { write } });
+    try {
+      await copyRich(app);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(written).toHaveLength(1);
+    expect(written[0]["text/html"]).toMatch(/^<div style="[^"]+">/);
+    expect(written[0]["text/html"]).toContain("call the bank");
+    // The secret stays hidden, in both.
+    expect(written[0]["text/html"]).not.toContain("QUJD");
+    expect(written[0]["text/plain"]).not.toContain("QUJD");
+    expect(written[0]["text/plain"]).toContain("- call the bank - todo");
+  });
+
+  it("Export as HTML writes a whole page, never over an open note", async () => {
+    const { app, disk } = await start({ "/notes/a.txt": "# Plan\n- write - ongoing\n" }, { savePath: "/notes/a.html" });
+    await app.openFile("/notes/a.txt");
+    await exportHtml(app);
+    expect(disk.text("/notes/a.html")).toMatch(/^<!DOCTYPE html>[\s\S]*<title>a<\/title>[\s\S]*Plan[\s\S]*ongoing/);
+    const other = await start({ "/notes/a.txt": "A", "/notes/b.txt": "B" }, { savePath: "/notes/b.txt" });
+    await other.app.openFile("/notes/b.txt");
+    await other.app.openFile("/notes/a.txt");
+    await exportHtml(other.app);
+    expect(other.disk.text("/notes/b.txt")).toBe("B");
+    expect([...document.querySelectorAll(".kn-toast")].some((t) => t.textContent?.includes("is open in a tab"))).toBe(true);
+  });
+
+  it("Print shows only the note to the printer, and takes it away after", async () => {
+    const { app, disk } = await start({ "/notes/a.txt": `printed text\n${SECRET_BEGIN}\nQUJD\n${SECRET_END}\n` });
+    await app.openFile("/notes/a.txt");
+    await printNote(app);
+    expect(disk.prints).toBe(1);
+    const page = document.getElementById("kn-print")!;
+    expect(page.textContent).toContain("printed text");
+    expect(page.textContent).not.toContain("QUJD");
+    window.dispatchEvent(new Event("afterprint"));
+    expect(document.getElementById("kn-print")).toBeNull();
+  });
+});
+
+describe("pinned and recent notes", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("Go to file shows the pinned notes first, then the ones opened lately", async () => {
+    const { app, disk } = await start({ "/notes/a.txt": "", "/notes/b.txt": "", "/notes/c.txt": "", "/notes/d.txt": "" });
+    disk.dirs.add("/notes");
+    await app.openFolder("/notes");
+    await app.openFile("/notes/c.txt");
+    await app.openFile("/notes/b.txt");
+    setPinned("/notes/d.txt", true);
+    const list = (q: string) => provideFiles(app, q).items.map((i) => `${i.label}${i.hint ? ` (${i.hint})` : ""}`);
+    expect(list("")).toEqual(["d.txt (pinned)", "b.txt (open)", "c.txt (open)", "a.txt"]);
+    // An equally good match: the pinned one first.
+    expect(list("txt")[0]).toBe("d.txt (pinned)");
+    // The explorer: a section above the tree, and a mark in it.
+    await vi.waitFor(() => expect(document.querySelector(".sb-pins .sb-name")?.textContent).toBe("d.txt"));
+    await vi.waitFor(() => expect(document.querySelector('.sb-tree .sb-row[data-path="/notes/d.txt"] .sb-pin-mark')).not.toBeNull());
+  });
+
+  it("a pinned note keeps its pin when it is renamed", async () => {
+    const { app, disk } = await start({ "/notes/a.txt": "" });
+    disk.dirs.add("/notes");
+    await app.openFolder("/notes");
+    setPinned("/notes/a.txt", true);
+    const renaming = renamePath(app, "/notes/a.txt");
+    await tick(10);
+    const input = document.querySelector<HTMLInputElement>(".kn-modal input")!;
+    input.value = "z.txt";
+    clickButton("Rename");
+    await renaming;
+    expect(pinnedNotes()).toEqual(["/notes/z.txt"]);
+  });
+});

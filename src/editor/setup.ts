@@ -17,6 +17,7 @@ import { isCodeLang, languageForPath, languageInfo } from "./languages";
 import { matchesInNote, openFind } from "./matches";
 import { scrollbarMarks } from "./ruler";
 import { noteSecrets } from "./secrets";
+import { slashCommands } from "./slash";
 import type { TaskConfig } from "../text/tasks";
 
 /** A document type id of LANGUAGES ("text", "markdown", "jsonc", "python"…). */
@@ -271,7 +272,7 @@ export function settingsExtensions(s: Settings, taskCfg: TaskConfig, lang: LangI
     taskConfigFacet.of(taskCfg),
     plainNotesFacet.of(lang === "text"),
     codeDocFacet.of(isCodeLang(lang)),
-    lang === "text" || lang === "markdown" ? noteImages(s.show_images) : [],
+    lang === "text" || lang === "markdown" ? [noteImages(s.show_images), slashCommands(s.slash_commands)] : [],
     scrollbarMarks(s.scrollbar_marks),
   ];
 }

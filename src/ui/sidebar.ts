@@ -13,6 +13,7 @@ import { copyText, createFileIn, createFolderIn, renamePath, trashPath } from ".
 import { replaceInFiles } from "../app/history";
 import { changeTaskInNote, generateReport } from "../app/tasks";
 import { openBoard } from "./lazy";
+import { pinnedNotes, setPinned } from "../app/pins";
 
 export type Panel = "files" | "tasks" | "search";
 
@@ -46,6 +47,7 @@ export class Sidebar {
   private switchBtns: Record<Panel, HTMLElement>;
   private taskBadge = h("span", { class: "sb-badge" });
   private treeEl = h("div", { class: "sb-tree" });
+  private pinsEl = h("div", { class: "sb-pins" });
   private filesHeader = h("div", { class: "sb-header" });
   private tasksList = h("div", { class: "sb-list" });
   private taskFilter: TaskFilter = "open";
@@ -75,7 +77,7 @@ export class Sidebar {
     const hideBtn = h("button", { class: "kn-icon-btn sb-hide", title: titleWithKey("Hide sidebar", "view.sidebar"), onclick: () => this.toggle() }, icon("panelClose"));
     const switcher = h("div", { class: "sb-switch" }, this.switchBtns.files, this.switchBtns.tasks, this.switchBtns.search, h("span", { class: "kn-spacer" }), hideBtn);
 
-    const filesPanel = h("div", { class: "sb-panel" }, this.filesHeader, this.treeEl);
+    const filesPanel = h("div", { class: "sb-panel" }, this.filesHeader, this.pinsEl, this.treeEl);
     this.treeEl.addEventListener("contextmenu", (e) => {
       if (e.target !== this.treeEl || !app.workspace) return;
       e.preventDefault();
@@ -174,6 +176,11 @@ export class Sidebar {
         this.cache.clear();
         tasksSoon();
       }
+      this.renderPins();
+      void this.renderTree();
+    });
+    app.on("pins", () => {
+      this.renderPins();
       void this.renderTree();
     });
     app.on("saved", tasksQuick);
@@ -336,6 +343,7 @@ export class Sidebar {
   private async renderDir(dir: string, depth: number, out: DocumentFragment) {
     const entries = await this.list(dir);
     const suffix = this.app.settings.archive_suffix;
+    const pins = pinnedNotes();
     // Children of expanded folders are loaded in parallel.
     await Promise.all(entries.filter((e) => e.isDir && this.expanded.has(e.path)).map((e) => this.list(e.path)));
     for (const e of entries) {
@@ -348,6 +356,7 @@ export class Sidebar {
         e.isDir ? icon("chevron", `sb-chevron${open ? " open" : ""}`) : h("span", { class: "sb-chevron-space" }),
         icon(ic, `sb-file-icon ${kind}`),
         h("span", { class: "sb-name" }, e.name),
+        !e.isDir && pins.some((p) => samePath(p, e.path)) ? icon("pin", "sb-pin-mark") : null,
       );
       if (e.isDir) {
         // Shown on hover: everything inside this folder, expanded or collapsed.
@@ -385,8 +394,48 @@ export class Sidebar {
     }
   }
 
+  /** The pinned notes, above the tree (they can be in any folder). */
+  private renderPins() {
+    const app = this.app;
+    const pins = pinnedNotes();
+    this.pinsEl.hidden = !pins.length;
+    if (!pins.length) {
+      this.pinsEl.replaceChildren();
+      return;
+    }
+    this.pinsEl.replaceChildren(
+      h("div", { class: "sb-pins-title" }, "Pinned"),
+      ...pins.map((p) => {
+        const where = app.workspace && isInside(p, app.workspace) ? relative(app.workspace, dirname(p)) : basename(dirname(p));
+        const unpin = h("button", { class: "kn-icon-btn sb-row-action", title: "Unpin", tabindex: "-1" }, icon("x"));
+        unpin.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          setPinned(p, false);
+        });
+        const row = h(
+          "div",
+          { class: "sb-row sb-pin", title: p, "data-path": p },
+          icon("pin", "sb-file-icon sb-pin-icon"),
+          h("span", { class: "sb-name" }, basename(p)),
+          where ? h("span", { class: "sb-pin-where" }, where) : null,
+          unpin,
+        );
+        row.addEventListener("click", () => void app.openFile(p));
+        row.addEventListener("contextmenu", (ev) => {
+          ev.preventDefault();
+          this.showFileMenu(p, ev.clientX, ev.clientY);
+        });
+        return row;
+      }),
+    );
+    this.markActive();
+  }
+
   private markActive() {
     const p = this.app.active?.path;
+    this.pinsEl.querySelectorAll<HTMLElement>(".sb-row").forEach((r) => {
+      r.classList.toggle("active", !!p && samePath(r.dataset.path!, p));
+    });
     this.treeEl.querySelectorAll<HTMLElement>(".sb-row").forEach((r) => {
       r.classList.toggle("active", !!p && samePath(r.dataset.path!, p));
     });
@@ -469,6 +518,9 @@ export class Sidebar {
       [
         { label: "Open", icon: "file", action: () => app.openFile(path) },
         { label: "Open in new window", icon: "newWindow", action: () => app.backend.openWindow([path]) },
+        pinnedNotes().some((p) => samePath(p, path))
+          ? { label: "Unpin", icon: "pin", action: () => setPinned(path, false) }
+          : { label: "Pin to the top", icon: "pin", action: () => setPinned(path, true) },
         { separator: true },
         { label: "Rename…", action: () => renamePath(app, path) },
         { label: "Copy path", action: () => copyText(path) },

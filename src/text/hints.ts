@@ -161,7 +161,7 @@ function isRealDate(iso: string): boolean {
   return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
 }
 
-/** A note name that is not an everyday word ("notes_dev", "Project-2026", "Stockviz"…). */
+/** A note name that is not an everyday word ("notes_dev", "Project-2026", "Bluebird"…). */
 function distinctive(name: string): boolean {
   return name.length >= 6 || /[\d_\-.]/.test(name) || /[a-z][A-Z]/.test(name);
 }
@@ -201,4 +201,8 @@ export const GENERAL_TIPS = [
   "Write @2026-12-01 in a task to give it a due date ({task.due} picks one for you).",
   "Right-click a tab for colors and tab groups.",
   "The activity report sums up your completed tasks by project and by month.",
+  "Type / at the start of a line: /today, /todo, /h1, /link, /secret, your templates…",
+  "{edit.copyRich} copies the note as rich text: paste it into an e-mail or a chat, tasks and colors included.",
+  "Right-click a note → Pin to the top: it stays above the explorer and first in {palette.files}.",
+  "Command palette → Print or save as PDF: the note alone on the page, ready for a PDF.",
 ];

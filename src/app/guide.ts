@@ -145,6 +145,34 @@ Write \`[[work]]\` (the name of another note of the folder, its extension option
 create it next to the current one. **Ctrl+Alt+B** lists the notes that link to the
 current one. \`[[work|the work note]]\` shows a label too.
 
+## Quick inserts with /
+
+In a note, type \`/\` at the start of a line or after a space: a small menu opens at
+the cursor. \`/today\`, \`/tomorrow\` and \`/now\` write the date or the time; \`/todo\`,
+\`/ongoing\`, \`/done\` make the line a task; \`/due\` gives a task its due date; \`/h1\`,
+\`/h2\`, \`/h3\` make it a heading; \`/code\`, \`/divider\`, and in Markdown \`/table\` and
+\`/quote\`; \`/link\` links a note, \`/secret\` encrypts the line, and each template has its
+own (\`/meeting-notes\`…). Type a few letters to filter, Enter or Tab to pick, Escape to
+close. A space or a second \`/\` makes the menu go away, so typing a path or "and/or" is
+never in the way. Settings → Editor turns it off.
+
+## Sharing a note
+
+- **Ctrl+Shift+C** copies the selection (or the whole note) as rich text: paste it into
+  an e-mail or a chat and it keeps its headings, lists, tables, links, and the tasks with
+  their colored status. Secrets stay hidden.
+- Command palette → "File: Export as HTML page…": the note as a light page that opens in
+  any browser, its images inside.
+- Command palette → "File: Print or save as PDF…": the print dialog, with the note alone
+  on the page. Choose "Save as PDF" (or "Microsoft Print to PDF") as the printer for a PDF.
+
+## Pinned and recent notes
+
+Right-click a note in the explorer, or its tab → "Pin to the top": it stays above the
+folder tree, and first in **Ctrl+P** (Go to file), whatever folder is open. The notes
+you opened lately come next in Ctrl+P, and on the welcome screen. Right-click a pinned
+note (or the × on its row) to unpin it.
+
 ## Templates
 
 **Ctrl+Alt+N** makes a new note from a template: daily note, meeting notes, project,

@@ -99,6 +99,18 @@ open it as a folder and follow its `README.md`.
 - **Links between notes**: `[[work]]` or `[[projects/report]]` (the name of another note of the
   folder); typing `[[` offers the notes, **Ctrl+click** opens the linked note (or creates it),
   **Ctrl+Alt+B** lists the notes linking to the current one
+- **Quick inserts with `/`**: in a note, `/` at the start of a line or after a space opens a
+  small menu at the cursor: `/today`, `/tomorrow`, `/now`, `/todo` (and the other statuses),
+  `/due`, `/h1`–`/h3`, `/code`, `/divider`, `/table` and `/quote` (Markdown), `/link`, `/secret`,
+  and your templates. The letters typed after `/` filter it, Enter or Tab picks, Escape
+  closes it; a space or a second `/` makes it go away (typing a path is never in the way).
+  Off in Settings → Editor
+- **Copy as rich text** (**Ctrl+Shift+C**): the selection, or the whole note, ready to paste
+  into an e-mail or a chat (Outlook, Teams…): headings, lists, tables, links, and the tasks
+  with their colored status. Secrets stay hidden
+- **Export and print**: *File: Export as HTML page* saves the note as a light, self-contained
+  page (its images inside), *File: Print or save as PDF* opens the print dialog with the note
+  alone on the page ("Save as PDF" is one of its printers)
 - **Templates**: a new note from a template (**Ctrl+Alt+N**: daily note, meeting notes,
   project, Markdown page, or your own), and **today's note** (**Ctrl+Alt+D**: `daily/2026-11-11.txt`
   in the open folder, made from the *Daily note* template the first time). `{{date}}`, `{{time}}`,
@@ -124,6 +136,9 @@ open it as a folder and follow its `README.md`.
   the last 12 months or all time, optionally limited to one `#tag` (a client, a topic…)
 
 **Organization**
+- **Pinned and recent notes**: right-click a note (in the explorer or on its tab) →
+  *Pin to the top*: it stays above the folder tree and first in **Go to file** (Ctrl+P), from
+  any folder. The notes opened lately come next in Go to file and on the welcome screen
 - **Several windows** (Ctrl+Shift+N), each with its own tabs and folder; drag a tab onto another
   window (or out of the window to open a new one); every window comes back at the next launch
 - Colored tabs and **tab groups** with a name and a color; click a group to collapse it into a
@@ -282,6 +297,8 @@ On macOS, Ctrl becomes ⌘.
 | Move the cursor with the view | Ctrl+↑↓ |
 | Move / duplicate / delete line | Alt+↑↓ / Shift+Alt+↑↓ / Ctrl+Shift+K |
 | Paste an image in a note | Ctrl+V |
+| Quick inserts (`/today`, `/todo`, `/h1`, `/link`…) | `/` at the start of a line or after a space |
+| Copy as rich text (for an e-mail or a chat) | Ctrl+Shift+C |
 
 Every shortcut can be changed in `settings.json`:
 

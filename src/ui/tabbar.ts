@@ -12,6 +12,7 @@ import { showMenu, type MenuItem } from "./overlay";
 import { copyText, renamePath } from "../app/files";
 import { openCommandPalette } from "../app/pickers";
 import { dropTabOutside, moveToNewWindow } from "../app/windows";
+import { isPinned, setPinned } from "../app/pins";
 
 export class TabBar {
   private scroller: HTMLElement;
@@ -338,6 +339,9 @@ export class TabBar {
       { label: "Close tabs to the right", disabled: idx === app.docs.length - 1, action: () => app.closeMany(app.docs.slice(idx + 1)) },
       { label: "Close all", shortcut: shortcutFor("tab.closeAll"), action: () => app.closeMany([...app.docs]) },
       { label: "Move to new window", icon: "newWindow", disabled: !doc.path, action: () => moveToNewWindow(app, doc) },
+      doc.path && isPinned(doc.path)
+        ? { label: "Unpin note", icon: "pin", action: () => setPinned(doc.path!, false) }
+        : { label: "Pin note to the top", icon: "pin", disabled: !doc.path, action: () => doc.path && setPinned(doc.path, true) },
       { separator: true },
       { header: "Color" },
       { colors: app.settings.tab_colors, selected: doc.color, allowNone: true, onPick: (c) => this.setColor(doc, c) },

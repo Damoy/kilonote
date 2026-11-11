@@ -82,6 +82,8 @@ export interface Backend {
   pickSavePath(defaultPath?: string): Promise<string | null>;
   openUrl(url: string): Promise<void>;
   reveal(path: string): Promise<void>;
+  /** Opens the print dialog for the window (its print styles show only what is to be printed). */
+  print(): Promise<void>;
   setTitle(title: string): void;
   setDark(dark: boolean): void;
   show(): Promise<void>;
@@ -169,6 +171,7 @@ export async function createTauriBackend(): Promise<Backend> {
       await opener.openUrl(url);
     },
     reveal: (path) => opener.revealItemInDir(path),
+    print: () => invoke("print_page"),
     setTitle: (title) => void win.setTitle(title).catch(() => {}),
     setDark: (dark) => void win.setTheme(dark ? "dark" : "light").catch(() => {}),
     show: async () => {
@@ -427,6 +430,7 @@ export function createWebBackend(): Backend {
       if (isSafeUrl(url)) window.open(url, "_blank", "noopener");
     },
     reveal: async () => {},
+    print: async () => window.print(),
     setTitle: (t) => void (document.title = t),
     setDark: () => {},
     show: async () => {},
