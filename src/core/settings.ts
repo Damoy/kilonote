@@ -16,6 +16,7 @@ export interface Settings {
   line_numbers: boolean;
   word_wrap: boolean;
   highlight_active_line: boolean;
+  scrollbar_marks: boolean;
   show_images: boolean;
   images_folder: string;
   tab_size: number;
@@ -74,6 +75,9 @@ export const SETTINGS_TEMPLATE = `// KiloNote settings
   "line_numbers": true,
   "word_wrap": true,
   "highlight_active_line": true,
+  // Marks along the scrollbar: headings and open tasks, the other occurrences of
+  // the selected text, the search matches
+  "scrollbar_marks": true,
   // Show the images of a note under their line: ![image](images/shot.png)
   "show_images": true,
   // Where a pasted image is saved, next to the note (Ctrl+V a screenshot in a note)

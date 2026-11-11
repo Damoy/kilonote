@@ -4,6 +4,7 @@ import { EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { afterEach, describe, expect, it } from "vitest";
 import { getSearchQuery } from "@codemirror/search";
+import { scrollbarMarks } from "./ruler";
 import { countLabel, goToOccurrence, MAX_MATCHES, matchesInNote, occurrences, openFind, searchCount, searchMatches, selectedText } from "./matches";
 
 const NOTE = "-- Stockviz\nssh host\n-- Stockviz\nnotes about Stockviz\n-- Stockviz\n";
@@ -17,7 +18,7 @@ afterEach(() => {
 });
 function open(doc: string, from = 0, to = from) {
   const view = new EditorView({
-    state: EditorState.create({ doc, selection: EditorSelection.single(from, to), extensions: [search({ top: true }), matchesInNote()] }),
+    state: EditorState.create({ doc, selection: EditorSelection.single(from, to), extensions: [search({ top: true }), matchesInNote(), scrollbarMarks(true)] }),
     parent: document.body,
   });
   views.push(view);
@@ -70,10 +71,10 @@ describe("the other occurrences of the selected text", () => {
     const view = open(NOTE, 0, 11);
     await frame();
     expect([...view.dom.querySelectorAll(".cm-selectionMatch")].map((e) => e.textContent)).toEqual(["-- Stockviz", "-- Stockviz"]);
-    expect(view.dom.querySelectorAll(".cm-match-ruler i.occ").length).toBeGreaterThan(0);
+    expect(view.dom.querySelectorAll(".cm-ruler i.occ").length).toBeGreaterThan(0);
     view.dispatch({ selection: { anchor: 12, head: 15 } });
     await frame();
-    expect(view.dom.querySelectorAll(".cm-selectionMatch, .cm-match-ruler i")).toHaveLength(0);
+    expect(view.dom.querySelectorAll(".cm-selectionMatch, .cm-ruler i")).toHaveLength(0);
   });
 });
 
@@ -118,7 +119,7 @@ describe("the search panel's count", () => {
     await frame();
     const label = view.dom.querySelector(".cm-search [main-field] + .cm-search-count");
     expect(label?.textContent).toBe("2 of 3");
-    expect(view.dom.querySelectorAll(".cm-match-ruler i.found.current")).toHaveLength(1);
+    expect(view.dom.querySelectorAll(".cm-ruler i.found.current")).toHaveLength(1);
     // Edited meanwhile: counted again.
     view.dispatch({ changes: { from: view.state.doc.length, insert: "-- Stockviz\n" } });
     await frame();

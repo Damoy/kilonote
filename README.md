@@ -84,6 +84,8 @@ open it as a folder and follow its `README.md`.
   appears in the whole note (or "only here"); the other occurrences are highlighted and
   marked along the scrollbar, **Ctrl+F3** goes to the next one. Find (Ctrl+F) counts its
   matches as you type: "3 of 12"
+- **Marks along the scrollbar**: the headings and the open tasks of the note (in their status
+  color), the other occurrences of the selection and the search matches
 - Autosave, atomic writes, unsaved tabs kept between sessions
 - Notes changed by another program are reloaded automatically (or you choose, if you have unsaved edits)
 - **Local history**: whenever a version is about to be thrown away (overwriting a file changed

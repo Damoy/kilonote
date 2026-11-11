@@ -243,7 +243,7 @@ try {
     await run(`await app.openFile(args[0]); app.focusEditor();
       const l = app.view.state.doc.line(1); app.view.dispatch({ selection: { anchor: l.from, head: l.to } });`, join(notes, "count.txt"));
     await until(() => run("return document.querySelector('.st-occ')?.textContent === '2 occurrences';"), "the count in the status bar");
-    await until(() => run("return document.querySelectorAll('#editor-host .cm-match-ruler i.occ').length === 2;"), "the marks along the scrollbar");
+    await until(() => run("return document.querySelectorAll('#editor-host .cm-ruler i.occ').length === 2;"), "the marks along the scrollbar");
     await press("Control", "F3");
     expect(await run("return app.view.state.doc.lineAt(app.view.state.selection.main.from).number;"), 302, "the line of the next occurrence");
     await press("Control", "f");

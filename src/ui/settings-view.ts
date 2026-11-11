@@ -185,6 +185,7 @@ class SettingsView {
           this.toggle("line_numbers", "Line numbers"),
           this.toggle("word_wrap", "Word wrap", "Long lines wrap instead of scrolling (Alt+Z)"),
           this.toggle("highlight_active_line", "Highlight the current line"),
+          this.toggle("scrollbar_marks", "Marks along the scrollbar", "Headings, open tasks, other occurrences of the selection, search matches"),
           this.heading("Images"),
           this.toggle("show_images", "Show images in notes", "Under their line: ![image](images/shot.png)"),
           this.text("images_folder", "Folder of pasted images", "Next to the note (Ctrl+V a screenshot in a note)"),

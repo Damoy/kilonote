@@ -83,6 +83,8 @@ it to the tasks of one tag (a client, a topic…).
 - Select some text: the status bar tells how many times it appears in the note (or
   "only here"), the other occurrences are highlighted and marked along the scrollbar.
   Click the count, or **Ctrl+F3** / **Ctrl+Shift+F3**, to go to the next / previous one.
+- Along the scrollbar, small marks show where the headings and the open tasks of the
+  note are (in the color of their status), and the matches of a search.
 - **Ctrl+D**: select the next occurrence (multiple cursors), **Alt+click**: add a cursor.
 - Click a line number to select the whole line, without its line break (drag for
   several lines, Shift+click to extend): then **Ctrl+C** / **Ctrl+X** copies or cuts its

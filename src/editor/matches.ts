@@ -1,8 +1,8 @@
 // Where else a text appears in the note: the occurrences of the selected text
 // and the matches of the search panel are counted in the whole note (not only
-// on screen), highlighted, and marked along the scrollbar. The search panel
-// shows its count next to the field ("3 of 12"); the status bar shows the
-// selection's (app side).
+// on screen) and highlighted; ruler.ts marks them along the scrollbar. The
+// search panel shows its count next to the field ("3 of 12"); the status bar
+// shows the selection's (app side).
 
 import { getSearchQuery, openSearchPanel, SearchQuery, searchPanelOpen, setSearchQuery } from "@codemirror/search";
 import { EditorSelection, type EditorState, type Extension, type Range, type Text } from "@codemirror/state";
@@ -169,7 +169,8 @@ export function searchCount(state: EditorState): string {
   return m.from.length === 1 ? "1 match" : `${countLabel(m)} matches`;
 }
 
-function searchChanged(u: ViewUpdate): boolean {
+/** The search panel was opened or closed, or its query changed. */
+export function searchChanged(u: ViewUpdate): boolean {
   return searchPanelOpen(u.state) !== searchPanelOpen(u.startState) || !getSearchQuery(u.state).eq(getSearchQuery(u.startState));
 }
 
@@ -235,82 +236,11 @@ const occurrenceHighlighter = ViewPlugin.fromClass(
   { decorations: (p) => p.decorations },
 );
 
-interface RulerMarks {
-  top: number;
-  height: number;
-  /** Heights of the marks (px from the top of the ruler), by kind. */
-  occurrences: number[];
-  found: number[];
-  current: number | null;
-}
-
-/** Where the matches are along the scrollbar: the same place the scrollbar thumb would be to show them. */
-function measureRuler(view: EditorView): RulerMarks {
-  const scroller = view.scrollDOM;
-  const height = scroller.clientHeight;
-  const scale = height / Math.max(scroller.scrollHeight, 1);
-  const pad = view.documentPadding.top;
-  const y = (pos: number) => Math.min(height - 2, Math.round((pad + view.lineBlockAt(pos).top) * scale));
-  // One mark per pixel row is plenty.
-  const ys = (m: Matches | null) => (m ? [...new Set(m.from.map(y))] : []);
-  const occ = occurrences(view.state);
-  const found = searchMatches(view.state);
-  const current = found ? currentMatch(found, view.state) : -1;
-  return {
-    top: scroller.offsetTop,
-    height,
-    // While searching, the search's marks (the selection is often one of its matches).
-    occurrences: !found && occ && occ.from.length > 1 ? ys(occ) : [],
-    found: ys(found),
-    current: found && current >= 0 ? y(found.from[current]) : null,
-  };
-}
-
-/** Marks over the scrollbar: where the other occurrences and the search matches are in the note. */
-const matchRuler = ViewPlugin.fromClass(
-  class {
-    readonly dom = document.createElement("div");
-
-    constructor(readonly view: EditorView) {
-      this.dom.className = "cm-match-ruler";
-      this.dom.setAttribute("aria-hidden", "true");
-      view.dom.append(this.dom);
-      this.schedule();
-    }
-
-    update(u: ViewUpdate) {
-      if (u.docChanged || u.selectionSet || u.geometryChanged || u.heightChanged || searchChanged(u)) this.schedule();
-    }
-
-    schedule() {
-      this.view.requestMeasure({ key: this, read: measureRuler, write: (marks) => this.draw(marks) });
-    }
-
-    draw(marks: RulerMarks) {
-      const mark = (kind: string, y: number) => {
-        const i = document.createElement("i");
-        i.className = kind;
-        i.style.top = `${y}px`;
-        return i;
-      };
-      const all = [...marks.occurrences.map((y) => mark("occ", y)), ...marks.found.map((y) => mark("found", y))];
-      if (marks.current != null) all.push(mark("found current", marks.current));
-      this.dom.style.top = `${marks.top}px`;
-      this.dom.style.height = `${marks.height}px`;
-      this.dom.replaceChildren(...all);
-    }
-
-    destroy() {
-      this.dom.remove();
-    }
-  },
-);
-
 /**
- * Where else a text appears: the occurrences of the selection (highlighted and
- * marked by the scrollbar) and the count of the search panel's matches. Goes
- * with the `search()` extension.
+ * Where else a text appears: the occurrences of the selection, highlighted, and
+ * the count of the search panel's matches (ruler.ts marks both along the
+ * scrollbar). Goes with the `search()` extension.
  */
 export function matchesInNote(): Extension {
-  return [occurrenceHighlighter, searchCounter, matchRuler];
+  return [occurrenceHighlighter, searchCounter];
 }

@@ -16,6 +16,7 @@ import { codeDocFacet, notesClickHandler, notesHighlighter, plainNotesFacet, tas
 import { noteImages } from "./images";
 import { isCodeLang, languageForPath, languageInfo } from "./languages";
 import { matchesInNote, openFind } from "./matches";
+import { scrollbarMarks } from "./ruler";
 import type { TaskConfig } from "../text/tasks";
 
 /** A document type id of LANGUAGES ("text", "markdown", "jsonc", "python"…). */
@@ -274,6 +275,7 @@ export function settingsExtensions(s: Settings, taskCfg: TaskConfig, lang: LangI
     plainNotesFacet.of(lang === "text"),
     codeDocFacet.of(isCodeLang(lang)),
     lang === "text" || lang === "markdown" ? noteImages(s.show_images) : [],
+    scrollbarMarks(s.scrollbar_marks),
   ];
 }
 
