@@ -11,6 +11,7 @@ import { formatDocument } from "./editing";
 import { renamePath } from "./files";
 import { deleteUnusedImages, dropImages, pasteImage, loadNoteImage } from "./images";
 import { openDailyNote } from "./templates";
+import { openNoteLink } from "./links";
 import { saveSessionNow } from "./session";
 import { archiveLines, cycleTasks } from "./tasks";
 
@@ -609,6 +610,27 @@ describe("templates", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("links between notes", () => {
+  it("Ctrl+click opens the linked note, or creates it next to the note once confirmed", async () => {
+    const { app, disk } = await start({ "/notes/a.txt": "see [[b]] and [[ideas/new one]]", "/notes/sub/b.txt": "B" });
+    disk.dirs.add("/notes");
+    await app.openFolder("/notes");
+    await app.openFile("/notes/a.txt");
+    await openNoteLink(app, "b");
+    expect(app.active?.path).toBe("/notes/sub/b.txt");
+    await app.openFile("/notes/a.txt");
+    const creating = openNoteLink(app, "ideas/new one");
+    await tick(10);
+    clickButton("Create");
+    await creating;
+    expect(disk.files.has("/notes/ideas/new one.txt")).toBe(true);
+    expect(app.active?.path).toBe("/notes/ideas/new one.txt");
+    // Never outside the folder.
+    await openNoteLink(app, "../../etc/x");
+    expect(document.querySelector(".kn-modal")).toBeNull();
   });
 });
 

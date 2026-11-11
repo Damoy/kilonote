@@ -53,6 +53,7 @@ export function showCheatSheet(app: App, opts: { startup?: boolean } = {}) {
       cmd("File", "palette.files"),
       cmd("Line", "palette.line"),
       cmd("Heading or task", "palette.symbol"),
+      cmd("Notes linking here", "palette.backlinks"),
       cmd("Search in files", "view.search"),
       cmd("Explorer", "view.files"),
     ]],

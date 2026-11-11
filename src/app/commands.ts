@@ -8,6 +8,7 @@ import type { App } from "./app";
 import { formatDocument } from "./editing";
 import { deleteUnusedImages } from "./images";
 import { editTemplates, newFromTemplate, openDailyNote } from "./templates";
+import { insertNoteLink, showBacklinks } from "./links";
 import { copyText, renamePath } from "./files";
 import { showLocalHistory } from "./history";
 import { openCommandPalette, openQuickOpen, selectAccent, selectLanguage, selectMascot, selectTheme } from "./pickers";
@@ -64,6 +65,7 @@ export function defaultKeybindings(app: App): Record<string, string> {
     "Mod+F3": "edit.nextOccurrence",
     "Mod+Alt+N": "file.newFromTemplate",
     "Mod+Alt+D": "file.dailyNote",
+    "Mod+Alt+B": "palette.backlinks",
     "Mod+Shift+F3": "edit.prevOccurrence",
     "Mod+?": "help.shortcuts",
   };
@@ -116,6 +118,8 @@ export function registerAllCommands(app: App) {
     { id: "palette.commands", title: "Command palette", run: () => openCommandPalette(app) },
     { id: "palette.files", title: "Go to file…", run: () => openQuickOpen(app) },
     { id: "palette.line", title: "Go to line…", run: () => openQuickOpen(app, ":") },
+    { id: "palette.backlinks", title: "Go to: Notes linking here", run: () => showBacklinks(app) },
+    { id: "edit.linkNote", title: "Edit: Link to a note…", run: () => insertNoteLink(app) },
     { id: "palette.symbol", title: "Go to heading or task…", run: () => openQuickOpen(app, "@") },
     { id: "edit.find", title: "Edit: Find", run: () => app.active && openFind(app.view) },
     { id: "edit.replace", title: "Edit: Find and replace", run: () => app.active && openFind(app.view) },

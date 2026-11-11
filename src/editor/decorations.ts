@@ -4,6 +4,7 @@
 import { Facet, type Range } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { resolveColor } from "../core/themes";
+import { noteLinks } from "../text/links";
 import { DUE_RE, dueState, isDoneStatus, makeTaskConfig, parseTask, todayISO, type DueState, type TaskConfig } from "../text/tasks";
 
 export const taskConfigFacet = Facet.define<TaskConfig, TaskConfig>({
@@ -22,10 +23,14 @@ export const codeDocFacet = Facet.define<boolean, boolean>({
   combine: (values) => values[values.length - 1] ?? false,
 });
 
-/** Hooks provided by the application (status menu, opening links). */
+/** Hooks provided by the application (status menu, opening links, linking a note). */
 export const editorHooks = {
   onStatusClick: (_view: EditorView, _line: number, _x: number, _y: number) => {},
   openUrl: (_url: string) => {},
+  /** Ctrl+click on `[[a note]]`. */
+  openNote: (_target: string) => {},
+  /** `[[` was just typed: pick the note to link to. */
+  linkNote: (_view: EditorView) => {},
 };
 
 const URL_RE = /\bhttps?:\/\/[^\s<>"'`)\]]+[^\s<>"'`)\].,;:!?]/g;
@@ -41,6 +46,7 @@ const STRONG_RE = /\*\*[^*\n]+\*\*/g;
 const mark = (cls: string, attrs?: Record<string, string>) => Decoration.mark({ class: cls, attributes: attrs });
 const M = {
   url: mark("kn-url", { title: "Ctrl+click to open" }),
+  link: mark("kn-link", { title: "Ctrl+click to open the note" }),
   date: mark("kn-date"),
   tag: mark("kn-tag"),
   mention: mark("kn-mention"),
@@ -134,6 +140,7 @@ function decorateLine(from: number, text: string, cfg: TaskConfig, plain: boolea
     if (text.includes("**")) eachMatch(STRONG_RE, text, (m) => out.push(M.strong.range(from + m.index, from + m.index + m[0].length)));
   }
   if (text.includes("://")) eachMatch(URL_RE, text, (m) => out.push(M.url.range(from + m.index, from + m.index + m[0].length)));
+  for (const l of noteLinks(text)) out.push(M.link.range(from + l.from, from + l.to));
   if (/\d/.test(text)) {
     eachMatch(DATE_RE, text, (m) => {
       if (m.index >= dueFrom && m.index < dueTo) return; // already shown as the due date
@@ -210,6 +217,17 @@ export const notesClickHandler = EditorView.domEventHandlers({
       editorHooks.onStatusClick(view, line, r.left, r.bottom + 4);
       return true;
     }
+    const link = target.closest?.(".kn-link");
+    if (link && (e.ctrlKey || e.metaKey)) {
+      const pos = view.posAtDOM(link);
+      const line = view.state.doc.lineAt(pos);
+      const found = noteLinks(line.text).find((l) => line.from + l.from <= pos && pos <= line.from + l.to);
+      if (found) {
+        e.preventDefault();
+        editorHooks.openNote(found.target);
+        return true;
+      }
+    }
     const url = target.closest?.(".kn-url");
     if (url && (e.ctrlKey || e.metaKey)) {
       // The link may be split into several fragments: read it again from the line.
@@ -227,4 +245,12 @@ export const notesClickHandler = EditorView.domEventHandlers({
     }
     return false;
   },
+});
+
+/** Typing `[[` in a note offers the notes to link to. */
+export const linkTrigger = EditorView.inputHandler.of((view, from, to, text) => {
+  if (text === "[" && from === to && !view.state.facet(codeDocFacet) && view.state.sliceDoc(from - 1, from) === "[") {
+    setTimeout(() => editorHooks.linkNote(view));
+  }
+  return false;
 });

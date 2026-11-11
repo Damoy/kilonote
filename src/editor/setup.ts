@@ -12,7 +12,7 @@ import { defineLanguageFacet, HighlightStyle, indentUnit, Language, StreamLangua
 import { GFM, parser as markdownParser } from "@lezer/markdown";
 import { tags as t } from "@lezer/highlight";
 import type { Settings } from "../core/settings";
-import { codeDocFacet, notesClickHandler, notesHighlighter, plainNotesFacet, taskConfigFacet } from "./decorations";
+import { codeDocFacet, linkTrigger, notesClickHandler, notesHighlighter, plainNotesFacet, taskConfigFacet } from "./decorations";
 import { noteImages } from "./images";
 import { isCodeLang, languageForPath, languageInfo } from "./languages";
 import { matchesInNote, openFind } from "./matches";
@@ -304,6 +304,7 @@ export function createEditorState(
       settingsCompartment.of(settingsExtensions(s, taskCfg, lang)),
       notesHighlighter,
       notesClickHandler,
+      linkTrigger,
       treeHighlight,
       syntaxHighlighting(highlight),
       theme,

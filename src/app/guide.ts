@@ -113,6 +113,14 @@ into the images folder under their own name, or just referenced if they already 
 in the note's folder. Command palette → "File: Delete unused images…" moves the
 images that no note shows any more to the system trash, after listing them.
 
+## Links between notes
+
+Write \`[[work]]\` (the name of another note of the folder, its extension optional) or
+\`[[projects/report]]\` to link to a note. Typing \`[[\` offers the notes of the folder.
+**Ctrl+click** on a link opens the note; if it does not exist yet, KiloNote offers to
+create it next to the current one. **Ctrl+Alt+B** lists the notes that link to the
+current one. \`[[work|the work note]]\` shows a label too.
+
 ## Templates
 
 **Ctrl+Alt+N** makes a new note from a template: daily note, meeting notes, project,

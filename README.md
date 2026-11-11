@@ -87,6 +87,9 @@ open it as a folder and follow its `README.md`.
   matches as you type: "3 of 12"
 - **Marks along the scrollbar**: the headings and the open tasks of the note (in their status
   color), the other occurrences of the selection and the search matches
+- **Links between notes**: `[[work]]` or `[[projects/report]]` (the name of another note of the
+  folder); typing `[[` offers the notes, **Ctrl+click** opens the linked note (or creates it),
+  **Ctrl+Alt+B** lists the notes linking to the current one
 - **Templates**: a new note from a template (**Ctrl+Alt+N**: daily note, meeting notes,
   project, Markdown page, or your own), and **today's note** (**Ctrl+Alt+D**: `daily/2026-11-11.txt`
   in the open folder, made from the *Daily note* template the first time). `{{date}}`, `{{time}}`,
@@ -251,6 +254,7 @@ On macOS, Ctrl becomes ⌘.
 | Shortcuts cheat sheet | Ctrl+? |
 | New note / open file / open folder | Ctrl+N / Ctrl+O / Ctrl+Shift+O |
 | New note from a template / today's note | Ctrl+Alt+N / Ctrl+Alt+D |
+| Notes linking to this one | Ctrl+Alt+B |
 | New window | Ctrl+Shift+N |
 | Save / save as | Ctrl+S / Ctrl+Shift+S |
 | Close / reopen a tab | Ctrl+W / Ctrl+Shift+T |

@@ -446,6 +446,7 @@ button.st-item:hover { background: var(--kn-hover); color: var(--kn-fg); }
 .cm-line.kn-quote { color: var(--kn-fg-muted); font-style: italic; }
 .kn-bullet { color: var(--kn-accent); font-weight: 700; }
 .kn-url { color: var(--kn-cyan); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--kn-cyan) 45%, transparent); text-underline-offset: 2px; }
+.kn-link { color: var(--kn-accent); text-decoration: underline dotted; text-decoration-color: color-mix(in srgb, var(--kn-accent) 60%, transparent); text-underline-offset: 3px; }
 .kn-date { color: var(--kn-purple); }
 .kn-due { color: var(--kn-purple); border-radius: 4px; }
 .kn-due-soon { color: var(--kn-yellow); }
