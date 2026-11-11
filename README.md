@@ -78,6 +78,10 @@ open it as a folder and follow its `README.md`.
   next to the note (`images/`) and shown right under its line, `![image](images/…png)`;
   the note stays plain text. Image files can be dropped on a note too, and *File: Delete
   unused images* moves the images no note uses any more to the trash
+- **Image viewer**: an image file (PNG, JPEG, GIF, WebP, BMP) opened from the explorer,
+  Ctrl+O or dropped outside a note shows in a viewer: ← → go through the images of its
+  folder, a click or Space switches between the whole image and its actual size, + − and
+  Ctrl+wheel zoom, Ctrl+C copies it, *Add to the note* writes it into the note being edited
 - Click a line number to select the whole line, without its line break (drag for more,
   Shift+click to extend);
   **Ctrl+↑/↓** moves the cursor and scrolls the text with it
@@ -119,7 +123,7 @@ open it as a folder and follow its `README.md`.
 - Notes changed by another program are reloaded automatically (or you choose, if you have unsaved edits)
 - **Local history**: whenever a version is about to be thrown away (overwriting a file changed
   elsewhere, reloading over unsaved edits, replacing in files), a copy is kept: *File: Local history*
-- Large files ask before opening (over 20 MB); binary files are never opened as text
+- Large files ask before opening (over 20 MB); other binary files are never opened
 
 **Tasks**
 - **Task board** (**Ctrl+Alt+K**): the tasks of every note of the folder in one column per
@@ -245,8 +249,8 @@ To build it yourself on Linux, see [Build from source](#build-from-source).
 ### Using KiloNote at work
 
 KiloNote is a plain local file editor: **no network access, no telemetry, no administrator
-rights, and it never runs other programs** (a non-text file can only be revealed in the file
-manager). The executable is not signed, though, and installing software that is not in your
+rights, and it never runs other programs** (a file that is neither text nor an image can only
+be revealed in the file manager). The executable is not signed, though, and installing software that is not in your
 company's catalog may fall under its IT policy: ask your IT team first and give them the
 [security sheet](docs/SECURITY.md), which lists everything the program and the installer do.
 

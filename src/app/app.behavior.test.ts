@@ -100,7 +100,7 @@ function memoryBackend(init: Record<string, string> = {}, opts: { savePath?: str
     stat: async (p) => meta(p),
     async listDir(p) {
       const out: Entry[] = [];
-      for (const f of disk.files.keys()) if (dirname(f) === p) out.push({ name: basename(f), path: f, isDir: false });
+      for (const f of [...disk.files.keys(), ...disk.images.keys()]) if (dirname(f) === p) out.push({ name: basename(f), path: f, isDir: false });
       return out;
     },
     walk: async (root) => [...disk.files.keys(), ...disk.images.keys()].filter((f) => isInside(f, root)),
@@ -930,5 +930,44 @@ describe("quick inserts after /", () => {
     await app.openFile("/notes/b.txt");
     app.view.dispatch({ changes: { from: 0, insert: "/" }, selection: { anchor: 1 }, userEvent: "input.type" });
     expect(slashMenu(app.view.state)).toBeNull();
+  });
+});
+
+describe("image files", () => {
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+  it("open in the image viewer, which goes through the images of their folder", async () => {
+    const { app, disk } = await start({ "/notes/a.txt": "text" });
+    disk.images.set("/notes/shot-1.png", PNG);
+    disk.images.set("/notes/shot-2.jpg", PNG);
+    expect(await app.openFile("/notes/shot-1.png")).toBeNull();
+    expect(app.docs).toHaveLength(0);
+    expect(document.querySelector(".kn-viewer-name")?.textContent).toBe("shot-1.png");
+    expect(document.querySelector<HTMLImageElement>(".kn-viewer-img")?.src).toMatch(/^data:image\/png/);
+    expect(document.querySelector(".kn-viewer-count")?.textContent).toBe("1 / 2");
+    // (Not refused: no "not a text file".)
+    expect([...document.querySelectorAll(".kn-toast")].some((t) => t.textContent?.includes("not a text file"))).toBe(false);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    await vi.waitFor(() => expect(document.querySelector(".kn-viewer-name")?.textContent).toBe("shot-2.jpg"));
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(document.querySelector(".kn-viewer")).toBeNull();
+  });
+
+  it("dropped outside a note: the viewer goes through them; text files open as notes", async () => {
+    const { app, disk } = await start({ "/notes/a.txt": "text" });
+    disk.images.set("/x/b.png", PNG);
+    disk.images.set("/y/c.png", PNG);
+    const stat = app.backend.stat;
+    app.backend.stat = async (p) => (disk.images.has(p) ? { mtime: 1, size: 8, isDir: false } : stat(p));
+    await app.openPaths(["/x/b.png", "/notes/a.txt", "/y/c.png"]);
+    expect(app.docs.map((d) => d.path)).toEqual(["/notes/a.txt"]);
+    expect(document.querySelector(".kn-viewer-name")?.textContent).toBe("b.png");
+    expect(document.querySelector(".kn-viewer-count")?.textContent).toBe("1 / 2");
+  });
+
+  it("an image that cannot be read says so in the viewer", async () => {
+    const { app } = await start({});
+    await app.openFile("/notes/gone.png");
+    expect(document.querySelector(".kn-viewer-error")?.textContent).toContain("cannot be shown");
   });
 });

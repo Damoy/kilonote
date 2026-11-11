@@ -33,6 +33,10 @@ import { Welcome } from "../ui/welcome";
 import { Preview } from "../ui/views/preview";
 import { openCheatSheet, openSettingsView, syncAssistant } from "../ui/lazy";
 import { noteOpened, onPinsChanged } from "./pins";
+import { isViewableImage } from "../text/images";
+
+/** The image viewer, loaded the first time an image is opened. */
+const showImage = (app: App, path: string, list?: string[]) => import("../ui/image-viewer").then((m) => m.showImage(app, path, list));
 import { setIconPack, type IconPack } from "../ui/icons";
 import { historyDir, historyName, keepVersion } from "./history";
 import { beforeClose, restoreOtherWindows, restoreSession, saveSessionNow, sessionFileName, sessionTab, type SessionTab } from "./session";
@@ -480,17 +484,26 @@ export class App {
   }
 
   async openPaths(paths: string[]) {
+    const images: string[] = [];
     for (const p of paths) {
       const meta = await this.backend.stat(p);
       if (meta?.isDir) await this.openFolder(p);
+      else if (meta && isViewableImage(p)) images.push(p);
       else if (meta) await this.openFile(p);
     }
+    // Several images at once: the viewer goes through them.
+    if (images.length) await showImage(this, images[0], images.length > 1 ? images : undefined);
   }
 
   async openFile(path: string, opts: { activate?: boolean; line?: number; select?: [number, number] } = {}): Promise<Doc | null> {
     const activate = opts.activate ?? true;
     let doc = this.findDoc(path);
     if (!doc) {
+      // An image is shown in the image viewer (read as an image, never handed to another program).
+      if (isViewableImage(path)) {
+        await showImage(this, path);
+        return null;
+      }
       // KiloNote never hands a file to the operating system to open or run it:
       // executables (and any other non-text file) can only be shown in the file manager.
       if (isProbablyBinary(path)) return this.refuseBinary(path);
@@ -534,7 +547,7 @@ export class App {
   }
 
   private refuseBinary(path: string): null {
-    toast(`"${basename(path)}" is not a text file. KiloNote only opens text files and never runs programs.`, {
+    toast(`"${basename(path)}" is not a text file. KiloNote opens text files and images, and never runs programs.`, {
       kind: "error",
       action: { label: "Reveal in file manager", run: () => this.backend.reveal(path) },
     });

@@ -55,7 +55,11 @@ const mimeOf = (path: string) => IMAGE_TYPES[path.slice(path.lastIndexOf(".") + 
 /** An image referenced by the active note, as a data URL (null if it cannot be shown). */
 export function loadNoteImage(app: App, ref: string): Promise<string | null> {
   const path = resolveImage(ref, app.active?.path ? dirname(app.active.path) : null);
-  if (!path) return Promise.resolve(null);
+  return path ? loadImageFile(app, path) : Promise.resolve(null);
+}
+
+/** An image file, as a data URL (null if it cannot be read: missing, too large, not an image). */
+export function loadImageFile(app: App, path: string): Promise<string | null> {
   const known = cache.get(path);
   if (known) return known;
   const url = app.backend.readImage(path).then((bytes) => dataUrl(bytes, mimeOf(path))).catch(() => null);
@@ -181,7 +185,19 @@ export async function dropImageFiles(app: App, paths: string[], at: { x: number;
   const images = onNote ? paths.filter(isImageFile) : [];
   if (!images.length || !doc) return paths;
   const rest = paths.filter((p) => !images.includes(p));
-  if (!receivingNote(app, app.view) || !doc.path) return rest;
+  await addImagesToNote(app, images, app.view.posAtCoords(at!, false));
+  return rest;
+}
+
+/**
+ * Image files added to the active note (at `pos`, or at the cursor): one already
+ * in the note's folder is referenced where it is, any other is copied into its
+ * images folder. False when the note cannot receive images (not saved, not a note).
+ */
+export async function addImagesToNote(app: App, images: string[], pos?: number): Promise<boolean> {
+  const doc = app.active;
+  if (!doc || (doc.lang !== "text" && doc.lang !== "markdown")) return false;
+  if (!receivingNote(app, app.view) || !doc.path) return false;
   const noteDir = dirname(doc.path);
   const refs: string[] = [];
   for (const path of images) {
@@ -197,9 +213,8 @@ export async function dropImageFiles(app: App, paths: string[], at: { x: number;
       toast(`Could not add "${basename(path)}": ${e}`, { kind: "error" });
     }
   }
-  const pos = app.view.posAtCoords(at!, false);
   if (refs.length) insertRefs(app, doc, refs, pos);
-  return rest;
+  return refs.length > 0;
 }
 
 // --- Images no note uses -------------------------------------------------------

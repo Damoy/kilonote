@@ -289,6 +289,8 @@ export function createWebBackend(): Backend {
   const meta = (p: string): Meta | null => {
     const f = files.get(p);
     if (f) return { mtime: f.mtime, size: f.text.length, isDir: false };
+    const img = images.get(p);
+    if (img) return { mtime: 0, size: img.length, isDir: false };
     return dirs.has(p) ? { mtime: 0, size: 0, isDir: true } : null;
   };
   const write = (p: string, text: string): Meta => {

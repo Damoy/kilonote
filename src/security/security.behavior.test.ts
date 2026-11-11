@@ -48,6 +48,15 @@ describe("opening files never runs a program", () => {
     expect(document.querySelectorAll(".kn-toast").length).toBeGreaterThan(0);
   });
 
+  it("an image file is only read, as an image, to be shown", async () => {
+    const { backend, calls } = recordingBackend({});
+    const app = new App(backend);
+    await app.openFile("C:\\notes\\shot.png");
+    await app.openPaths(["C:\\notes\\a.jpg", "C:\\notes\\b.gif"]);
+    expect(app.docs).toHaveLength(0);
+    expect(new Set(calls.map((c) => c.method))).toEqual(new Set(["readImage", "stat", "listDir"]));
+  });
+
   it("the only action offered is revealing the file in the file manager", async () => {
     const { backend, calls } = recordingBackend({ "C:\\notes\\tool.exe": "MZ" });
     const app = new App(backend);

@@ -57,6 +57,11 @@ export function isImageFile(path: string): boolean {
   return Object.hasOwn(IMAGE_TYPES, extOf(path));
 }
 
+/** Image files that open in the image viewer (an SVG is text: it opens in the editor, with its preview). */
+export function isViewableImage(path: string): boolean {
+  return isImageFile(path) && extOf(path) !== "svg";
+}
+
 /** The reference written in the note for an image in `folder` (relative to the note). */
 export function imageMarkup(folder: string, name: string): string {
   const parts = [...folder.split(/[\\/]+/).filter(Boolean), name];

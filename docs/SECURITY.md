@@ -10,7 +10,7 @@ automated tests.
 |---|---|
 | What it is | A local text file editor (functionally like Notepad++) |
 | Network access | **None.** No HTTP client is compiled in, no telemetry, no automatic update, no license check |
-| Running programs | **Never.** Opening, dropping or passing a file on the command line only reads text; a non-text file (`.exe`, `.msi`…, or any file whose content is binary, whatever its extension) can only be revealed in the file manager |
+| Running programs | **Never.** Opening, dropping or passing a file on the command line only reads text, or an image to show it; any other file (`.exe`, `.msi`…, or any file whose content is binary, whatever its extension) can only be revealed in the file manager |
 | Child processes | Only the WebView2 engine (`msedgewebview2.exe`), and the default browser or mail app when the user clicks a web or mail link |
 | Data | Text files chosen by the user, on the local disk, in plain text (like Notepad) |
 | Privileges | **Standard user.** No administrator rights, no service, no driver, nothing launched at startup, no scheduled task |
@@ -179,7 +179,9 @@ npx tauri build --no-bundle
   Web images are never fetched, and neither is an image on another computer
   (`\\server\share\…`): a note cannot make the PC connect to a server and hand it the
   Windows sign-in. An image on a network share is read only when the note itself is on
-  that share; device paths (`\\?\…`, `\\.\…`) never.
+  that share; device paths (`\\?\…`, `\\.\…`) never. An image file opened by itself
+  (explorer, Ctrl+O, a file dropped outside a note) is read the same way and shown in
+  the app's image viewer: it is never handed to another program.
   A pasted or dropped image is written by a native
   command that only writes image types, only to a new file (never over an existing
   one), in the images folder next to the note. Unused images are only moved to the
