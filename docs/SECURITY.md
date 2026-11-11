@@ -176,7 +176,11 @@ npx tauri build --no-bundle
   (`![image](images/shot.png)`), read by a native command that only reads image types
   (png, jpg, gif, webp, bmp, svg; 50 MB at most) and shown as `data:` images: an image
   cannot run anything, and an SVG shown this way runs no script and loads nothing.
-  Web images are never fetched. A pasted or dropped image is written by a native
+  Web images are never fetched, and neither is an image on another computer
+  (`\\server\share\…`): a note cannot make the PC connect to a server and hand it the
+  Windows sign-in. An image on a network share is read only when the note itself is on
+  that share; device paths (`\\?\…`, `\\.\…`) never.
+  A pasted or dropped image is written by a native
   command that only writes image types, only to a new file (never over an existing
   one), in the images folder next to the note. Unused images are only moved to the
   system trash (recoverable), after a confirmation that lists them.

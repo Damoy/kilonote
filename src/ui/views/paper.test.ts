@@ -120,3 +120,32 @@ describe("a code file on paper", () => {
     expect(root.querySelector("b")).toBeNull();
   });
 });
+
+describe("nothing on paper can run or load anything", () => {
+  it("text that looks like HTML stays text, in every kind of note", async () => {
+    for (const lang of ["text", "markdown", "json"]) {
+      const root = await paper('<script>alert(1)</script> <img src=x onerror=alert(2)> <a href="javascript:alert(3)">x</a>', lang);
+      expect(root.querySelector("script, img, iframe")).toBeNull();
+      expect(root.querySelector("a[href^='javascript']")).toBeNull();
+      expect(root.outerHTML).toContain("&lt;script&gt;");
+    }
+  });
+
+  it("a link keeps only a web address, quotes and all escaped", async () => {
+    const root = await paper('[x](https://example.com/a"onmouseover="alert(1))', "markdown");
+    for (const a of root.querySelectorAll("a")) {
+      expect(a.getAttributeNames().sort()).toEqual(["href", "style"]);
+      expect(a.getAttribute("href")!.startsWith("https://")).toBe(true);
+    }
+  });
+
+  it("a status color of the settings is a color, nothing more", () => {
+    expect(paperColor("#e91e63")).toBe("#e91e63");
+    expect(paperColor("rgb(10, 20, 30)")).toBe("rgb(10, 20, 30)");
+    expect(paperColor("tomato")).toBe("tomato");
+    expect(paperColor("blue")).not.toBe("blue"); // a palette name: its color on paper
+    for (const bad of ["rgb(0,0,0);background:url(http://x)", "red;background-image:url(x)", "#fff url(x)", "expression(alert(1))"]) {
+      expect(paperColor(bad)).toBe(paperColor(undefined));
+    }
+  });
+});

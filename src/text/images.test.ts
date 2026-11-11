@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { droppedImageName, extForMime, imageMarkup, imageRefs, isImageFile, pastedImageName, resolveImage } from "./images";
+import { droppedImageName, extForMime, imageMarkup, imageRefs, isImageFile, networkShare, pastedImageName, resolveImage } from "./images";
 
 describe("image references in notes", () => {
   it("finds the images written on a line", () => {
@@ -46,5 +46,26 @@ describe("image references in notes", () => {
     expect(extForMime("image/jpeg")).toBe("jpg");
     expect(extForMime("image/tiff")).toBeNull();
     expect(extForMime("text/html")).toBeNull();
+  });
+});
+
+describe("images on other computers", () => {
+  it("are never read from a note: no connection to another computer", () => {
+    for (const ref of ["\\\\attacker\\share\\a.png", "//attacker/share/a.png", "\\\\attacker@SSL\\a.png", "%5C%5Cattacker%5Cshare%5Ca.png", "/\\attacker\\share\\a.png"]) {
+      expect(resolveImage(ref, "C:\\Notes")).toBeNull();
+      expect(resolveImage(ref, null)).toBeNull();
+    }
+    // Device paths, never.
+    expect(resolveImage("\\\\?\\C:\\x.png", "C:\\Notes")).toBeNull();
+    expect(resolveImage("\\\\.\\pipe\\x.png", "C:\\Notes")).toBeNull();
+  });
+
+  it("are read from the share the note itself comes from", () => {
+    const dir = "\\\\Files\\Team\\notes";
+    expect(resolveImage("images/a.png", dir)).toBe("\\\\Files\\Team\\notes\\images\\a.png");
+    expect(resolveImage("\\\\files\\team\\shots\\b.png", dir)).toBe("\\\\files\\team\\shots\\b.png");
+    expect(resolveImage("\\\\files\\other\\b.png", dir)).toBeNull();
+    expect(networkShare("//Files/Team/x")).toBe("files\\team");
+    expect(networkShare("C:\\Notes")).toBeNull();
   });
 });

@@ -33,7 +33,8 @@ const MONO = `Consolas, "Cascadia Mono", Menlo, "Courier New", monospace`;
 export function paperColor(value: string | undefined): string {
   if (!value) return C.grey;
   if ((PALETTE_NAMES as readonly string[]).includes(value) || value === "accent") return (C as Record<string, string>)[value];
-  return /^#[0-9a-f]{3,8}$|^rgb|^hsl/i.test(value) ? value : C.grey;
+  // Only a plain color goes into a style: nothing else can follow it ("…;background:url(…)").
+  return /^#[0-9a-f]{3,8}$|^(rgb|hsl)a?\([\d\s.,%/]+\)$|^[a-z]{3,20}$/i.test(value.trim()) ? value.trim() : C.grey;
 }
 
 /** Dark text on a light color, white text on a dark one. */

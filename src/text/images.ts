@@ -64,6 +64,12 @@ export function imageMarkup(folder: string, name: string): string {
   return `![image](${/[\s()<>]/.test(dest) ? `<${dest}>` : dest})`;
 }
 
+/** `\\server\share\…` or `//server/share/…` → "server\share" (any case); null for anything else. */
+export function networkShare(p: string): string | null {
+  const m = /^[\\/]{2}([^\\/?.][^\\/]*)[\\/]+([^\\/]+)/.exec(p);
+  return m ? `${m[1]}\\${m[2]}`.toLowerCase() : null;
+}
+
 /**
  * The file an image reference points to: relative to the note's folder, or an
  * absolute path. Web images and inline data are not loaded (null).
@@ -76,6 +82,13 @@ export function resolveImage(ref: string, noteDir: string | null): string | null
     dest = decodeURI(dest);
   } catch {
     /* a lone % stays as it is */
+  }
+  if (/^[\\/]{2}/.test(dest)) {
+    // Another computer's file (\\server\share\…): read only from the share the note
+    // itself comes from. A note never makes the computer connect to another one,
+    // which would hand it the Windows sign-in. (Device paths, \\?\ and \\.\, never.)
+    const share = networkShare(dest);
+    return share && noteDir && networkShare(noteDir) === share ? dest : null;
   }
   if (isWindowsPath(dest) || dest.startsWith("/")) return dest;
   if (!noteDir) return null;
