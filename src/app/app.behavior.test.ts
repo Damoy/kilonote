@@ -10,6 +10,7 @@ import { basename, dirname, isInside } from "../core/path";
 import { formatDocument } from "./editing";
 import { renamePath } from "./files";
 import { deleteUnusedImages, dropImages, pasteImage, loadNoteImage } from "./images";
+import { openDailyNote } from "./templates";
 import { saveSessionNow } from "./session";
 import { archiveLines, cycleTasks } from "./tasks";
 
@@ -582,3 +583,32 @@ describe("images in notes", () => {
     expect([...disk.images.keys()].sort()).toEqual(["/notes/images/named.png", "/notes/images/up.png", "/notes/images/used.png", "/notes/photos/trip.png"]);
   });
 });
+
+describe("templates", () => {
+  it("today's note is made from the Daily note template of the user, once", async () => {
+    vi.useFakeTimers({ now: new Date(2026, 10, 11, 9, 5), toFake: ["Date"] });
+    try {
+      const { app, disk } = await start({
+        "/config/templates/Daily note.md": "# {{date}}\n- {{cursor}}\n",
+        "/notes/work.txt": "",
+      });
+      disk.dirs.add("/notes");
+      await app.openFolder("/notes");
+      // (happy-dom: see the archive test; the editor is not focused here.)
+      app.view.contentDOM.blur();
+      app.view.focus = () => {};
+      await openDailyNote(app);
+      expect(disk.text("/notes/daily/2026-11-11.md")).toBe("# 2026-11-11\n- \n");
+      expect(app.active?.path).toBe("/notes/daily/2026-11-11.md");
+      expect(app.view.state.selection.main.head).toBe("# 2026-11-11\n- ".length);
+      // Already there: opened as it is.
+      app.view.dispatch({ changes: { from: app.view.state.doc.length, insert: "edited" } });
+      await app.save(app.active!);
+      await openDailyNote(app);
+      expect(disk.text("/notes/daily/2026-11-11.md")).toBe("# 2026-11-11\n- \nedited");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+

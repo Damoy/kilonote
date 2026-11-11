@@ -58,6 +58,8 @@ export function showCheatSheet(app: App, opts: { startup?: boolean } = {}) {
     ]],
     ["Files", "file", [
       cmd("New note", "file.new"),
+      cmd("From a template", "file.newFromTemplate"),
+      cmd("Today's note", "file.dailyNote"),
       cmd("Open file", "file.open"),
       cmd("Open folder", "folder.open"),
       cmd("Save", "file.save"),

@@ -87,6 +87,10 @@ open it as a folder and follow its `README.md`.
   matches as you type: "3 of 12"
 - **Marks along the scrollbar**: the headings and the open tasks of the note (in their status
   color), the other occurrences of the selection and the search matches
+- **Templates**: a new note from a template (**Ctrl+Alt+N**: daily note, meeting notes,
+  project, Markdown page, or your own), and **today's note** (**Ctrl+Alt+D**: `daily/2026-11-11.txt`
+  in the open folder, made from the *Daily note* template the first time). `{{date}}`, `{{time}}`,
+  `{{weekday}}`, `{{title}}` and `{{cursor}}` are filled in; *Template: Edit templates* changes them
 - Autosave, atomic writes, unsaved tabs kept between sessions
 - Notes changed by another program are reloaded automatically (or you choose, if you have unsaved edits)
 - **Local history**: whenever a version is about to be thrown away (overwriting a file changed
@@ -246,6 +250,7 @@ On macOS, Ctrl becomes ⌘.
 | Format document (JSON, XML, HTML, CSS, SQL, tables) | Shift+Alt+F |
 | Shortcuts cheat sheet | Ctrl+? |
 | New note / open file / open folder | Ctrl+N / Ctrl+O / Ctrl+Shift+O |
+| New note from a template / today's note | Ctrl+Alt+N / Ctrl+Alt+D |
 | New window | Ctrl+Shift+N |
 | Save / save as | Ctrl+S / Ctrl+Shift+S |
 | Close / reopen a tab | Ctrl+W / Ctrl+Shift+T |

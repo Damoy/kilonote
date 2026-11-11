@@ -113,6 +113,15 @@ into the images folder under their own name, or just referenced if they already 
 in the note's folder. Command palette → "File: Delete unused images…" moves the
 images that no note shows any more to the system trash, after listing them.
 
+## Templates
+
+**Ctrl+Alt+N** makes a new note from a template: daily note, meeting notes, project,
+Markdown page, or one of yours. **Ctrl+Alt+D** opens today's note, \`daily/2026-11-11.txt\`
+in the open folder, made from the "Daily note" template the first time.
+In a template, \`{{date}}\`, \`{{time}}\`, \`{{weekday}}\`, \`{{title}}\` and \`{{cursor}}\`
+(where the cursor goes) are filled in. Command palette → "Template: Edit templates…"
+changes a template or makes a new one (they are files of the settings folder).
+
 ## Code and config files
 
 Python, JavaScript, TypeScript, C#, Java, C/C++, Go, Rust, SQL, PowerShell, Batch,

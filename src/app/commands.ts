@@ -7,6 +7,7 @@ import { openCheatSheet } from "../ui/lazy";
 import type { App } from "./app";
 import { formatDocument } from "./editing";
 import { deleteUnusedImages } from "./images";
+import { editTemplates, newFromTemplate, openDailyNote } from "./templates";
 import { copyText, renamePath } from "./files";
 import { showLocalHistory } from "./history";
 import { openCommandPalette, openQuickOpen, selectAccent, selectLanguage, selectMascot, selectTheme } from "./pickers";
@@ -61,6 +62,8 @@ export function defaultKeybindings(app: App): Record<string, string> {
     "Mod+Shift+V": "view.preview",
     "Shift+Alt+F": "edit.format",
     "Mod+F3": "edit.nextOccurrence",
+    "Mod+Alt+N": "file.newFromTemplate",
+    "Mod+Alt+D": "file.dailyNote",
     "Mod+Shift+F3": "edit.prevOccurrence",
     "Mod+?": "help.shortcuts",
   };
@@ -118,6 +121,9 @@ export function registerAllCommands(app: App) {
     { id: "edit.replace", title: "Edit: Find and replace", run: () => app.active && openFind(app.view) },
     { id: "edit.nextOccurrence", title: "Edit: Next occurrence of the selected text", run: () => app.active && goToOccurrence(app.view, true) },
     { id: "edit.prevOccurrence", title: "Edit: Previous occurrence of the selected text", run: () => app.active && goToOccurrence(app.view, false) },
+    { id: "file.newFromTemplate", title: "File: New note from template…", run: () => newFromTemplate(app) },
+    { id: "file.dailyNote", title: "File: Today's note", run: () => openDailyNote(app) },
+    { id: "template.edit", title: "Template: Edit templates…", run: () => editTemplates(app) },
     { id: "file.deleteUnusedImages", title: "File: Delete unused images…", run: () => deleteUnusedImages(app) },
     { id: "edit.format", title: "Edit: Format document (JSON, XML, HTML, CSS, SQL, Markdown tables)", run: () => formatDocument(app) },
     { id: "edit.minify", title: "Edit: Minify JSON", run: () => formatDocument(app, "minify") },

@@ -19,6 +19,7 @@ export interface Settings {
   scrollbar_marks: boolean;
   show_images: boolean;
   images_folder: string;
+  daily_notes_folder: string;
   tab_size: number;
   indent_with_tabs: boolean;
   autosave: boolean;
@@ -94,6 +95,8 @@ export const SETTINGS_TEMPLATE = `// KiloNote settings
   // Line ending of new files: "system", "lf" or "crlf"
   "default_line_ending": "system",
   "show_hidden_files": false,
+  // Where "File: Today's note" (Ctrl+Alt+D) keeps the daily notes, in the open folder
+  "daily_notes_folder": "daily",
   // Extensions treated as notes (quick open, tasks, activity report)
   "note_extensions": ["txt", "md", "markdown", "note", "todo", "log", "org", "rst", "text"],
 
@@ -172,10 +175,16 @@ export function mergeSettings(user: Partial<Settings> | null | undefined): Setti
   if (!ICON_PACKS.some((p) => p.id === out.icon_pack)) out.icon_pack = DEFAULT_SETTINGS.icon_pack;
   // Without a suffix, a note would be its own archive.
   if (typeof out.archive_suffix !== "string" || !out.archive_suffix.trim()) out.archive_suffix = DEFAULT_SETTINGS.archive_suffix;
-  // Images stay next to the note: a folder name, not a path elsewhere.
-  if (typeof out.images_folder !== "string" || !out.images_folder.trim() || /^([a-z]:|[\\/])|(^|[\\/])\.\.([\\/]|$)/i.test(out.images_folder.trim())) out.images_folder = DEFAULT_SETTINGS.images_folder;
-  else out.images_folder = out.images_folder.trim();
+  // Images stay next to the note, daily notes in the open folder: folder names, not paths elsewhere.
+  out.images_folder = innerFolder(out.images_folder, DEFAULT_SETTINGS.images_folder);
+  out.daily_notes_folder = innerFolder(out.daily_notes_folder, DEFAULT_SETTINGS.daily_notes_folder);
   return out;
+}
+
+/** A folder inside another one (`images`, `notes/daily`), or the default: never absolute, never `..`. */
+function innerFolder(value: unknown, fallback: string): string {
+  const v = typeof value === "string" ? value.trim() : "";
+  return !v || /^([a-z]:|[\\/])|(^|[\\/])\.\.([\\/]|$)/i.test(v) ? fallback : v;
 }
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, Number.isFinite(n) ? n : min));

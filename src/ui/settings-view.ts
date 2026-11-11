@@ -203,6 +203,7 @@ class SettingsView {
           this.heading("Folder"),
           this.toggle("show_hidden_files", "Show hidden files"),
           this.list("note_extensions", "Note extensions", "Used by quick open, the tasks panel and the report"),
+          this.text("daily_notes_folder", "Folder of daily notes", "In the open folder (File: Today's note, Ctrl+Alt+D)"),
         ];
       case "tasks":
         return this.tasks();
