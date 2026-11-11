@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """KiloNote's icons.
 
-The app icon is a vector drawing, src-tauri/icons/app-icon.svg: `tauri icon`
-renders every size from it (Windows ICO, macOS ICNS, PNGs), and it is the
-favicon of the browser mode.
+Kilo, the floppy disk mascot, and the app icon (Kilo's face) are pixel art:
+hand-made character grids (one character = one pixel). The app icon is drawn
+natively at 16, 24 and 32 px; every other size is one of them scaled up without
+blur. They are turned into
 
-Kilo, the floppy disk mascot shown in the app, is pixel art: hand-made
-character grids (one character = one pixel), turned into
-
+  src-tauri/icons/             app icon: Windows ICO, PNGs, macOS ICNS (via `tauri icon`)
+  public/favicon.svg           app icon of the browser mode
   src/assets/kilo.svg          mascot (welcome screen, README)
-  docs/kilo-1024.png           large version
+  docs/kilo-1024.png           large version of the app icon
   docs/logo-pack/              color variants (SVG, PNG, ICO), logotype, preview sheet
 
 Usage: npm run icons
-       KILONOTE_ICON=mint npm run icons   (Kilo as the app icon, in one of the pack colors)
+       KILONOTE_ICON=mint npm run icons   (the app icon in another of Kilo's colors)
 """
 
 from __future__ import annotations
@@ -50,63 +50,94 @@ PALETTE = {
     "R": (0xFF, 0x8F, 0xA3),  # eraser
     "T": (0xF7, 0xE1, 0xB5),  # pencil wood
     "Q": (0xB8, 0xBE, 0xD0),  # ferrule
+    "h": (0xFF, 0xFF, 0xFF),  # shutter shine
+    "X": (0x0E, 0x0B, 0x24, 46),  # soft drop shadow (translucent)
 }
 
-# 32×32 icon: the floppy disk, cut top-right corner, shutter with its slot,
-# a "K" for Kilo, and the face label with a terminal line.
+# The app icon, drawn natively at 32, 24 and 16 px (each size its own drawing,
+# so that none is blurred; the larger sizes are the 32 px one scaled up). The
+# floppy disk lit from the top left, its cut corner, the metal shutter and its
+# slot, a "K" for Kilo, the face label with a line of text and a terminal
+# cursor, and a soft shadow.
 ICON_32 = """
 ................................
-................................
-...OOOOOOOOOOOOOOOOOOOOOOOO.....
-..OLLLLLLOSSSSSSSSSSSOLLLLPO....
-..OLKPPKPOSSSSSSDDDSsOPPPPPPO...
-..OLKPKPPOSSSSSSDDDSsOPPPPPPpO..
-..OLKKPPPOSSSSSSDDDSsOPPPPPPpO..
-..OLKPKPPOSSSSSSDDDSsOPPPPPPpO..
-..OLKPPKPOSSSSSSDDDSsOPPPPPPpO..
-..OLPPPPPOSSSSSSDDDSsOPPPPPPpO..
-..OLPPPPPOsssssssssssOPPPPPPpO..
-..OLPPPPPOOOOOOOOOOOOOPPPPPPpO..
-..OLPPPPPPPPPPPPPPPPPPPPPPPPpO..
-..OLPPPPPPPPPPPPPPPPPPPPPPPPpO..
-..OLPPOOOOOOOOOOOOOOOOOOOOPPpO..
-..OLPPOWWWWWWWWWWWWWWWWWWOPPpO..
-..OLPPOWWWWWWWWWWWWWWWWWwOPPpO..
-..OLPPOWWWEEWWWWWWWWEEWWwOPPpO..
-..OLPPOWWWEEWWWWWWWWEEWWwOPPpO..
-..OLPPOWWWEEWWWWWWWWEEWWwOPPpO..
-..OLPPOWWWWWWWWWWWWWWWWWwOPPpO..
-..OLPPOWCCWWWMWWWWMWWWCCwOPPpO..
-..OLPPOWWWWWWWMMMMWWWWWWwOPPpO..
-..OLPPOWWWWWWWWWWWWWWWWWwOPPpO..
-..OLPPOWWWWWWWWWWWWWGGWWwOPPpO..
-..OLPPOWWgggggggggWWGGWWwOPPpO..
-..OLPPOWwwwwwwwwwwwwwwwwwOPPpO..
-..OLPPOOOOOOOOOOOOOOOOOOOOPPpO..
-..OLpppppppppppppppppppppppppO..
-...OOOOOOOOOOOOOOOOOOOOOOOOOO...
-................................
+..OOOOOOOOOOOOOOOOOOOOOOO.......
+.OLLLLLLLOSSSSSSSSSSsOLLLO......
+.OLPKPPKPOShSSSSDDDSsOPPPLO.....
+.OLPKPKPPOShSSSSDDDSsOPPPPLO....
+.OLPKKPPPOShSSSSDDDSsOPPPPPLO...
+.OLPKPKPPOShSSSSDDDSsOPPPPPPLO..
+.OLPKPPKPOSSSSSSDDDSsOPPPPPPpOX.
+.OLPPPPPPOSSSSSSSSSSsOPPPPPPpOX.
+.OLPPPPPPOsssssssssssOPPPPPPpOX.
+.OLPPPPPPOOOOOOOOOOOOOPPPPPPpOX.
+.OLPPPPPPPPPPPPPPPPPPPPPPPPPpOX.
+.OLPPPPPPPPPPPPPPPPPPPPPPPPPpOX.
+.OLPPPOOOOOOOOOOOOOOOOOOOOPPpOX.
+.OLPPPOWWWWWWWWWWWWWWWWWwOPPpOX.
+.OLPPPOWWWWWWWWWWWWWWWWWwOPPpOX.
+.OLPPPOWWWEEWWWWWWWWEEWWwOPPpOX.
+.OLPPPOWWWEEWWWWWWWWEEWWwOPPpOX.
+.OLPPPOWWWEEWWWWWWWWEEWWwOPPpOX.
+.OLPPPOWWWWWWWWWWWWWWWWWwOPPpOX.
+.OLPPPOWWWWWWWWWWWWWWWWWwOPPpOX.
+.OLPPPOWCCWWWMWWWWMWWWCCwOPPpOX.
+.OLPPPOWWWWWWWMMMMWWWWWWwOPPpOX.
+.OLPPPOWWWWWWWWWWWWWWWWWwOPPpOX.
+.OLPPPOWWWWWWWWWWWWWGGWWwOPPpOX.
+.OLPPPOWWggggggggWWWGGWWwOPPpOX.
+.OLPPPOWWWWWWWWWWWWWWWWWwOPPpOX.
+.OLPPPOwwwwwwwwwwwwwwwwwwOPPpOX.
+.OLpppOOOOOOOOOOOOOOOOOOOOpppOX.
+..OOOOOOOOOOOOOOOOOOOOOOOOOOOXX.
+...XXXXXXXXXXXXXXXXXXXXXXXXXXX..
 ................................
 """
 
-# 16×16 icon: simplified version for very small sizes (taskbar at 100% scaling).
+ICON_24 = """
+........................
+..OOOOOOOOOOOOOOOOO.....
+.OLLLLLOShSSDDDsOLLO....
+.OLPPPPOShSSDDDsOPPLO...
+.OLPPPPOShSSDDDsOPPPLO..
+.OLPPPPOSSSSDDDsOPPPPLO.
+.OLPPPPOSSSSSSSsOPPPPpOX
+.OLPPPPOssssssssOPPPPpOX
+.OLPPPPOOOOOOOOOOPPPPpOX
+.OLPPPPPPPPPPPPPPPPPPpOX
+.OLPOOOOOOOOOOOOOOOOPpOX
+.OLPOWWWWWWWWWWWWWwOPpOX
+.OLPOWWEEWWWWWWEEWwOPpOX
+.OLPOWWEEWWWWWWEEWwOPpOX
+.OLPOWWEEWWWWWWEEWwOPpOX
+.OLPOWWWWWWWWWWWWWwOPpOX
+.OLPOWCWWWMWWMWWWCwOPpOX
+.OLPOWWWWWWMMWWWWWwOPpOX
+.OLPOWWWWWWWWWWWWWwOPpOX
+.OLPOWWgggggWWWGWWwOPpOX
+.OLPOWWWWWWWWWWWWWwOPpOX
+.OLpOwwwwwwwwwwwwwwOppOX
+..OOOOOOOOOOOOOOOOOOOOXX
+...XXXXXXXXXXXXXXXXXXXX.
+"""
+
 ICON_16 = """
-................
-.OOOOOOOOOOOO...
-OLLOSSSSDSOPPO..
-OLPOSSSSDSOPPPO.
-OLPOSSSSDSOPPPO.
-OLPOOOOOOOOPPPO.
-OLPPPPPPPPPPPPO.
-OLPWWWWWWWWWWPO.
-OLPWEEWWWWEEWPO.
-OLPWEEWWWWEEWPO.
-OLPWCWWMMWWCWPO.
-OLPWWWWWWWGWWPO.
-OLPWggggWWGWWPO.
-OLppppppppppppO.
-.OOOOOOOOOOOOO..
-................
+.OOOOOOOOOOO....
+OLLLOSSSDDOLO...
+OLPPOSSSDDOPLO..
+OLPPOSSSDDOPPLO.
+OLPPOsssssOPPpOX
+OLPPOOOOOOOPPpOX
+OLPPPPPPPPPPPpOX
+OLOOOOOOOOOOOpOX
+OLOWWWWWWWWWOpOX
+OLOWWEWWWEWWOpOX
+OLOWWEWWWEWWOpOX
+OLOWCWWWWWCWOpOX
+OLOWWWMMMWWWOpOX
+OLOwwwwwwwwwOpOX
+.OOOOOOOOOOOOOXX
+..XXXXXXXXXXXXX.
 """
 
 # 40×40 mascot: the same floppy disk, with arms, feet and a pencil.
@@ -172,7 +203,7 @@ def to_rgba(rows: list[str], palette: dict = PALETTE) -> list[list[tuple[int, in
         line = []
         for ch in r:
             c = palette[ch]
-            line.append((0, 0, 0, 0) if c is None else (*c, 255))
+            line.append((0, 0, 0, 0) if c is None else c if len(c) == 4 else (*c, 255))
         out.append(line)
     return out
 
@@ -254,7 +285,9 @@ def svg(rows: list[str], label: str, palette: dict = PALETTE, eyes_class: str | 
     parts = []
     for ch, rects in by_color.items():
         cls = f' class="{THEMABLE[ch]}"' if themable and ch in THEMABLE else ""
-        parts.append(f'<g{cls} fill="{hexa(ch, palette)}">{"".join(rects)}</g>')
+        color = palette[ch]
+        opacity = f' fill-opacity="{color[3] / 255:.2f}"' if len(color) == 4 else ""  # type: ignore[arg-type]
+        parts.append(f'<g{cls} fill="{hexa(ch, palette)}"{opacity}>{"".join(rects)}</g>')
     if eyes:
         parts.append(f'<g class="{eyes_class}">{"".join(eyes)}</g>')
     h = len(rows)
@@ -265,7 +298,7 @@ def svg(rows: list[str], label: str, palette: dict = PALETTE, eyes_class: str | 
 
 
 def hexa(ch: str, palette: dict = PALETTE) -> str:
-    r, g, b = palette[ch]  # type: ignore[misc]
+    r, g, b = palette[ch][:3]  # type: ignore[index]
     return f"#{r:02X}{g:02X}{b:02X}"
 
 
@@ -333,20 +366,38 @@ def compose(images: list[list[list[tuple[int, int, int, int]]]], cols: int, gap:
     return canvas
 
 
-def logo_pack(icon32: list[str], icon16: list[str], mascot: list[str]) -> None:
+def icon_sizes(icon32: list[str], icon24: list[str], icon16: list[str], pal: dict) -> dict[int, list]:
+    """Every size of the app icon, each from the drawing that fits it (scaled up without blur)."""
+    px32, px24, px16 = to_rgba(icon32, pal), to_rgba(icon24, pal), to_rgba(icon16, pal)
+    return {
+        16: px16,
+        24: px24,
+        32: px32,
+        48: scale_nearest(px24, 2),
+        64: scale_nearest(px32, 2),
+        128: scale_nearest(px32, 4),
+        256: scale_nearest(px32, 8),
+        512: scale_nearest(px32, 16),
+        1024: scale_nearest(px32, 32),
+    }
+
+
+ICO_SIZES = (16, 24, 32, 48, 64, 256)
+
+
+def logo_pack(icon32: list[str], icon24: list[str], icon16: list[str], mascot: list[str]) -> None:
     pack = ROOT / "docs" / "logo-pack"
     previews = []
     for name in VARIANTS:
         pal = variant_palette(name)
         out = pack / name
         out.mkdir(parents=True, exist_ok=True)
-        px32, px16 = to_rgba(icon32, pal), to_rgba(icon16, pal)
+        sizes = icon_sizes(icon32, icon24, icon16, pal)
         (out / "kilo-icon.svg").write_text(svg(icon32, f"KiloNote ({name})", pal))
         (out / "kilo-mascot.svg").write_text(svg(mascot, f"Kilo ({name})", pal))
-        (out / "kilo-icon-512.png").write_bytes(png_bytes(scale_nearest(px32, 16)))
+        (out / "kilo-icon-512.png").write_bytes(png_bytes(sizes[512]))
         (out / "kilo-mascot-320.png").write_bytes(png_bytes(scale_nearest(to_rgba(mascot, pal), 8)))
-        sizes = {16: px16, 32: px32, 48: scale_nearest(px16, 3), 64: scale_nearest(px32, 2), 256: scale_nearest(px32, 8)}
-        (out / "kilo.ico").write_bytes(ico_bytes(sorted((s, png_bytes(p)) for s, p in sizes.items())))
+        (out / "kilo.ico").write_bytes(ico_bytes([(s, png_bytes(sizes[s])) for s in ICO_SIZES]))
         previews.append(scale_nearest(to_rgba(mascot, pal), 4))
     for suffix, first, second in (("dark", "#1B1834", "#7B6CF6"), ("light", "#FFFFFF", "#A79CFF")):
         rows, pal = wordmark(first, second)
@@ -364,51 +415,34 @@ def tauri_icon(source: Path, icons: Path) -> None:
 
 
 def main() -> None:
-    icon32, icon16, mascot = parse(ICON_32), parse(ICON_16), parse(MASCOT_40)
-    assert len(icon32) == 32 and len(icon16) == 16 and len(mascot) == 40
-    # KILONOTE_ICON=<variant> builds the app with Kilo as its icon, in that color.
-    variant = os.environ.get("KILONOTE_ICON")
-    if variant is not None and variant not in VARIANTS:
+    icon32, icon24, icon16, mascot = parse(ICON_32), parse(ICON_24), parse(ICON_16), parse(MASCOT_40)
+    assert len(icon32) == 32 and len(icon24) == 24 and len(icon16) == 16 and len(mascot) == 40
+    # KILONOTE_ICON=<variant>: the app icon in another of Kilo's colors.
+    variant = os.environ.get("KILONOTE_ICON") or "classic"
+    if variant not in VARIANTS:
         raise SystemExit(f"unknown variant {variant!r}: {', '.join(VARIANTS)}")
-    pal = variant_palette(variant or "classic")
-    px32, px16 = to_rgba(icon32, pal), to_rgba(icon16, pal)
+    sizes = icon_sizes(icon32, icon24, icon16, variant_palette(variant))
+    pngs = {s: png_bytes(p) for s, p in sizes.items()}
 
     icons = ROOT / "src-tauri" / "icons"
     icons.mkdir(parents=True, exist_ok=True)
     (ROOT / "docs").mkdir(exist_ok=True)
-    (ROOT / "docs" / "kilo-1024.png").write_bytes(png_bytes(scale_nearest(px32, 32)))
+    (ROOT / "docs" / "kilo-1024.png").write_bytes(pngs[1024])
     # The in-app mascot stays classic: the app recolors it (theme accent or chosen variant).
     (ROOT / "src" / "assets" / "kilo.svg").write_text(svg(mascot, "Kilo, the KiloNote mascot", eyes_class="kilo-eyes", themable=True))
-    logo_pack(icon32, icon16, mascot)
+    logo_pack(icon32, icon24, icon16, mascot)
 
-    if not variant:
-        tauri_icon(icons / "app-icon.svg", icons)
-        shutil.copyfile(icons / "app-icon.svg", ROOT / "public" / "favicon.svg")
-        print("Icons generated from src-tauri/icons/app-icon.svg, + the mascot and docs/logo-pack/")
-        return
-
-    # Kilo as the app icon: the large sizes from `tauri icon`, then crisp pixel
-    # art for the others (each size from the best-suited drawing, without blur).
+    # `tauri icon` makes the macOS and store images from the largest size; then
+    # the Windows icon and the PNGs are replaced by crisp pixel art (no blur).
     tauri_icon(ROOT / "docs" / "kilo-1024.png", icons)
-    sizes = {
-        16: px16,
-        24: downscale_box(scale_nearest(px32, 3), 4),
-        32: px32,
-        48: scale_nearest(px16, 3),
-        64: scale_nearest(px32, 2),
-        128: scale_nearest(px32, 4),
-        256: scale_nearest(px32, 8),
-    }
-    pngs = {s: png_bytes(p) for s, p in sizes.items()}
-    (icons / "icon.ico").write_bytes(ico_bytes(sorted(pngs.items())))
+    (icons / "icon.ico").write_bytes(ico_bytes([(s, pngs[s]) for s in ICO_SIZES]))
     (icons / "32x32.png").write_bytes(pngs[32])
     (icons / "64x64.png").write_bytes(pngs[64])
     (icons / "128x128.png").write_bytes(pngs[128])
     (icons / "128x128@2x.png").write_bytes(pngs[256])
-    (icons / "icon.png").write_bytes(png_bytes(scale_nearest(px32, 16)))
-    (ROOT / "public" / "favicon.svg").write_text(svg(icon32, "KiloNote", pal))
-    print(f"Icons generated (Kilo, {variant}):", ", ".join(f"{s}px" for s in sizes), "+ docs/logo-pack/")
-    print("Back to the app icon: npm run icons")
+    (icons / "icon.png").write_bytes(pngs[512])
+    (ROOT / "public" / "favicon.svg").write_text(svg(icon32, "KiloNote", variant_palette(variant)))
+    print(f"Icons generated (Kilo, {variant}):", ", ".join(f"{s}px" for s in sizes), "+ the mascot and docs/logo-pack/")
 
 
 if __name__ == "__main__":
