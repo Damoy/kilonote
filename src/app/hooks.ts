@@ -50,7 +50,8 @@ function appSlashItems(app: App, state: EditorState): SlashItem[] {
           toast("Write the private text first, then /secret on its line.");
           return;
         }
-        view.dispatch({ selection: { anchor: l.from, head: l.to } });
+        // (Without the space left before "/secret".)
+        view.dispatch({ selection: { anchor: l.from, head: l.from + l.text.trimEnd().length } });
         void secrets().then((m) => m.encryptSelection(app));
       },
     },
