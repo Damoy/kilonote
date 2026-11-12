@@ -536,6 +536,111 @@ fn percent_decode(s: &str) -> Result<String, String> {
     String::from_utf8(out).map_err(|_| "bad path".into())
 }
 
+// ---------------------------------------------------------------------------
+// Videos opened in KiloNote, played in its viewer. The player asks the
+// `knmedia` protocol for the file piece by piece (HTTP ranges): a long video is
+// never loaded whole, and it can jump anywhere. Video files only, read only.
+
+/// The video types the viewer plays, and the type the player is told.
+const VIDEO_TYPES: &[(&str, &str)] = &[
+    ("mp4", "video/mp4"),
+    ("m4v", "video/mp4"),
+    ("mov", "video/mp4"),
+    ("webm", "video/webm"),
+    ("mkv", "video/webm"),
+    ("ogv", "video/ogg"),
+];
+/// The largest piece of a video sent at once (bytes).
+const MEDIA_CHUNK: u64 = 4 * 1024 * 1024;
+
+fn video_type(p: &Path) -> Option<&'static str> {
+    let ext = p.extension()?.to_str()?.to_ascii_lowercase();
+    VIDEO_TYPES
+        .iter()
+        .find(|(e, _)| *e == ext)
+        .map(|(_, t)| *t)
+}
+
+/// The bytes asked for by a `Range` header ("bytes=0-", "bytes=100-199",
+/// "bytes=-500"), within a file of `len` bytes, MEDIA_CHUNK of them at most:
+/// (first, last), or None when the range is outside the file.
+fn byte_range(header: Option<&str>, len: u64) -> Option<(u64, u64)> {
+    if len == 0 {
+        return None;
+    }
+    let (start, end) = match header.and_then(|h| h.trim().strip_prefix("bytes=")) {
+        Some(spec) => {
+            let (a, b) = spec.split(',').next()?.trim().split_once('-')?;
+            if a.is_empty() {
+                let n: u64 = b.trim().parse().ok()?;
+                (len.saturating_sub(n), len - 1)
+            } else {
+                let start: u64 = a.trim().parse().ok()?;
+                let end = if b.trim().is_empty() {
+                    len - 1
+                } else {
+                    b.trim().parse::<u64>().ok()?.min(len - 1)
+                };
+                (start, end)
+            }
+        }
+        None => (0, len - 1),
+    };
+    if start > end || start >= len {
+        return None;
+    }
+    Some((start, end.min(start + MEDIA_CHUNK - 1)))
+}
+
+/// The answer of the `knmedia` protocol: a piece of a video file.
+fn media_response(request: &tauri::http::Request<Vec<u8>>) -> tauri::http::Response<Vec<u8>> {
+    use std::io::{Read, Seek, SeekFrom};
+    let empty = |code: u16| {
+        tauri::http::Response::builder()
+            .status(code)
+            .body(Vec::new())
+            .unwrap()
+    };
+    let Ok(path) = percent_decode(request.uri().path().trim_start_matches('/')) else {
+        return empty(400);
+    };
+    let path = PathBuf::from(path);
+    let Some(mime) = video_type(&path) else {
+        return empty(403);
+    };
+    let Ok(mut file) = File::open(&path) else {
+        return empty(404);
+    };
+    let len = file.metadata().map(|m| m.len()).unwrap_or(0);
+    let range = request
+        .headers()
+        .get("range")
+        .and_then(|v| v.to_str().ok());
+    let Some((start, end)) = byte_range(range, len) else {
+        return tauri::http::Response::builder()
+            .status(416)
+            .header("Content-Range", format!("bytes */{len}"))
+            .body(Vec::new())
+            .unwrap();
+    };
+    let mut body = vec![0; (end - start + 1) as usize];
+    if file
+        .seek(SeekFrom::Start(start))
+        .and_then(|_| file.read_exact(&mut body))
+        .is_err()
+    {
+        return empty(500);
+    }
+    tauri::http::Response::builder()
+        .status(206)
+        .header("Content-Type", mime)
+        .header("Accept-Ranges", "bytes")
+        .header("Content-Range", format!("bytes {start}-{end}/{len}"))
+        .header("Content-Length", body.len().to_string())
+        .body(body)
+        .unwrap()
+}
+
 #[tauri::command]
 fn config_dir(app: AppHandle) -> Result<String, String> {
     let dir = app.path().app_config_dir().map_err(err)?;
@@ -793,6 +898,10 @@ fn main() {
         )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        // Videos played in the viewer, piece by piece (see media_response).
+        .register_asynchronous_uri_scheme_protocol("knmedia", |_ctx, request, responder| {
+            std::thread::spawn(move || responder.respond(media_response(&request)));
+        })
         .manage(Windows::default())
         .setup(|app| {
             *app.state::<Windows>().last_focused.lock().unwrap() = "main".into();
@@ -896,6 +1005,58 @@ mod tests {
         assert!(read_fresh(&bin, None, 1000).unwrap().text.is_none());
         assert!(read_fresh(&dir.join("gone.txt"), None, 1000).is_none());
         assert!(read_fresh(&dir, None, 1000).is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn video_ranges_stay_in_the_file() {
+        assert_eq!(byte_range(None, 10), Some((0, 9)));
+        assert_eq!(byte_range(Some("bytes=0-"), 10), Some((0, 9)));
+        assert_eq!(byte_range(Some("bytes=2-5"), 10), Some((2, 5)));
+        assert_eq!(byte_range(Some("bytes=2-500"), 10), Some((2, 9)));
+        assert_eq!(byte_range(Some("bytes=-3"), 10), Some((7, 9)));
+        assert_eq!(byte_range(Some("bytes=10-"), 10), None);
+        assert_eq!(byte_range(Some("bytes=5-2"), 10), None);
+        assert_eq!(byte_range(Some("bytes=x-"), 10), None);
+        assert_eq!(byte_range(Some("bytes=0-"), 0), None);
+        // A long video is sent piece by piece.
+        let big = 100 * MEDIA_CHUNK;
+        assert_eq!(byte_range(Some("bytes=0-"), big), Some((0, MEDIA_CHUNK - 1)));
+    }
+
+    #[test]
+    fn only_videos_are_played() {
+        let dir = std::env::temp_dir().join(format!("kilonote-video-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let video = dir.join("clip é.mp4");
+        fs::write(&video, b"0123456789").unwrap();
+        fs::write(dir.join("secret.txt"), b"private").unwrap();
+        let ask = |path: &Path, range: Option<&str>| {
+            let encoded: String = path
+                .to_string_lossy()
+                .bytes()
+                .map(|b| format!("%{b:02X}"))
+                .collect();
+            let mut req = tauri::http::Request::builder().uri(format!("knmedia://localhost/{encoded}"));
+            if let Some(r) = range {
+                req = req.header("range", r);
+            }
+            media_response(&req.body(Vec::new()).unwrap())
+        };
+        let r = ask(&video, Some("bytes=2-5"));
+        assert_eq!(r.status(), 206);
+        assert_eq!(r.body(), b"2345");
+        assert_eq!(r.headers()["content-range"], "bytes 2-5/10");
+        assert_eq!(r.headers()["content-type"], "video/mp4");
+        assert_eq!(ask(&video, None).body(), b"0123456789");
+        assert_eq!(ask(&video, Some("bytes=20-")).status(), 416);
+        // Anything else is refused, and nothing is read.
+        assert_eq!(ask(&dir.join("secret.txt"), None).status(), 403);
+        assert!(ask(&dir.join("secret.txt"), None).body().is_empty());
+        assert_eq!(ask(&dir.join("gone.mp4"), None).status(), 404);
+        assert_eq!(video_type(Path::new("a.MKV")), Some("video/webm"));
+        assert_eq!(video_type(Path::new("a.exe")), None);
         let _ = fs::remove_dir_all(&dir);
     }
 

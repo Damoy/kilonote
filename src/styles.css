@@ -277,6 +277,7 @@ body.zen .cm-gutters { display: none !important; }
 :root[data-icons="duotone"] .sb-file-icon.ft-config, :root[data-icons="pixel"] .sb-file-icon.ft-config { color: var(--kn-orange); }
 :root[data-icons="duotone"] .sb-file-icon.ft-markup, :root[data-icons="pixel"] .sb-file-icon.ft-markup { color: var(--kn-red); }
 :root[data-icons="duotone"] .sb-file-icon.ft-image, :root[data-icons="pixel"] .sb-file-icon.ft-image { color: var(--kn-pink); }
+:root[data-icons="duotone"] .sb-file-icon.ft-video, :root[data-icons="pixel"] .sb-file-icon.ft-video { color: var(--kn-orange); }
 :root[data-icons="duotone"] .sb-file-icon.ft-diagram, :root[data-icons="pixel"] .sb-file-icon.ft-diagram { color: var(--kn-cyan); }
 :root[data-icons="duotone"] .sb-file-icon.ft-text, :root[data-icons="pixel"] .sb-file-icon.ft-text { color: var(--kn-fg-muted); }
 .sb-name { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
@@ -1096,6 +1097,12 @@ body.zen .kn-kilo { display: none; }
 }
 .kn-viewer-img { display: block; flex: none; margin: auto; cursor: zoom-out; image-rendering: auto; box-shadow: 0 1px 8px rgba(0, 0, 0, 0.25); }
 .kn-viewer-stage.fit .kn-viewer-img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; cursor: zoom-in; }
-.kn-viewer-stage.failed .kn-viewer-img { display: none; }
+.kn-viewer-stage.failed .kn-viewer-img, .kn-viewer-stage.failed .kn-viewer-video { display: none; }
+.kn-viewer-kind { display: inline-flex; flex: none; }
+.kn-viewer-kind .kn-icon { width: 17px; height: 17px; color: var(--kn-accent); }
+/* A video: fitted in the window, its own controls below it. */
+.kn-viewer-video { display: none; flex: none; margin: auto; max-width: 100%; max-height: 100%; background: #000; border-radius: 4px; outline: none; }
+.kn-viewer-stage.video .kn-viewer-video { display: block; }
+.kn-viewer-stage.video .kn-viewer-img { display: none; }
 .kn-viewer-error { color: var(--kn-fg-muted); max-width: 420px; text-align: center; line-height: 1.5; }
 .kn-viewer-hint { padding: 6px 16px 8px; font-size: 11.5px; color: var(--kn-fg-faint); border-top: 1px solid var(--kn-border); }

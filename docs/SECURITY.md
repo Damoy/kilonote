@@ -10,7 +10,7 @@ automated tests.
 |---|---|
 | What it is | A local text file editor (functionally like Notepad++) |
 | Network access | **None.** No HTTP client is compiled in, no telemetry, no automatic update, no license check |
-| Running programs | **Never.** Opening, dropping or passing a file on the command line only reads text, or an image to show it; any other file (`.exe`, `.msi`…, or any file whose content is binary, whatever its extension) can only be revealed in the file manager |
+| Running programs | **Never.** Opening, dropping or passing a file on the command line only reads text, or an image or a video to show it; any other file (`.exe`, `.msi`…, or any file whose content is binary, whatever its extension) can only be revealed in the file manager |
 | Child processes | Only the WebView2 engine (`msedgewebview2.exe`), and the default browser or mail app when the user clicks a web or mail link |
 | Data | Text files chosen by the user, on the local disk, in plain text (like Notepad) |
 | Privileges | **Standard user.** No administrator rights, no service, no driver, nothing launched at startup, no scheduled task |
@@ -182,6 +182,14 @@ npx tauri build --no-bundle
   that share; device paths (`\\?\…`, `\\.\…`) never. An image file opened by itself
   (explorer, Ctrl+O, a file dropped outside a note) is read the same way and shown in
   the app's image viewer: it is never handed to another program.
+- Videos opened in KiloNote play in the same viewer. The player reads the file through
+  the app's own `knmedia` protocol (registered in `src-tauri/src/main.rs`): it answers
+  only for video files (mp4, m4v, mov, webm, mkv, ogv), only by reading, and piece by
+  piece (HTTP ranges of 4 MB at most), so a long video is never loaded whole. The
+  interface's content security policy allows media from that protocol only
+  (`media-src 'self' knmedia:`); the previews of notes and pages never create video
+  elements, and their frames allow no media from it. Nothing is handed to another
+  program. A test checks the file types, that the protocol only reads, and the policy.
   A pasted or dropped image is written by a native
   command that only writes image types, only to a new file (never over an existing
   one), in the images folder next to the note. Unused images are only moved to the

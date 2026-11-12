@@ -120,11 +120,12 @@ into the images folder under their own name, or just referenced if they already 
 in the note's folder. Command palette → "File: Delete unused images…" moves the
 images that no note shows any more to the system trash, after listing them.
 
-An image file opened by itself (a click in the explorer, Ctrl+O, dropped outside a
-note) shows in the image viewer: ← → go through the images of its folder, a click or
-Space switches between the whole image and its actual size, + − (or Ctrl+wheel) zoom,
-Ctrl+C copies the image, "Add to the note" writes it into the note being edited.
-Escape closes the viewer.
+An image or a video opened by itself (a click in the explorer, Ctrl+O, dropped outside
+a note) shows in the viewer, and ← → go through the images and videos of its folder.
+For an image, a click or Space switches between the whole image and its actual size,
++ − (or Ctrl+wheel) zoom, Ctrl+C copies the image, "Add to the note" writes it into the
+note being edited. A video (MP4, WebM, MOV, MKV, OGV) plays with the usual controls:
+Space plays or pauses, Shift+← → go 5 seconds back or forward. Escape closes the viewer.
 
 ## Kilo, the assistant
 

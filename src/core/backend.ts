@@ -86,6 +86,8 @@ export interface Backend {
   print(): Promise<void>;
   setTitle(title: string): void;
   setDark(dark: boolean): void;
+  /** The address a video file is played from (streamed piece by piece), or null when videos cannot play. */
+  mediaUrl(path: string): string | null;
   /** Zooms the whole window (1: actual size), like the zoom of a web browser. */
   setZoom(scale: number): Promise<void>;
   show(): Promise<void>;
@@ -110,7 +112,7 @@ export const isTauri = () => typeof window !== "undefined" && "__TAURI_INTERNALS
 // Tauri
 
 export async function createTauriBackend(): Promise<Backend> {
-  const { invoke } = await import("@tauri-apps/api/core");
+  const { convertFileSrc, invoke } = await import("@tauri-apps/api/core");
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
   const { getCurrentWebview } = await import("@tauri-apps/api/webview");
   const { emit, listen } = await import("@tauri-apps/api/event");
@@ -177,6 +179,7 @@ export async function createTauriBackend(): Promise<Backend> {
     setTitle: (title) => void win.setTitle(title).catch(() => {}),
     setDark: (dark) => void win.setTheme(dark ? "dark" : "light").catch(() => {}),
     setZoom: (scale) => getCurrentWebview().setZoom(scale),
+    mediaUrl: (path) => convertFileSrc(path, "knmedia"),
     show: async () => {
       await win.show();
       await win.setFocus();
@@ -439,6 +442,8 @@ export function createWebBackend(): Backend {
     setTitle: (t) => void (document.title = t),
     setDark: () => {},
     setZoom: async (scale) => void (document.documentElement.style.zoom = scale === 1 ? "" : String(scale)),
+    // (The browser demo has no video files.)
+    mediaUrl: () => null,
     show: async () => {},
     toggleFullscreen: async () => {
       if (document.fullscreenElement) await document.exitFullscreen();

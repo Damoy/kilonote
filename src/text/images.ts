@@ -62,6 +62,18 @@ export function isViewableImage(path: string): boolean {
   return isImageFile(path) && extOf(path) !== "svg";
 }
 
+/** Video files the viewer plays (the native side streams these types only). */
+export const VIDEO_EXTS = new Set(["mp4", "m4v", "mov", "webm", "mkv", "ogv"]);
+
+export function isVideoFile(path: string): boolean {
+  return VIDEO_EXTS.has(extOf(path));
+}
+
+/** Files that open in the viewer: images and videos. */
+export function isViewableMedia(path: string): boolean {
+  return isViewableImage(path) || isVideoFile(path);
+}
+
 /** The reference written in the note for an image in `folder` (relative to the note). */
 export function imageMarkup(folder: string, name: string): string {
   const parts = [...folder.split(/[\\/]+/).filter(Boolean), name];

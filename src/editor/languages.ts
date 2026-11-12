@@ -148,9 +148,12 @@ export const isCodeLang = (id: string) => !["text", "markdown"].includes(languag
 const IMAGE_EXT = new Set("png jpg jpeg gif bmp ico icns webp avif tiff svgz psd".split(" "));
 
 /** Icon of a file in the explorer: its kind, plus images and binaries. */
-export function fileKindFor(path: string): FileKind | "image" | "binary" {
+const VIDEO_EXT = new Set("mp4 m4v mov webm mkv ogv avi wmv".split(" "));
+
+export function fileKindFor(path: string): FileKind | "image" | "video" | "binary" {
   const ext = extname(path);
   if (IMAGE_EXT.has(ext)) return "image";
+  if (VIDEO_EXT.has(ext)) return "video";
   if (isProbablyBinary(path)) return "binary";
   return languageInfo(languageForPath(path)).kind;
 }

@@ -145,6 +145,7 @@ function memoryBackend(init: Record<string, string> = {}, opts: { savePath?: str
     reveal: async () => {},
     print: async () => void disk.prints++,
     setZoom: async (scale) => void disk.zooms.push(scale),
+    mediaUrl: (p) => `knmedia://localhost/${encodeURIComponent(p)}`,
     setTitle: () => {},
     setDark: () => {},
     show: async () => {},
@@ -1013,5 +1014,29 @@ describe("zoom", () => {
     const { app, disk } = await start({ "/config/settings.json": '{ "autosave": false, "ui_zoom": 1000 }' });
     expect(app.settings.ui_zoom).toBe(300);
     expect(disk.zooms).toEqual([3]);
+  });
+});
+
+describe("video files", () => {
+  it("play in the viewer, streamed from the app's own protocol; the folder's images and videos go together", async () => {
+    const { app, disk } = await start({ "/notes/a.txt": "text" });
+    disk.images.set("/notes/clip.mp4", new Uint8Array([0, 0, 0, 24]));
+    disk.images.set("/notes/shot.png", new Uint8Array([0x89, 0x50, 0x4e, 0x47]));
+    expect(await app.openFile("/notes/clip.mp4")).toBeNull();
+    expect(app.docs).toHaveLength(0);
+    const video = document.querySelector<HTMLVideoElement>(".kn-viewer-video")!;
+    expect(video.getAttribute("src")).toBe(`knmedia://localhost/${encodeURIComponent("/notes/clip.mp4")}`);
+    expect(document.querySelector(".kn-viewer-stage")?.classList.contains("video")).toBe(true);
+    expect(document.querySelector(".kn-viewer-hint")?.textContent).toContain("play / pause");
+    // Image-only buttons are hidden for a video.
+    expect([...document.querySelectorAll<HTMLElement>(".kn-viewer-head .kn-btn")].filter((b) => !b.hidden).map((b) => b.textContent)).toEqual([]);
+    await vi.waitFor(() => expect(document.querySelector(".kn-viewer-count")?.textContent).toBe("1 / 2"));
+    expect([...document.querySelectorAll(".kn-toast")].some((t) => t.textContent?.includes("not a text file"))).toBe(false);
+    // To the image next to it: the video stops.
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    await vi.waitFor(() => expect(document.querySelector(".kn-viewer-name")?.textContent).toBe("shot.png"));
+    expect(video.getAttribute("src")).toBeNull();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(document.querySelector(".kn-viewer")).toBeNull();
   });
 });

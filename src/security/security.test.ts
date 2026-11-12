@@ -32,6 +32,19 @@ describe("no program execution", () => {
     expect(rust).not.toMatch(/std::process::Command|Command::new|ShellExecute|CreateProcess/);
   });
 
+  it("the video protocol only reads video files, piece by piece, and media load from nowhere else", () => {
+    const rust = read("src-tauri/src/main.rs");
+    expect(rust).toMatch(/register_asynchronous_uri_scheme_protocol\("knmedia"/);
+    const types = /const VIDEO_TYPES: &\[\(&str, &str\)\] = &\[([\s\S]*?)\];/.exec(rust)![1];
+    const exts = [...types.matchAll(/\("(\w+)",/g)].map((m) => m[1]);
+    expect(exts.sort()).toEqual(["m4v", "mkv", "mov", "mp4", "ogv", "webm"]);
+    // The protocol answers with a piece of the file: no write, no listing.
+    const fn = /fn media_response[\s\S]*?\n}\n/.exec(rust)![0];
+    expect(fn).not.toMatch(/fs::write|remove|read_dir|create/);
+    const csp = (JSON.parse(read("src-tauri/tauri.conf.json")) as { app: { security: { csp: string } } }).app.security.csp;
+    expect(/media-src ([^;]*)/.exec(csp)![1].trim()).toBe("'self' knmedia: http://knmedia.localhost");
+  });
+
   it("the image commands only read and write image files, and never overwrite one", () => {
     const rust = read("src-tauri/src/main.rs");
     expect(rust).toMatch(/const IMAGE_EXTS: &\[&str\] = &\["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"\];/);
@@ -88,7 +101,8 @@ describe("hardening of the Windows build and of the release", () => {
     const conf = JSON.parse(read("src-tauri/tauri.conf.json")) as { bundle: { windows: { webviewInstallMode: { type: string } } }; app: { withGlobalTauri: boolean; security: { csp: string } } };
     expect(conf.bundle.windows.webviewInstallMode.type).toBe("skip");
     expect(conf.app.withGlobalTauri).toBe(false);
-    expect(conf.app.security.csp).not.toMatch(/https?:\/\/(?!ipc\.localhost)|\*/);
+    // No address outside the app: only its own IPC and its video protocol (local, read only).
+    expect(conf.app.security.csp).not.toMatch(/https?:\/\/(?!(?:ipc|knmedia)\.localhost\b)|\*/);
     const hooks = read("src-tauri/windows/installer-hooks.nsh").split("\n").filter((l) => !l.trim().startsWith(";")).join("\n");
     expect(hooks).not.toMatch(/WriteReg|System::|Exec|NSISdl|inetc|nsExec/i);
   });

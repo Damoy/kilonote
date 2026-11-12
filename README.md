@@ -78,10 +78,13 @@ open it as a folder and follow its `README.md`.
   next to the note (`images/`) and shown right under its line, `![image](images/…png)`;
   the note stays plain text. Image files can be dropped on a note too, and *File: Delete
   unused images* moves the images no note uses any more to the trash
-- **Image viewer**: an image file (PNG, JPEG, GIF, WebP, BMP) opened from the explorer,
-  Ctrl+O or dropped outside a note shows in a viewer: ← → go through the images of its
-  folder, a click or Space switches between the whole image and its actual size, + − and
-  Ctrl+wheel zoom, Ctrl+C copies it, *Add to the note* writes it into the note being edited
+- **Image and video viewer**: an image (PNG, JPEG, GIF, WebP, BMP) or a video (MP4, WebM,
+  MOV, MKV, OGV) opened from the explorer, Ctrl+O or dropped outside a note shows in a
+  viewer, and ← → go through the images and videos of its folder. An image: a click or
+  Space switches between the whole image and its actual size, + − and Ctrl+wheel zoom,
+  Ctrl+C copies it, *Add to the note* writes it into the note being edited. A video: the
+  usual controls, Space plays or pauses, Shift+← → go 5 seconds back or forward; it is
+  streamed piece by piece, so a long video starts at once
 - Click a line number to select the whole line, without its line break (drag for more,
   Shift+click to extend);
   **Ctrl+↑/↓** moves the cursor and scrolls the text with it

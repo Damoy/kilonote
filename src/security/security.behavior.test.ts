@@ -57,6 +57,15 @@ describe("opening files never runs a program", () => {
     expect(new Set(calls.map((c) => c.method))).toEqual(new Set(["readImage", "stat", "listDir"]));
   });
 
+  it("a video file is only streamed to the viewer, never handed to another program", async () => {
+    const { backend, calls } = recordingBackend({});
+    const app = new App(backend);
+    await app.openFile("C:\\notes\\clip.mp4");
+    await app.openPaths(["C:\\notes\\a.webm", "C:\\notes\\b.mov"]);
+    expect(app.docs).toHaveLength(0);
+    expect(new Set(calls.map((c) => c.method))).toEqual(new Set(["mediaUrl", "stat", "listDir"]));
+  });
+
   it("the only action offered is revealing the file in the file manager", async () => {
     const { backend, calls } = recordingBackend({ "C:\\notes\\tool.exe": "MZ" });
     const app = new App(backend);

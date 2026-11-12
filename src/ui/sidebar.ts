@@ -29,7 +29,7 @@ type TaskFilter = "open" | "ongoing" | "due" | "all";
 export function fileIcon(path: string, archiveSuffix: string): [string, string] {
   if (isDoneFile(path, archiveSuffix)) return ["fileDone", "ft-done"];
   const kind = fileKindFor(path);
-  const name = { markdown: "fileMd", json: "fileJson", code: "fileCode", config: "fileCode", markup: "fileCode", diagram: "fileDiagram", image: "fileImage", binary: "fileBin", text: "file" }[kind];
+  const name = { markdown: "fileMd", json: "fileJson", code: "fileCode", config: "fileCode", markup: "fileCode", diagram: "fileDiagram", image: "fileImage", video: "fileVideo", binary: "fileBin", text: "file" }[kind];
   return [name, `ft-${kind}`];
 }
 
