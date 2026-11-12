@@ -292,7 +292,8 @@ On macOS, Ctrl becomes ⌘.
 | Close / reopen a tab | Ctrl+W / Ctrl+Shift+T |
 | Next tab / tab #N | Ctrl+Tab / Ctrl+1…9 |
 | Sidebar / file explorer | Ctrl+B / Ctrl+Shift+E |
-| Text size | Ctrl+= / Ctrl+- / Ctrl+0 (or Ctrl+wheel) |
+| Zoom the whole interface | Ctrl+= / Ctrl+- / Ctrl+0 |
+| Editor text size only | Ctrl+wheel |
 | Settings | Ctrl+, |
 | Zen mode / full screen | Shift+F11 / F11 |
 | Select next occurrence | Ctrl+D |
@@ -371,9 +372,25 @@ sudo dnf group install c-development
 sudo pacman -S --needed webkit2gtk-4.1 base-devel curl wget file openssl libappindicator-gtk3 librsvg xdotool
 
 npm ci --ignore-scripts
-npm run app:build
-sudo apt install ./src-tauri/target/release/bundle/deb/KiloNote_*_amd64.deb   # or the .rpm / .AppImage next to it
+npm run install:linux
 ```
+
+`npm run install:linux` builds KiloNote and installs it for your user, without root: the
+program in `~/.local/bin`, its icons and its entry in the applications menu, so the menu,
+the dock and Alt+Tab show Kilo's icon. Run it again to update (an open window keeps running,
+the new version starts next time); `bash scripts/install-linux.sh --uninstall` removes it
+(your notes and settings stay).
+
+For a system-wide install instead, build the packages and install one of them:
+
+```bash
+npm run app:build
+sudo apt install ./src-tauri/target/release/bundle/deb/KiloNote_*_amd64.deb   # or the .rpm next to it
+```
+
+Running the program straight from `src-tauri/target/` works too, but without a menu entry
+the dock shows a generic icon. If the old icon stays after an update, log out and back in
+(the desktop keeps icons in a cache).
 
 ### Windows
 

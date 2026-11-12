@@ -86,6 +86,8 @@ export interface Backend {
   print(): Promise<void>;
   setTitle(title: string): void;
   setDark(dark: boolean): void;
+  /** Zooms the whole window (1: actual size), like the zoom of a web browser. */
+  setZoom(scale: number): Promise<void>;
   show(): Promise<void>;
   toggleFullscreen(): Promise<void>;
   /** The handler returns false to cancel closing. */
@@ -174,6 +176,7 @@ export async function createTauriBackend(): Promise<Backend> {
     print: () => invoke("print_page"),
     setTitle: (title) => void win.setTitle(title).catch(() => {}),
     setDark: (dark) => void win.setTheme(dark ? "dark" : "light").catch(() => {}),
+    setZoom: (scale) => getCurrentWebview().setZoom(scale),
     show: async () => {
       await win.show();
       await win.setFocus();
@@ -435,6 +438,7 @@ export function createWebBackend(): Backend {
     print: async () => window.print(),
     setTitle: (t) => void (document.title = t),
     setDark: () => {},
+    setZoom: async (scale) => void (document.documentElement.style.zoom = scale === 1 ? "" : String(scale)),
     show: async () => {},
     toggleFullscreen: async () => {
       if (document.fullscreenElement) await document.exitFullscreen();

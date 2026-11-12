@@ -95,7 +95,8 @@ export function showCheatSheet(app: App, opts: { startup?: boolean } = {}) {
     ["View", "eye", [
       cmd("Sidebar", "view.sidebar"),
       cmd("Preview / tree view", "view.preview"),
-      ["Text size", [key("view.zoomIn"), key("view.zoomOut")].filter(Boolean).join(" / ")],
+      ["Zoom (whole interface)", [key("view.uiZoomIn"), key("view.uiZoomOut"), key("view.uiZoomReset")].filter(Boolean).join(" / ")],
+      fixed("Editor text size", `${mod}Wheel`),
       cmd("Word wrap", "view.wrap"),
       cmd("Zen mode", "view.zen"),
       cmd("Settings", "settings.open"),

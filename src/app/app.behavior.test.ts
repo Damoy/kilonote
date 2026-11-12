@@ -40,6 +40,8 @@ interface Disk {
   reads: number;
   /** Print dialogs opened. */
   prints: number;
+  /** Zooms of the whole window asked for. */
+  zooms: number[];
   /** Simulates another program changing a file. */
   external(path: string, text: string): void;
   text(path: string): string | undefined;
@@ -57,6 +59,7 @@ function memoryBackend(init: Record<string, string> = {}, opts: { savePath?: str
     clock: 1_000,
     reads: 0,
     prints: 0,
+    zooms: [],
     external(path, text) {
       disk.clock += 5_000;
       disk.files.set(path, { text, mtime: disk.clock });
@@ -141,6 +144,7 @@ function memoryBackend(init: Record<string, string> = {}, opts: { savePath?: str
     openUrl: async () => {},
     reveal: async () => {},
     print: async () => void disk.prints++,
+    setZoom: async (scale) => void disk.zooms.push(scale),
     setTitle: () => {},
     setDark: () => {},
     show: async () => {},
@@ -985,5 +989,29 @@ describe("crafted Markdown", () => {
     // Asked for by hand: still refused.
     app.setLang(bomb, "markdown");
     expect(bomb.lang).toBe("text");
+  });
+});
+
+describe("zoom", () => {
+  it("Ctrl+= / Ctrl+- zoom the whole window by steps, Ctrl+0 goes back, and the level is kept", async () => {
+    const { app, disk } = await start({});
+    app.zoomInterface(1);
+    await vi.waitFor(() => expect(app.settings.ui_zoom).toBe(110));
+    app.zoomInterface(1);
+    await vi.waitFor(() => expect(app.settings.ui_zoom).toBe(125));
+    app.zoomInterface(-1);
+    await vi.waitFor(() => expect(app.settings.ui_zoom).toBe(110));
+    expect(disk.zooms.at(-1)).toBe(1.1);
+    expect(disk.text("/config/settings.json")).toMatch(/"ui_zoom": 110/);
+    app.zoomInterface(null);
+    await vi.waitFor(() => expect(disk.zooms.at(-1)).toBe(1));
+    // The editor text size is left alone (Ctrl+wheel changes it).
+    expect(app.settings.font_size).toBe(14);
+  });
+
+  it("a level from settings.json is kept within the zoom levels", async () => {
+    const { app, disk } = await start({ "/config/settings.json": '{ "autosave": false, "ui_zoom": 1000 }' });
+    expect(app.settings.ui_zoom).toBe(300);
+    expect(disk.zooms).toEqual([3]);
   });
 });

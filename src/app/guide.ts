@@ -205,7 +205,7 @@ it lives in \`settings.json\` (with comments), one click away from the settings 
   Mint, Sakura, Latte, Frost), or automatic. Kilo, the mascot, takes the theme's color.
 - Command palette → "Theme: Accent color…" to change the main color.
 - Four icon packs (Settings → Appearance): Line, Bold, Duotone and Pixel.
-- Ctrl+= / Ctrl+-: text size. Shift+F11: zen mode. Ctrl+B: sidebar.
+- Ctrl+= / Ctrl+- / Ctrl+0: zoom the whole interface; Ctrl+wheel: the editor text size only. Shift+F11: zen mode. Ctrl+B: sidebar.
 
 ## Your notes are safe
 

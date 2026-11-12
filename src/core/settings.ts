@@ -13,6 +13,7 @@ export interface Settings {
   font_size: number;
   line_height: number;
   ui_font_size: number;
+  ui_zoom: number;
   line_numbers: boolean;
   word_wrap: boolean;
   highlight_active_line: boolean;
@@ -46,6 +47,9 @@ export interface Settings {
   keybindings: Record<string, string>;
 }
 
+/** The zoom levels of the interface (%), as in a web browser. */
+export const ZOOM_LEVELS = [50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300];
+
 export const SETTINGS_TEMPLATE = `// KiloNote settings
 // -----------------
 // Change a value and save (Ctrl+S): everything applies immediately.
@@ -78,6 +82,9 @@ export const SETTINGS_TEMPLATE = `// KiloNote settings
   "font_size": 14,
   "line_height": 1.65,
   "ui_font_size": 13,
+  // Zoom of the whole interface, in % (Ctrl+= / Ctrl+- / Ctrl+0); Ctrl+wheel changes the
+  // editor text size only
+  "ui_zoom": 100,
   "line_numbers": true,
   "word_wrap": true,
   "highlight_active_line": true,
@@ -172,6 +179,7 @@ export function mergeSettings(user: Partial<Settings> | null | undefined): Setti
   }
   out.font_size = clamp(out.font_size, 8, 40);
   out.ui_font_size = clamp(out.ui_font_size, 9, 22);
+  out.ui_zoom = clamp(Math.round(out.ui_zoom), ZOOM_LEVELS[0], ZOOM_LEVELS[ZOOM_LEVELS.length - 1]);
   out.line_height = clamp(out.line_height, 1, 3);
   out.tab_size = clamp(Math.round(out.tab_size), 1, 12);
   out.autosave_delay = clamp(out.autosave_delay, 100, 60_000);

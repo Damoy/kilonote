@@ -22,6 +22,7 @@
     "icons": "python3 scripts/generate-icons.py",
     "build:windows": "bash scripts/build-windows.sh",
     "install:windows": "bash scripts/build-windows.sh --install",
+    "install:linux": "bash scripts/install-linux.sh",
     "release": "bash scripts/release.sh",
     "test:e2e": "node e2e/app.e2e.mjs"
   },

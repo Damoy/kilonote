@@ -253,7 +253,8 @@ class SettingsView {
       this.number("font_size", "Editor text size", { min: 8, max: 40, unit: "px" }),
       this.number("line_height", "Line height", { min: 1, max: 3, step: 0.05 }),
       this.number("ui_font_size", "Interface text size", { min: 9, max: 22, unit: "px" }),
-      h("p", { class: "kn-set-note" }, "Tip: Ctrl+wheel or Ctrl+= / Ctrl+- also change the editor text size. Every theme color can be overridden in settings.json (\"colors\")."),
+      this.number("ui_zoom", "Zoom of the whole interface", { min: 50, max: 300, step: 10, unit: "%" }),
+      h("p", { class: "kn-set-note" }, "Tip: Ctrl+= / Ctrl+- / Ctrl+0 zoom the whole interface, Ctrl+wheel changes the editor text size only. Every theme color can be overridden in settings.json (\"colors\")."),
       h("button", { class: "kn-btn subtle kn-set-link", onclick: () => selectTheme(app) }, icon("palette"), "Preview the themes one by one…"),
     ];
   }

@@ -17,7 +17,7 @@ import type { Backend } from "../core/backend";
 import { setKeybindings, setPlatform, type Command } from "../core/commands";
 import { parseJsonc } from "../core/jsonc";
 import { basename, dirname, extname, isInside, isProbablyBinary, join, samePath } from "../core/path";
-import { mergeSettings, setSettingInText, SETTINGS_TEMPLATE, type Settings } from "../core/settings";
+import { mergeSettings, setSettingInText, SETTINGS_TEMPLATE, ZOOM_LEVELS, type Settings } from "../core/settings";
 import { applyMascot, applyTheme, findTheme } from "../core/themes";
 import { editorHooks } from "../editor/decorations";
 import { closeSlashMenu } from "../editor/slash";
@@ -248,6 +248,10 @@ export class App {
     root.setProperty("--kn-font-size", `${s.font_size}px`);
     root.setProperty("--kn-line-height", String(s.line_height));
     root.setProperty("--kn-ui-size", `${s.ui_font_size}px`);
+    if (s.ui_zoom !== this.appliedZoom) {
+      this.appliedZoom = s.ui_zoom;
+      void this.backend.setZoom(s.ui_zoom / 100).catch(() => {});
+    }
     setKeybindings(defaultKeybindings(this), s.keybindings);
     this.taskCfg = this.makeTaskCfg();
     registerStatusCommands(this);
@@ -1203,9 +1207,22 @@ export class App {
     this.saveSessionSoon();
   }
 
+  /** The editor text size (Ctrl+wheel): one step bigger, smaller, or back to the default. */
   zoom(delta: number | null) {
     const size = delta == null ? 14 : Math.max(8, Math.min(40, this.settings.font_size + delta));
     void this.updateSetting("font_size", size);
+  }
+
+  /** The zoom of the whole interface already applied (%). */
+  private appliedZoom = 100;
+
+  /** Zooms the whole interface (Ctrl+= / Ctrl+-): the next level up or down, or back to 100 %. */
+  zoomInterface(dir: 1 | -1 | null) {
+    const now = this.settings.ui_zoom;
+    const next = dir == null ? 100 : dir > 0 ? (ZOOM_LEVELS.find((z) => z > now) ?? now) : ([...ZOOM_LEVELS].reverse().find((z) => z < now) ?? now);
+    if (next === now && dir != null) return;
+    void this.updateSetting("ui_zoom", next);
+    toast(`Zoom ${next} %`, { timeout: 1200 });
   }
 
   toastInfo(message: string) {
