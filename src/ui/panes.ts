@@ -225,19 +225,23 @@ export function startFileDrag(app: App, e: PointerEvent, path: string) {
   let indicator: DropIndicator | null = null;
   let target: DropTarget | null = null;
   const move = (ev: PointerEvent) => {
+    // Released outside the window: the drag ends there, without a drop.
+    if (!ev.buttons) {
+      up(ev, false);
+      return;
+    }
     if (!indicator) {
       if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
       indicator = new DropIndicator(basename(path));
       document.body.classList.add("kn-dragging");
-      getSelection()?.removeAllRanges();
     }
     target = dropTargetAt(app, ev.clientX, ev.clientY, null);
     indicator.update(target, ev.clientX, ev.clientY);
   };
-  const up = (ev: PointerEvent) => {
+  const up = (ev: PointerEvent, drop = true) => {
     window.removeEventListener("pointermove", move);
-    window.removeEventListener("pointerup", up);
-    window.removeEventListener("pointercancel", up);
+    window.removeEventListener("pointerup", end);
+    window.removeEventListener("pointercancel", end);
     if (!indicator) return;
     indicator.remove();
     document.body.classList.remove("kn-dragging");
@@ -248,9 +252,10 @@ export function startFileDrag(app: App, e: PointerEvent, path: string) {
     };
     window.addEventListener("click", swallow, { capture: true, once: true });
     setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 0);
-    if (ev.type === "pointerup" && target) void dropOn(app, target, { path });
+    if (drop && ev.type === "pointerup" && target) void dropOn(app, target, { path });
   };
+  const end = (ev: PointerEvent) => up(ev);
   window.addEventListener("pointermove", move);
-  window.addEventListener("pointerup", up);
-  window.addEventListener("pointercancel", up);
+  window.addEventListener("pointerup", end);
+  window.addEventListener("pointercancel", end);
 }

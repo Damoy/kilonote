@@ -185,7 +185,9 @@ export class TabBar {
       });
     }
     if (!items.length) items.push({ header: "No open tab" });
-    const r = (e?.currentTarget as HTMLElement | undefined)?.getBoundingClientRect() ?? this.listBtn.getBoundingClientRect();
+    // (From the keyboard, the button may be hidden: the menu opens at the right of the bar.)
+    let r = (e?.currentTarget as HTMLElement | undefined)?.getBoundingClientRect() ?? this.listBtn.getBoundingClientRect();
+    if (!r.width) r = this.el.getBoundingClientRect();
     showMenu(items, r.right - 240, r.bottom + 4);
   }
 
@@ -275,13 +277,14 @@ export class TabBar {
       doc, el: fresh, startX: e.clientX, startY: e.clientY, lastX: e.clientX, active: false, pointerId: e.pointerId,
       outside: false, own: true, target: null, indicator: null,
     };
-    const move = (ev: PointerEvent) => this.onPointerMove(ev);
-    const up = (ev: PointerEvent) => {
+    const up = (ev: PointerEvent | null) => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
-      this.onPointerUp(ev.type === "pointerup" ? ev : null);
+      this.onPointerUp(ev?.type === "pointerup" ? ev : null);
     };
+    // (No button pressed any more: released where the window could not see it, the drag is dropped.)
+    const move = (ev: PointerEvent) => (ev.buttons ? this.onPointerMove(ev) : up(null));
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", up);

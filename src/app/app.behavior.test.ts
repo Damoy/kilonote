@@ -21,7 +21,7 @@ import { SECRET_BEGIN, SECRET_END } from "../text/secrets";
 import { encryptSelection, revealSecret } from "./secrets";
 import { secretsField } from "../editor/secrets";
 import { saveSessionNow } from "./session";
-import { dropOn, dropTargetAt } from "../ui/panes";
+import { dropOn, dropTargetAt, startFileDrag } from "../ui/panes";
 import { runCommand } from "../core/commands";
 import { archiveLines, changeTaskInNote, cycleTasks } from "./tasks";
 
@@ -434,6 +434,82 @@ describe("panes", () => {
     await dropOn(app, { kind: "tabs", pane: right, before: b }, { doc: c });
     expect(app.docsOf(right).map((d) => d.title)).toEqual(["c.txt", "b.txt", "a.txt"]);
     expect(app.panes).toHaveLength(1);
+  });
+
+  it("closing every tab of a split window ends on the welcome screen", async () => {
+    const { app } = await start({ "/notes/a.txt": "A", "/notes/b.txt": "B", "/notes/c.txt": "C" });
+    await app.openFile("/notes/a.txt");
+    await app.openFile("/notes/b.txt");
+    app.splitActive("right");
+    await app.openFile("/notes/c.txt");
+    app.splitActive("bottom");
+    expect(app.panes).toHaveLength(3);
+    runCommand("tab.closeAll");
+    await tick(5);
+    expect(app.docs).toHaveLength(0);
+    expect(app.panes).toHaveLength(1);
+    expect(document.getElementById("welcome")!.hidden).toBe(false);
+    expect(app.pane.body.contains(document.getElementById("welcome"))).toBe(true);
+  });
+
+  it("a grouped tab moved to another pane leaves its group; Close others stays in the pane", async () => {
+    const { app } = await start({ "/notes/a.txt": "A", "/notes/b.txt": "B", "/notes/c.txt": "C" });
+    const a = (await app.openFile("/notes/a.txt"))!;
+    const b = (await app.openFile("/notes/b.txt"))!;
+    const c = (await app.openFile("/notes/c.txt"))!;
+    app.groups.push({ id: "g1", name: "Work", color: "blue", collapsed: false });
+    for (const d of [a, b]) d.groupId = "g1";
+    app.emit("docs");
+    app.splitDoc(b, "right");
+    expect(b.groupId).toBeNull();
+    expect(a.groupId).toBe("g1");
+    const right = app.paneOf(b);
+    expect(right.tabbarEl.querySelector(".kn-group-chip")).toBeNull();
+    expect(app.paneOf(a).tabbarEl.querySelector(".kn-group-chip")).not.toBeNull();
+    app.activate(c);
+    runCommand("tab.closeOthers");
+    await tick(5);
+    expect(app.docs.map((d) => d.title).sort()).toEqual(["b.txt", "c.txt"]);
+  });
+
+  it("a file asked for a pane opens there, even if the focus moved while it was read", async () => {
+    const { app, backend } = await start({ "/notes/a.txt": "A", "/notes/b.txt": "B" });
+    await app.openFile("/notes/a.txt");
+    app.splitActive("right");
+    const [left, right] = app.panes;
+    const read = backend.readText;
+    backend.readText = async (p, ...rest) => {
+      app.focusPane(left);
+      return read(p, ...rest);
+    };
+    await app.openInPane("/notes/b.txt", right);
+    expect(app.docsOf(right).map((d) => d.title)).toEqual(["b.txt"]);
+    expect(app.pane).toBe(right);
+  });
+
+  it("a file dragged from the explorer and released outside the window is not dropped later", async () => {
+    const { app } = await start({ "/notes/a.txt": "A", "/notes/b.txt": "B" });
+    await app.openFile("/notes/a.txt");
+    app.pane.tabbarEl.getBoundingClientRect = rect(0, 0, 600, 38);
+    app.pane.body.getBoundingClientRect = rect(0, 38, 600, 400);
+    const at = (type: string, x: number, buttons: number) => window.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: 200, buttons }));
+    startFileDrag(app, new MouseEvent("pointerdown", { button: 0, clientX: 5, clientY: 5 }) as PointerEvent, "/notes/b.txt");
+    at("pointermove", 590, 1);
+    expect(document.querySelector(".kn-drop-zone:not([hidden])")?.textContent).toBe("Split right");
+    // The button was released outside: the next move has none pressed.
+    at("pointermove", 590, 0);
+    expect(document.querySelector(".kn-drop-zone")).toBeNull();
+    at("pointerup", 590, 0);
+    await tick(5);
+    expect(app.panes).toHaveLength(1);
+    expect(app.findDoc("/notes/b.txt")).toBeUndefined();
+    // A real drop near the right edge: a new pane on the right.
+    startFileDrag(app, new MouseEvent("pointerdown", { button: 0, clientX: 5, clientY: 5 }) as PointerEvent, "/notes/b.txt");
+    at("pointermove", 590, 1);
+    at("pointerup", 590, 0);
+    await tick(5);
+    expect(app.panes).toHaveLength(2);
+    expect(app.active?.title).toBe("b.txt");
   });
 
   it("open to the side, move to the next pane, join all panes", async () => {

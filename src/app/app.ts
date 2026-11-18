@@ -567,7 +567,8 @@ export class App {
     if (media.length) await showMedia(this, media[0], media.length > 1 ? media : undefined);
   }
 
-  async openFile(path: string, opts: { activate?: boolean; line?: number; select?: [number, number] } = {}): Promise<Doc | null> {
+  /** Opens a file in a tab (in `opts.pane`, or the pane that has the focus), or shows the tab it is already in. */
+  async openFile(path: string, opts: { activate?: boolean; line?: number; select?: [number, number]; pane?: Pane } = {}): Promise<Doc | null> {
     const activate = opts.activate ?? true;
     let doc = this.findDoc(path);
     if (!doc) {
@@ -601,6 +602,8 @@ export class App {
             path, text: ft.text, eol: ft.text.includes("\r\n") ? "\r\n" : ft.text.includes("\n") ? "\n" : this.defaultEol(),
             encoding: ft.encoding, mtime: ft.mtime,
           });
+          // (The file was read meanwhile: the pane asked for gets it, wherever the focus went.)
+          if (opts.pane && this.panes.includes(opts.pane)) this.focusPane(opts.pane, true);
           if (!activate) this.docs.push(doc);
           else this.insertDoc(doc);
           this.normalizeOrder();
@@ -1350,7 +1353,7 @@ export class App {
       else this.activate(open);
       return open;
     }
-    return this.openFile(path);
+    return this.openFile(path, { pane });
   }
 
   /** Opens a file to the side: in the pane on the right (made if needed). */

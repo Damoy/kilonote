@@ -31,7 +31,8 @@ export interface SessionTab {
 export interface Session {
   version: 1;
   workspace: string | null;
-  recent: string[];
+  /** Older versions: the recent folders of the window (now shared by the windows, see pins.ts). */
+  recent?: string[];
   tabs: SessionTab[];
   active: number;
   groups: TabGroup[];
@@ -77,7 +78,6 @@ export function sessionData(app: App): Session {
   return {
     version: 1,
     workspace: app.workspace,
-    recent: app.recent,
     tabs: tabs.map((d) => ({ ...sessionTab(app, d), pane: split ? Math.max(0, order.indexOf(d.pane)) : undefined })),
     active: app.active ? tabs.indexOf(app.active) : -1,
     panes: split
