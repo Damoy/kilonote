@@ -80,9 +80,11 @@ The commit must only bump the version (do the work in earlier commits). Then pus
 - **to `main`** when the session may: `git pull --rebase origin main` first (the release
   workflow commits packaging manifests to `main` after each release), then `git push origin HEAD:main`;
 - **otherwise to the session's branch**: `git push -u origin HEAD` (if the branch was pushed
-  before, `git merge origin/main` rather than a rebase: never force-push), and tell Damoy to
-  merge the pull request from the GitHub app (Pull requests → the PR → Merge). The release
-  starts once it is merged.
+  before, `git merge origin/main` rather than a rebase: never force-push). The session cannot
+  open the pull request itself (`gh` is not logged in): tell Damoy to open it (the *Create PR*
+  button of the Claude app, or on github.com the *Compare & pull request* banner of the
+  branch) and to merge it (GitHub app: Pull requests → the PR → Merge). The release starts
+  once it is merged.
 
 When `main` receives a new version, `.github/workflows/release.yml` runs the checks, creates
 the tag `vX.Y.Z`, builds Windows, macOS and Linux and publishes the release "KiloNote vX.Y.Z"

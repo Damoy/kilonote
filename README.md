@@ -466,8 +466,9 @@ checksums are online, the workflow also updates the Scoop and winget manifests i
 
 **From a phone (Claude Code):** in a Claude Code session on this repository, ask for a patch,
 minor or major version. The session bumps the version (`npm run version:bump -- patch`), runs
-the tests and pushes the `Version X.Y.Z` commit. If it pushed a branch, merge its pull request
-in the GitHub app. When a new version reaches `main`, the release workflow runs the checks,
+the tests and pushes the `Version X.Y.Z` commit. If it pushed a branch, open its pull request
+(the *Create PR* button of the Claude app, or *Compare & pull request* on github.com) and merge
+it (GitHub app: Pull requests → the PR → Merge). When a new version reaches `main`, the release workflow runs the checks,
 creates the `vX.Y.Z` tag itself, builds the three systems and publishes the release: it appears
 on the Releases page about 15 to 25 minutes later (follow it in Actions → Release). If the
 checks fail, nothing is published: once fixed, run the release again from Actions → Release →
