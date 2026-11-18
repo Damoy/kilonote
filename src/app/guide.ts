@@ -52,9 +52,10 @@ it to the tasks of one tag (a client, a topic…).
 ## Tabs and tab groups
 
 - Right-click a tab: color, group, close others…
-- **Tab groups** have a name and a color; click the label to collapse the group into
-  a compact stack (only the tab you are editing stays visible), click again to expand
-  it. Command palette → "Tab: Collapse all groups". Drag a tab to move it.
+- **Tab groups** have a name and a color, on their own row above the tabs; click a
+  group to collapse it (only the tab you are editing stays visible), click again to
+  expand it. Command palette → "Tab: Collapse all groups". Drag a tab to move it, or
+  onto a group to add it to that group.
 - Ctrl+1…9: go to tab number N. Ctrl+Tab: next tab.
 - Ctrl+Shift+T: reopen the last closed tab.
 - When the tabs no longer fit, the list button at the right shows them all.

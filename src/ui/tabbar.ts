@@ -1,5 +1,5 @@
-// The tab bar of a pane: per-tab colors, browser-style collapsible groups,
-// mouse drag and drop (pointer events, works in WebView2 and WebKit): within
+// The tab bar of a pane: per-tab colors, browser-style collapsible groups
+// (on their own row, above the tabs, once the pane has one), mouse drag and drop (pointer events, works in WebView2 and WebKit): within
 // the bar, onto another pane (or near its edge, for a new pane), or out of
 // the window.
 
@@ -19,9 +19,13 @@ import { DropIndicator, dropOn, dropTargetAt, type DropTarget, type Pane } from 
 
 export class TabBar {
   private scroller: HTMLElement;
+  /** The groups of the pane, one chip each (hidden while the pane has none). */
+  private groupRow = h("div", { class: "kn-group-row", hidden: true });
   private dragging: {
     doc: Doc; el: HTMLElement; startX: number; startY: number; lastX: number; active: boolean; pointerId: number;
     outside: boolean; own: boolean; target: DropTarget | null; indicator: DropIndicator | null;
+    /** Over a group chip: the tab joins that group. */
+    into: TabGroup | null;
   } | null = null;
   private marker = h("div", { class: "kn-tab-marker" });
   private wasCollapsed = new Set<string>();
@@ -57,13 +61,15 @@ export class TabBar {
     );
     // Shown only while the sidebar is hidden (see .no-sidebar in the CSS).
     const showSidebar = h("button", { class: "kn-icon-btn kn-show-sidebar", title: titleWithKey("Show sidebar", "view.sidebar"), onclick: () => app.sidebar.toggle() }, icon("panelOpen"));
-    el.append(showSidebar, this.scroller, actions);
-    this.scroller.addEventListener("wheel", (e) => {
-      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-        this.scroller.scrollLeft += e.deltaY;
-        e.preventDefault();
-      }
-    }, { passive: false });
+    el.append(this.groupRow, h("div", { class: "kn-tabbar-row" }, showSidebar, this.scroller, actions));
+    for (const row of [this.scroller, this.groupRow]) {
+      row.addEventListener("wheel", (e) => {
+        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+          row.scrollLeft += e.deltaY;
+          e.preventDefault();
+        }
+      }, { passive: false });
+    }
     this.scroller.addEventListener("dblclick", (e) => {
       if (e.target === this.scroller) here(() => app.newDoc())();
     });
@@ -103,7 +109,7 @@ export class TabBar {
     }
   }
 
-  /** What is on screen: the groups and tabs, in order (when it is the same, the tabs are updated in place). */
+  /** What is on screen: the tabs, in order (when it is the same, the tabs are updated in place). */
   private shown = "";
   private shownActive: Doc | null = null;
   private overflowPending = false;
@@ -114,31 +120,31 @@ export class TabBar {
     // Groups expanded since the last render: their tabs slide in.
     const opened = new Set(app.groups.filter((g) => !g.collapsed && this.wasCollapsed.has(g.id)).map((g) => g.id));
     this.wasCollapsed = new Set(app.groups.filter((g) => g.collapsed).map((g) => g.id));
-    const items: ({ group: TabGroup } | { doc: Doc; group?: TabGroup })[] = [];
-    const seenGroups = new Set<string>();
+    const groups: TabGroup[] = [];
+    const items: { doc: Doc; group?: TabGroup; edge: string }[] = [];
     const active = this.pane.active;
     for (const doc of this.docs()) {
       const group = doc.groupId ? app.groups.find((g) => g.id === doc.groupId) : undefined;
-      if (group && !seenGroups.has(group.id)) {
-        seenGroups.add(group.id);
-        items.push({ group });
-      }
+      if (group && !groups.includes(group)) groups.push(group);
       if (group?.collapsed && doc !== active) continue;
-      items.push({ doc, group });
+      items.push({ doc, group, edge: "" });
     }
-    const shown = items.map((i) => ("doc" in i ? `t${i.doc.id}` : `g${i.group.id}`)).join(",");
+    // The tabs of a group stand apart from the others: where a group starts and ends.
+    items.forEach((it, i) => {
+      if (!it.group) return;
+      if (items[i - 1]?.group !== it.group) it.edge += " group-start";
+      if (items[i + 1]?.group !== it.group) it.edge += " group-end";
+    });
+    this.renderGroups(groups);
+    const shown = items.map((i) => `t${i.doc.id}`).join(",");
     const els = [...this.scroller.children].filter((e) => e !== this.marker) as HTMLElement[];
     if (shown === this.shown && !opened.size && els.length === items.length) {
       // The same tabs: only their state changes (dirty, active, name…), no new elements.
-      items.forEach((it, i) => {
-        if ("doc" in it) this.applyTab(els[i], it.doc, it.group);
-        else if (els[i].dataset.sig !== this.groupSig(it.group)) els[i].replaceWith(this.renderGroupChip(it.group));
-      });
+      items.forEach((it, i) => this.applyTab(els[i], it.doc, it.group, it.edge));
     } else {
       this.scroller.replaceChildren(
         ...items.map((it) => {
-          if (!("doc" in it)) return this.renderGroupChip(it.group);
-          const tab = this.renderTab(it.doc, it.group);
+          const tab = this.renderTab(it.doc, it.group, it.edge);
           if (it.group && opened.has(it.group.id) && it.doc !== active) tab.classList.add("appearing");
           return tab;
         }),
@@ -191,17 +197,32 @@ export class TabBar {
     showMenu(items, r.right - 240, r.bottom + 4);
   }
 
-  /** What a group chip shows (it is redrawn only when that changes: a click on it is never lost). */
+  /** The row of groups, above the tabs (a chip is redrawn only when what it shows changes: a click on it is never lost). */
+  private renderGroups(groups: TabGroup[]) {
+    this.groupRow.hidden = !groups.length;
+    this.el.classList.toggle("has-groups", groups.length > 0);
+    const chips = [...this.groupRow.children] as HTMLElement[];
+    if (chips.length === groups.length && groups.every((g, i) => chips[i].dataset.group === g.id)) {
+      groups.forEach((g, i) => {
+        if (chips[i].dataset.sig !== this.groupSig(g)) chips[i].replaceWith(this.renderGroupChip(g));
+      });
+    } else this.groupRow.replaceChildren(...groups.map((g) => this.renderGroupChip(g)));
+  }
+
+  /** What a group chip shows. */
   private groupSig(group: TabGroup) {
-    return `${group.name}|${group.color}|${group.collapsed}|${this.docs().filter((d) => d.groupId === group.id).length}`;
+    const current = this.pane.active?.groupId === group.id;
+    return `${group.name}|${group.color}|${group.collapsed}|${current}|${this.docs().filter((d) => d.groupId === group.id).length}`;
   }
 
   private renderGroupChip(group: TabGroup) {
     const count = this.docs().filter((d) => d.groupId === group.id).length;
+    // The group of the tab being edited stands out.
+    const current = this.pane.active?.groupId === group.id;
     const chip = h(
       "div",
       {
-        class: `kn-group-chip${group.collapsed ? " collapsed" : ""}`,
+        class: `kn-group-chip${group.collapsed ? " collapsed" : ""}${current ? " current" : ""}`,
         style: { "--g": resolveColor(group.color) },
         title: `${group.name || "Group"} · ${count} tab${count > 1 ? "s" : ""} — click to ${group.collapsed ? "expand" : "collapse"}`,
         role: "button",
@@ -209,8 +230,9 @@ export class TabBar {
       },
       icon("chevron", "kn-group-arrow"),
       h("span", { class: "kn-group-name" }, group.name || " "),
-      group.collapsed ? h("span", { class: "kn-group-count" }, String(count)) : null,
+      h("span", { class: "kn-group-count" }, String(count)),
     );
+    chip.dataset.group = group.id;
     chip.dataset.sig = this.groupSig(group);
     chip.addEventListener("click", () => this.app.toggleGroup(group));
     chip.addEventListener("contextmenu", (e) => {
@@ -221,9 +243,9 @@ export class TabBar {
   }
 
   /** Shows the state of a document on its tab (made by renderTab). */
-  private applyTab(tab: HTMLElement, doc: Doc, group?: TabGroup) {
+  private applyTab(tab: HTMLElement, doc: Doc, group: TabGroup | undefined, edge: string) {
     const app = this.app;
-    const cls = `kn-tab${doc === this.pane.active ? " active" : ""}${doc.dirty ? " dirty" : ""}${doc.missing ? " missing" : ""}${group ? " grouped" : ""}${doc.color ? " colored" : ""}`;
+    const cls = `kn-tab${doc === this.pane.active ? " active" : ""}${doc.dirty ? " dirty" : ""}${doc.missing ? " missing" : ""}${group ? ` grouped${edge}` : ""}${doc.color ? " colored" : ""}`;
     if (tab.className !== cls) tab.className = cls;
     const tabColor = doc.color ? resolveColor(doc.color) : "";
     const groupColor = group ? resolveColor(group.color) : "";
@@ -239,7 +261,7 @@ export class TabBar {
     else if (!done) doneIcon?.remove();
   }
 
-  private renderTab(doc: Doc, group?: TabGroup) {
+  private renderTab(doc: Doc, group: TabGroup | undefined, edge: string) {
     const app = this.app;
     const tab = h(
       "div",
@@ -247,7 +269,7 @@ export class TabBar {
       h("span", { class: "kn-tab-name" }),
       h("button", { class: "kn-tab-close", title: "Close", tabindex: "-1" }, h("span", { class: "kn-tab-dirty" }), icon("x")),
     );
-    this.applyTab(tab, doc, group);
+    this.applyTab(tab, doc, group, edge);
     tab.querySelector(".kn-tab-close")!.addEventListener("click", (e) => {
       e.stopPropagation();
       void app.closeDoc(doc);
@@ -275,7 +297,7 @@ export class TabBar {
     const fresh = this.scroller.querySelector<HTMLElement>(".kn-tab.active") ?? el;
     this.dragging = {
       doc, el: fresh, startX: e.clientX, startY: e.clientY, lastX: e.clientX, active: false, pointerId: e.pointerId,
-      outside: false, own: true, target: null, indicator: null,
+      outside: false, own: true, target: null, indicator: null, into: null,
     };
     const up = (ev: PointerEvent | null) => {
       window.removeEventListener("pointermove", move);
@@ -315,17 +337,34 @@ export class TabBar {
     // Over its own bar (or close to it), the tab follows the pointer; elsewhere, its name does.
     const bar = this.el.getBoundingClientRect();
     d.own = !d.outside && e.clientY >= bar.top - 6 && e.clientY <= bar.bottom + 6 && e.clientX >= bar.left && e.clientX <= bar.right;
+    d.into = d.own ? this.groupAt(e.clientX, e.clientY) : null;
+    this.markGroup(d.into);
     if (d.own) {
       d.target = null;
       d.indicator!.update(null, e.clientX, e.clientY, false);
       d.el.style.transform = `translateX(${dx}px)`;
-      this.showMarker(this.docAt(e.clientX));
+      if (d.into) this.hideMarker();
+      else this.showMarker(this.docAt(e.clientX));
       return;
     }
     d.el.style.transform = "";
     this.hideMarker();
     d.target = d.outside ? null : dropTargetAt(this.app, e.clientX, e.clientY, d.doc);
     d.indicator!.update(d.target, e.clientX, e.clientY, !d.outside, true);
+  }
+
+  /** The group whose chip is under the pointer (a tab dropped there joins it). */
+  private groupAt(x: number, y: number): TabGroup | null {
+    if (this.groupRow.hidden) return null;
+    for (const chip of this.groupRow.children as HTMLCollectionOf<HTMLElement>) {
+      const r = chip.getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top - 4 && y <= r.bottom + 4) return this.app.groups.find((g) => g.id === chip.dataset.group) ?? null;
+    }
+    return null;
+  }
+
+  private markGroup(group: TabGroup | null) {
+    for (const chip of this.groupRow.children as HTMLCollectionOf<HTMLElement>) chip.classList.toggle("drop-into", chip.dataset.group === group?.id);
   }
 
   private tabElements() {
@@ -370,13 +409,16 @@ export class TabBar {
     this.el.classList.remove("is-dragging", "detaching");
     document.body.classList.remove("kn-dragging");
     this.hideMarker();
+    this.markGroup(null);
     d.indicator?.remove();
     if (!e) return;
     if (d.outside) {
       void dropTabOutside(this.app, d.doc, e.screenX, e.screenY);
       return;
     }
-    if (d.own) this.app.placeDoc(d.doc, this.pane, before);
+    if (d.own && d.into) {
+      if (d.doc.groupId !== d.into.id) this.app.addToGroup(d.doc, d.into.id);
+    } else if (d.own) this.app.placeDoc(d.doc, this.pane, before);
     else if (d.target) void dropOn(this.app, d.target, { doc: d.doc });
     this.app.focusEditor();
   }

@@ -157,9 +157,11 @@ open it as a folder and follow its `README.md`.
   top of the explorer; shared by all windows
 - **Several windows** (Ctrl+Shift+N), each with its own tabs and folder; drag a tab onto another
   window (or out of the window to open a new one); every window comes back at the next launch
-- Colored tabs and **tab groups** with a name and a color; click a group to collapse it into a
-  compact stack (only the tab being edited stays visible), click again to expand it; drag and
-  drop; a list of all tabs when they no longer fit
+- Colored tabs and **tab groups** with a name and a color; the groups have their own row above
+  the tabs (the group of the tab being edited stands out, each shows its number of tabs); click
+  a group to collapse it (only the tab being edited stays visible), click again to expand it;
+  drag and drop a tab between the tabs, or onto a group to add it; a list of all tabs when they
+  no longer fit
 - Sidebar and folder can be closed from their own buttons (or Ctrl+B)
 - File explorer with file type icons; the header button collapses every folder (or expands
   them all when none is open), and the button that appears over a folder expands or collapses

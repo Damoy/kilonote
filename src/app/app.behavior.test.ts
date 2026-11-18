@@ -472,6 +472,53 @@ describe("panes", () => {
     expect(app.docs.map((d) => d.title).sort()).toEqual(["b.txt", "c.txt"]);
   });
 
+  it("the groups have their own row above the tabs; a tab dragged onto a group joins it", async () => {
+    const { app } = await start({ "/notes/a.txt": "A", "/notes/b.txt": "B", "/notes/c.txt": "C" });
+    const a = (await app.openFile("/notes/a.txt"))!;
+    const b = (await app.openFile("/notes/b.txt"))!;
+    const c = (await app.openFile("/notes/c.txt"))!;
+    const bar = app.pane.tabbarEl;
+    const row = bar.querySelector<HTMLElement>(".kn-group-row")!;
+    // No group: no row of groups.
+    expect(row.hidden).toBe(true);
+    const group = { id: "g1", name: "Work", color: "blue", collapsed: false };
+    app.groups.push(group);
+    for (const d of [a, b]) d.groupId = "g1";
+    app.emit("docs");
+    expect(row.hidden).toBe(false);
+    // The chip is in the row of groups, never among the tabs.
+    expect(row.querySelectorAll(".kn-group-chip")).toHaveLength(1);
+    expect(bar.querySelector(".kn-tabs .kn-group-chip")).toBeNull();
+    expect(names(bar.querySelector(".kn-tabs")!)).toEqual(["a.txt", "b.txt", "c.txt"]);
+    const tabs = () => [...bar.querySelectorAll<HTMLElement>(".kn-tab")];
+    expect(tabs().map((t) => [t.classList.contains("group-start"), t.classList.contains("group-end")])).toEqual([[true, false], [false, true], [false, false]]);
+    // The chip of the group being edited stands out; it shows how many tabs the group has.
+    const chip = () => row.querySelector<HTMLElement>(".kn-group-chip")!;
+    expect(chip().classList.contains("current")).toBe(false);
+    expect(chip().querySelector(".kn-group-count")!.textContent).toBe("2");
+    app.activate(a);
+    expect(chip().classList.contains("current")).toBe(true);
+    // Collapsed: only its tab being edited stays among the tabs.
+    chip().click();
+    expect(group.collapsed).toBe(true);
+    expect(names(bar.querySelector(".kn-tabs")!)).toEqual(["a.txt", "c.txt"]);
+    chip().click();
+    // c.txt dragged onto the chip joins the group.
+    const cTab = tabs().find((t) => t.dataset.doc === String(c.id))!;
+    cTab.dispatchEvent(new PointerEvent("pointerdown", { button: 0, clientX: 300, clientY: 50, bubbles: true }));
+    chip().getBoundingClientRect = rect(10, 4, 80, 22);
+    bar.getBoundingClientRect = rect(0, 0, 600, 70);
+    window.dispatchEvent(new PointerEvent("pointermove", { clientX: 40, clientY: 14, buttons: 1 }));
+    expect(chip().classList.contains("drop-into")).toBe(true);
+    window.dispatchEvent(new PointerEvent("pointerup", { clientX: 40, clientY: 14 }));
+    expect(c.groupId).toBe("g1");
+    expect(chip().classList.contains("drop-into")).toBe(false);
+    expect(chip().querySelector(".kn-group-count")!.textContent).toBe("3");
+    // Ungrouped: the row of groups goes away.
+    app.ungroup(group);
+    expect(row.hidden).toBe(true);
+  });
+
   it("a file asked for a pane opens there, even if the focus moved while it was read", async () => {
     const { app, backend } = await start({ "/notes/a.txt": "A", "/notes/b.txt": "B" });
     await app.openFile("/notes/a.txt");

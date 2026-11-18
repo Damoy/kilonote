@@ -202,11 +202,20 @@ body.zen .cm-gutters { display: none !important; }
 /* ------------------------------------------------------------------ Tabs */
 
 .kn-tabbar {
-  flex: none; container-type: inline-size; display: flex; align-items: stretch;
-  height: var(--bar-h);
+  flex: none; container-type: inline-size; display: flex; flex-direction: column;
   background: var(--kn-bg-alt);
   border-bottom: 1px solid var(--kn-border);
 }
+.kn-tabbar-row { display: flex; align-items: stretch; height: var(--bar-h); }
+/* The groups of the pane, on their own row above the tabs. */
+.kn-group-row {
+  flex: none; display: flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 10px;
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+  border-bottom: 1px solid var(--kn-border);
+  background: color-mix(in srgb, var(--kn-bg-alt) 70%, var(--kn-bg));
+}
+.kn-group-row::-webkit-scrollbar { display: none; }
 .kn-tabs {
   position: relative; flex: 1; min-width: 0;
   display: flex; align-items: stretch; overflow-x: auto; overflow-y: hidden;
@@ -238,8 +247,11 @@ body.zen .cm-gutters { display: none !important; }
 .kn-tab.colored { --accent-line: var(--tab-c); background: color-mix(in srgb, var(--tab-c) 9%, transparent); }
 .kn-tab.colored.active { background: color-mix(in srgb, var(--tab-c) 7%, var(--kn-bg)); }
 .kn-tab.colored .kn-tab-name { color: color-mix(in srgb, var(--tab-c) 55%, var(--kn-fg)); }
-.kn-tab.grouped { box-shadow: inset 0 -2px 0 var(--g); }
+.kn-tab.grouped { box-shadow: inset 0 -2px 0 var(--g); background: color-mix(in srgb, var(--g) 6%, transparent); }
+.kn-tab.grouped.active { background: color-mix(in srgb, var(--g) 5%, var(--kn-bg)); }
 .kn-tab.grouped.active::after { display: none; }
+/* The tabs of a group stand apart from the others. */
+.kn-tab.group-start:not(:first-child), .kn-tab.group-end + .kn-tab:not(.group-start) { margin-left: 6px; border-left: 1px solid var(--kn-border); }
 .kn-tab.missing .kn-tab-name { text-decoration: line-through; opacity: 0.7; }
 .kn-tab.dragging { z-index: 3; background: var(--kn-bg-hover); box-shadow: var(--shadow); transition: none; opacity: 0.95; }
 .kn-tabbar.is-dragging .kn-tab { pointer-events: none; }
@@ -267,23 +279,31 @@ body.zen .cm-gutters { display: none !important; }
 .kn-tab.dirty .kn-tab-close:hover .kn-tab-dirty { opacity: 0; }
 
 .kn-group-chip {
-  flex: none; align-self: center;
+  flex: none;
   display: inline-flex; align-items: center; gap: 5px;
-  height: 22px; margin: 0 4px 0 8px; padding: 0 9px; border-radius: 11px;
-  background: var(--g); color: var(--kn-bg);
+  height: 22px; padding: 0 6px 0 9px; border-radius: 11px;
+  background: color-mix(in srgb, var(--g) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g) 45%, transparent);
+  color: color-mix(in srgb, var(--g) 65%, var(--kn-fg));
   font-weight: 650; font-size: calc(var(--kn-ui-size) - 1px);
-  cursor: pointer; transition: filter 80ms, transform 80ms;
-  max-width: 160px;
+  cursor: pointer; transition: filter 80ms, transform 80ms, background 80ms;
+  max-width: 180px;
 }
-.kn-group-chip:hover { filter: brightness(1.1); }
+.kn-group-chip:hover { background: color-mix(in srgb, var(--g) 26%, transparent); }
 .kn-group-chip:active { transform: scale(0.97); }
-.kn-group-chip.collapsed { opacity: 0.85; }
+/* The group of the tab being edited. */
+.kn-group-chip.current { background: var(--g); border-color: var(--g); color: var(--kn-bg); }
+.kn-group-chip.current:hover { filter: brightness(1.1); }
+.kn-group-chip.collapsed { opacity: 0.8; }
+/* A tab dragged onto a group joins it. */
+.kn-group-chip.drop-into { outline: 2px solid var(--kn-accent); outline-offset: 1px; }
 .kn-group-arrow { width: 12px; height: 12px; margin-left: -3px; transition: transform 140ms var(--ease); transform: rotate(90deg); }
 .kn-group-chip.collapsed .kn-group-arrow { transform: none; }
 .kn-tab.appearing { animation: tab-in 160ms var(--ease); }
 @keyframes tab-in { from { opacity: 0; transform: translateX(-8px); } }
 .kn-group-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 6px; }
-.kn-group-count { font-size: 0.85em; background: color-mix(in srgb, var(--kn-bg) 25%, transparent); padding: 0 5px; border-radius: 6px; }
+.kn-group-count { font-size: 0.85em; background: color-mix(in srgb, var(--g) 22%, transparent); padding: 0 5px; border-radius: 6px; }
+.kn-group-chip.current .kn-group-count { background: color-mix(in srgb, var(--kn-bg) 25%, transparent); }
 
 /* ------------------------------------------------------------------ Sidebar */
 
