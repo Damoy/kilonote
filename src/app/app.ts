@@ -1,6 +1,7 @@
-// The controller of a window: its state (documents, tabs, tab groups, folder,
-// settings) and the core document actions (open, activate, save, reload,
-// close). The features built on it are functions over the App, one module each:
+// The controller of a window: its state (documents, tabs, tab groups, panes,
+// folder, settings) and the core document actions (open, activate, save,
+// reload, close). The features built on it are functions over the App, one
+// module each:
 //
 //   commands.ts  every command and the default shortcuts
 //   pickers.ts   command palette, Go to file / line / heading, theme pickers
@@ -10,6 +11,10 @@
 //   files.ts     create, rename, trash, copy a path
 //   session.ts   session of the window, closing
 //   windows.ts   moving a tab to another window
+//   layout.ts    how the panes are laid out (ui/panes.ts draws them)
+//
+// A window has one or more panes, each with its tabs and its editor. `active`
+// and `view` are those of the pane that has the focus: the commands act there.
 
 import { ChangeSet, EditorState, Text, type TransactionSpec } from "@codemirror/state";
 import { EditorView, type ViewUpdate } from "@codemirror/view";
@@ -23,16 +28,18 @@ import { editorHooks } from "../editor/decorations";
 import { closeSlashMenu } from "../editor/slash";
 import { createEditorState, langForPath, languageReady, loadLanguage, markdownTooDeep, reconfigureLanguage, settingsCompartment, settingsExtensions, type LangId } from "../editor/setup";
 import { makeTaskConfig, type TaskConfig } from "../text/tasks";
-import { debounce } from "../ui/dom";
+import { debounce, h } from "../ui/dom";
 import { confirm, prompt, setFocusRestorer, toast } from "../ui/overlay";
 import { setPaletteFocusRestorer } from "../ui/palette";
 import { TabBar } from "../ui/tabbar";
+import { Pane, renderLayout } from "../ui/panes";
+import { MAX_PANES, neighborPane, panesInOrder, removeFromLayout, splitLayout, type Layout, type Side } from "./layout";
 import { Sidebar } from "../ui/sidebar";
 import { StatusBar } from "../ui/statusbar";
 import { Welcome } from "../ui/welcome";
 import { Preview } from "../ui/views/preview";
 import { openCheatSheet, openSettingsView, syncAssistant } from "../ui/lazy";
-import { noteOpened, onPinsChanged } from "./pins";
+import { folderOpened, forgetFolder, noteOpened, onPinsChanged, recentFolders } from "./pins";
 import { isViewableMedia } from "../text/images";
 
 /** The image and video viewer, loaded the first time one is opened. */
@@ -59,6 +66,8 @@ export interface Doc {
   lang: LangId;
   color: string | null;
   groupId: string | null;
+  /** The pane the tab is in (its id). */
+  pane: number;
   missing: boolean;
   /** Changed on disk while the tab has unsaved edits. */
   conflict: boolean;
@@ -89,13 +98,15 @@ export class App {
   settings!: Settings;
   taskCfg!: TaskConfig;
   docs: Doc[] = [];
-  active: Doc | null = null;
   groups: TabGroup[] = [];
+  /** The panes of the window, and the one that has the focus. */
+  panes: Pane[] = [];
+  pane!: Pane;
+  layout: Layout = { pane: 0 };
+  private splitRoot!: HTMLElement;
+  private nextPaneId = 1;
   workspace: string | null = null;
-  recent: string[] = [];
   workspaceFiles: string[] = [];
-  view!: EditorView;
-  tabbar!: TabBar;
   sidebar!: Sidebar;
   statusbar!: StatusBar;
   welcome!: Welcome;
@@ -110,6 +121,26 @@ export class App {
   systemDark = matchMedia("(prefers-color-scheme: dark)");
 
   constructor(public backend: Backend) {}
+
+  /** The folders opened lately (in any window), the last one first. */
+  get recent(): string[] {
+    return recentFolders();
+  }
+
+  /** The tab shown in the pane that has the focus. */
+  get active(): Doc | null {
+    return this.pane?.active ?? null;
+  }
+
+  /** The editor of the pane that has the focus. */
+  get view(): EditorView {
+    return this.pane.view;
+  }
+
+  /** The tab bar of the pane that has the focus. */
+  get tabbar(): TabBar {
+    return this.pane.tabbar;
+  }
 
   // -------------------------------------------------------------------------
   // Events
@@ -144,13 +175,16 @@ export class App {
     setKeybindings(defaultKeybindings(this), this.settings.keybindings);
 
     const host = document.getElementById("editor-host")!;
-    this.view = new EditorView({ parent: host, state: this.blankState() });
-    this.tabbar = new TabBar(this, document.getElementById("tabbar")!);
+    this.splitRoot = h("div", { class: "kn-split-root" });
+    host.prepend(this.splitRoot);
+    this.pane = this.createPane();
+    this.layout = { pane: this.pane.id };
+    renderLayout(this, this.splitRoot);
     this.sidebar = new Sidebar(this, document.getElementById("sidebar")!, document.getElementById("sb-resizer")!);
     this.statusbar = new StatusBar(this, document.getElementById("statusbar")!);
     this.welcome = new Welcome(this, document.getElementById("welcome")!);
     this.preview = new Preview(this);
-    this.preview.attach();
+    this.preview.attach(this.pane.view);
 
     setFocusRestorer(() => this.focusEditor());
     setPaletteFocusRestorer(() => this.focusEditor());
@@ -168,8 +202,17 @@ export class App {
       this.refreshWorkspaceFilesSoon();
     });
     window.addEventListener("blur", () => this.flushAutosaves());
-    setInterval(() => document.hasFocus() && this.active?.path && void this.checkExternalChanges([this.active]), 4000);
-    this.backend.onFileDrop((paths, at) => void dropImageFiles(this, paths, at).then((rest) => this.openPaths(rest)));
+    // The notes on screen (one per pane) are checked often; the other tabs when the window gets the focus.
+    setInterval(() => {
+      const shown = this.panes.flatMap((p) => (p.active?.path ? [p.active] : []));
+      if (document.hasFocus() && shown.length) void this.checkExternalChanges(shown);
+    }, 4000);
+    this.backend.onFileDrop((paths, at) => {
+      // Dropped on a pane: it takes the files.
+      const pane = at && this.paneAt(at.x, at.y);
+      if (pane) this.focusPane(pane);
+      void dropImageFiles(this, paths, at).then((rest) => this.openPaths(rest));
+    });
     this.backend.onOpenRequest((paths) => void this.openPaths(paths));
     this.backend.onCloseRequested(() => beforeClose(this));
 
@@ -183,7 +226,7 @@ export class App {
     } else if (startup.length) await this.openPaths(startup);
     this.on("settings", () => syncAssistant(this));
     // Pinned and recent notes: the explorer, "Go to file" and the welcome screen follow.
-    onPinsChanged((change) => change === "pins" && this.emit("pins"));
+    onPinsChanged((change) => (change === "pins" || change === "folders") && this.emit("pins"));
     this.on("active", () => {
       const p = this.active?.path;
       if (p && !isInside(p, this.configDir)) noteOpened(p);
@@ -222,6 +265,7 @@ export class App {
 
   focusEditor() {
     if (this.active) this.view.focus();
+    else if (this.panes.length > 1) this.pane.hint.focus();
   }
 
   // -------------------------------------------------------------------------
@@ -258,7 +302,8 @@ export class App {
     for (const doc of this.docs) {
       if (!this.stateMade(doc)) continue; // (made with the settings of the moment)
       const effects = settingsCompartment.reconfigure(settingsExtensions(s, this.taskCfg, doc.lang));
-      if (doc === this.active) this.view.dispatch({ effects });
+      const view = this.viewOf(doc);
+      if (view) view.dispatch({ effects });
       else doc.state = doc.state.update({ effects }).state;
     }
     this.emit("settings");
@@ -350,6 +395,7 @@ export class App {
       lang,
       color: init.color ?? null,
       groupId: init.groupId ?? null,
+      pane: this.pane?.id ?? 0,
       missing: false,
       conflict: false,
       scroll: null,
@@ -410,14 +456,14 @@ export class App {
   docText(doc: Doc): string {
     const pending = this.unmade.get(doc);
     if (pending) return pending.text;
-    return (doc === this.active ? this.view.state : doc.state).doc.toString();
+    return (this.viewOf(doc)?.state ?? doc.state).doc.toString();
   }
 
   /** The cursor of a tab, without making its editor state. */
   docCursor(doc: Doc): number {
     const pending = this.unmade.get(doc);
     if (pending) return pending.cursor;
-    return (doc === this.active ? this.view.state : doc.state).selection.main.head;
+    return (this.viewOf(doc)?.state ?? doc.state).selection.main.head;
   }
 
   /** Sets the document type of a tab: its coloring and the note features. */
@@ -493,8 +539,9 @@ export class App {
     return doc;
   }
 
-  /** Inserts a tab right after the active one (or at the end of its group). */
+  /** Inserts a tab right after the active one (or at the end of its group), in the pane that has the focus. */
   private insertDoc(doc: Doc) {
+    doc.pane = this.pane.id;
     if (doc.groupId) {
       const members = this.docs.filter((d) => d.groupId === doc.groupId);
       if (members.length) {
@@ -579,56 +626,83 @@ export class App {
     return null;
   }
 
+  /** Shows a tab: in its pane, which takes the focus. */
   activate(doc: Doc | null) {
-    if (doc === this.active) {
+    let switched = false;
+    if (doc) {
+      const owner = this.panes.find((p) => p.id === doc.pane);
+      if (!owner) doc.pane = this.pane.id;
+      else if (owner !== this.pane) {
+        // A pane without tabs (a new split) takes the note asked for.
+        if (this.panes.length > 1 && !this.docsOf(this.pane).length) {
+          this.moveDocToPane(doc, this.pane);
+          return;
+        }
+        this.focusPane(owner, true);
+        switched = true;
+      }
+    }
+    const pane = this.pane;
+    if (doc === pane.active) {
+      if (switched) this.emit("active");
       if (doc) this.focusEditor();
       return;
     }
-    const prev = this.active;
+    this.showInPane(pane, doc);
+    // Show the editor first (the welcome screen hides it), then focus it.
+    this.emit("active");
+    if (doc) pane.view.focus();
+  }
+
+  /** Puts a tab in a pane's editor (or nothing), keeping the state and scrolling of the one it showed. */
+  showInPane(pane: Pane, doc: Doc | null) {
+    const prev = pane.active;
+    if (prev === doc) return;
     if (prev && this.docs.includes(prev)) {
-      closeSlashMenu(this.view);
-      prev.state = this.view.state;
-      prev.scroll = this.view.scrollSnapshot();
+      closeSlashMenu(pane.view);
+      prev.state = pane.view.state;
+      prev.scroll = pane.view.scrollSnapshot();
     }
-    this.active = doc;
+    pane.active = doc;
+    pane.el.classList.toggle("empty", !doc);
     if (doc) {
-      this.view.setState(doc.state);
-      if (doc.scroll) this.view.dispatch({ effects: doc.scroll });
+      doc.pane = pane.id;
+      pane.view.setState(doc.state);
+      if (doc.scroll) pane.view.dispatch({ effects: doc.scroll });
       else if (doc.pendingScrollTop) {
         const top = doc.pendingScrollTop;
-        requestAnimationFrame(() => (this.view.scrollDOM.scrollTop = top));
+        requestAnimationFrame(() => (pane.view.scrollDOM.scrollTop = top));
         doc.pendingScrollTop = 0;
       }
     } else {
-      this.view.setState(this.blankState());
+      pane.view.setState(this.blankState());
     }
-    // Show the editor first (the welcome screen hides it), then focus it.
-    this.emit("active");
-    if (doc) this.view.focus();
   }
 
   /** Centers line `line` (1-based) on screen, with an optional selection within that line. */
   reveal(doc: Doc, line: number, select?: [number, number]) {
-    const st = doc === this.active ? this.view.state : doc.state;
+    const view = this.viewOf(doc);
+    const st = view?.state ?? doc.state;
     const l = st.doc.line(Math.max(1, Math.min(line, st.doc.lines)));
     const anchor = select ? Math.min(l.from + select[0], l.to) : l.from;
     const head = select ? Math.min(l.from + select[1], l.to) : l.from;
     const spec: TransactionSpec = { selection: { anchor, head }, effects: EditorView.scrollIntoView(anchor, { y: "center" }) };
-    if (doc === this.active) {
-      this.view.dispatch(spec);
-      this.view.focus();
+    if (view) {
+      view.dispatch(spec);
+      if (view === this.view) view.focus();
     } else doc.state = doc.state.update(spec).state;
   }
 
   private onEditorUpdate(u: ViewUpdate) {
-    const doc = this.active;
+    const pane = u.view === this.pane.view ? this.pane : this.panes.find((p) => p.view === u.view);
+    const doc = pane?.active;
     if (!doc) return;
     doc.state = u.state;
     if (u.docChanged) {
       this.notifyChanges(doc, u.changes);
       this.afterDocChange(doc);
     }
-    if (u.docChanged || u.selectionSet) this.emit("selection");
+    if (u.docChanged || (u.selectionSet && pane === this.pane)) this.emit("selection");
   }
 
   private afterDocChange(doc: Doc) {
@@ -641,7 +715,8 @@ export class App {
 
   /** Applies a transaction to a document, whether it is active or not. */
   applyToDoc(doc: Doc, spec: TransactionSpec) {
-    if (doc === this.active) this.view.dispatch(spec);
+    const view = this.viewOf(doc);
+    if (view) view.dispatch(spec);
     else {
       const tr = doc.state.update(spec);
       doc.state = tr.state;
@@ -659,7 +734,7 @@ export class App {
 
   /** Collects the edits made to a document from now on (to map positions across an await). */
   trackChanges(doc: Doc) {
-    const start = doc === this.active ? this.view.state.doc : doc.state.doc;
+    const start = (this.viewOf(doc)?.state ?? doc.state).doc;
     let since = ChangeSet.empty(start.length);
     const fn = (c: ChangeSet) => (since = since.compose(c));
     if (!this.changeWatchers.has(doc)) this.changeWatchers.set(doc, new Set());
@@ -884,7 +959,11 @@ export class App {
         clearTimeout(doc.timer);
         if (!(await this.save(doc))) return false;
       } else {
-        if (doc !== this.active) this.activate(doc);
+        // (Shown where it is, even from a pane waiting for a note.)
+        if (doc !== this.active) {
+          this.focusPane(this.paneOf(doc));
+          this.activate(doc);
+        }
         const r = await confirm({
           title: `Save "${this.docName(doc)}"?`,
           message: "Your changes will be lost if you don't save them.",
@@ -902,17 +981,30 @@ export class App {
       this.closed.push(sessionTab(this, doc));
       if (this.closed.length > 30) this.closed.shift();
     }
+    const pane = this.paneOf(doc);
+    const next = pane.active === doc ? this.nextInPane(pane, doc) : null;
     this.docs.splice(i, 1);
-    if (this.active === doc) {
-      this.active = null;
-      const visible = this.docs.filter((d) => !this.isHidden(d));
-      const next = this.docs[i] && !this.isHidden(this.docs[i]) ? this.docs[i] : visible[visible.length - 1] ?? this.docs[i - 1] ?? this.docs[0] ?? null;
-      this.activate(next ?? null);
-      if (!next) this.emit("active");
+    if (pane.active === doc) {
+      if (next) {
+        if (pane === this.pane) this.activate(next);
+        else this.showInPane(pane, next);
+      } else if (this.panes.length > 1) this.closePane(pane);
+      else {
+        this.showInPane(pane, null);
+        this.emit("active");
+      }
     }
     this.cleanGroups();
     this.emit("docs");
     return true;
+  }
+
+  /** The tab a pane shows when `doc` leaves it: the one after it, or else the one before. */
+  private nextInPane(pane: Pane, doc: Doc): Doc | null {
+    const mine = this.docsOf(pane);
+    const shown = mine.filter((d) => d === doc || !this.isHidden(d));
+    const i = shown.indexOf(doc);
+    return shown[i + 1] ?? shown[i - 1] ?? mine.find((d) => d !== doc) ?? null;
   }
 
   async closeMany(list: Doc[]) {
@@ -931,8 +1023,9 @@ export class App {
     }
   }
 
+  /** In a collapsed group (its pane still shows it while it is the pane's tab). */
   private isHidden(doc: Doc) {
-    return !!doc.groupId && !!this.groups.find((g) => g.id === doc.groupId)?.collapsed;
+    return !!doc.groupId && !!this.groups.find((g) => g.id === doc.groupId)?.collapsed && this.paneOf(doc).active !== doc;
   }
 
   // -------------------------------------------------------------------------
@@ -1046,15 +1139,19 @@ export class App {
     this.emit("docs");
   }
 
-  /** Moves a tab to index `to` (drag and drop) and updates its group. */
-  moveDoc(doc: Doc, to: number) {
-    const from = this.docs.indexOf(doc);
-    if (from < 0) return;
-    this.docs.splice(from, 1);
-    const idx = to > from ? to - 1 : to;
-    this.docs.splice(idx, 0, doc);
-    const left = this.docs[idx - 1];
-    const right = this.docs[idx + 1];
+  /** Puts a tab before `before` (null: at the end) in a pane, moving it there if needed (drag and drop), and updates its group. */
+  placeDoc(doc: Doc, pane: Pane, before: Doc | null) {
+    if (doc.pane !== pane.id) {
+      this.moveDocToPane(doc, pane, before);
+      return;
+    }
+    if (before === doc || !this.docs.includes(doc)) return;
+    this.docs.splice(this.docs.indexOf(doc), 1);
+    this.docs.splice(this.indexIn(pane, before), 0, doc);
+    const mine = this.docsOf(pane);
+    const k = mine.indexOf(doc);
+    const left = mine[k - 1];
+    const right = mine[k + 1];
     if (left?.groupId && left.groupId === right?.groupId) doc.groupId = left.groupId;
     else if (doc.groupId && (left?.groupId === doc.groupId || right?.groupId === doc.groupId)) {
       /* stays in its group */
@@ -1065,6 +1162,211 @@ export class App {
   }
 
   // -------------------------------------------------------------------------
+  // Panes
+
+  /** A new pane (not laid out yet): its tab bar and its editor. */
+  createPane(): Pane {
+    const view = new EditorView({ state: this.blankState() });
+    const pane: Pane = new Pane(this.nextPaneId++, view, () => this.closePane(pane));
+    pane.tabbar = new TabBar(this, pane.tabbarEl, pane);
+    // A click, the keyboard or a drop in a pane gives it the focus (before the editor handles them).
+    pane.el.addEventListener("pointerdown", () => this.focusPane(pane), true);
+    pane.el.addEventListener("focusin", () => this.focusPane(pane));
+    pane.el.addEventListener("drop", () => this.focusPane(pane), true);
+    this.panes.push(pane);
+    this.preview?.attach(view);
+    return pane;
+  }
+
+  /** Gives the focus to a pane: the commands, the status bar and the preview follow its tab. */
+  focusPane(pane: Pane, silent = false) {
+    if (pane === this.pane || !this.panes.includes(pane)) return;
+    closeSlashMenu(this.pane.view);
+    this.pane = pane;
+    for (const p of this.panes) p.el.classList.toggle("focused", p === pane);
+    if (!silent) this.emit("active");
+  }
+
+  paneById(id: number): Pane | undefined {
+    return this.panes.find((p) => p.id === id);
+  }
+
+  /** The pane a tab is in. */
+  paneOf(doc: Doc): Pane {
+    return this.paneById(doc.pane) ?? this.pane;
+  }
+
+  /** The editor showing a tab, if a pane shows it. */
+  viewOf(doc: Doc): EditorView | null {
+    if (this.pane.active === doc) return this.pane.view;
+    return this.panes.find((p) => p.active === doc)?.view ?? null;
+  }
+
+  /** The tabs of a pane, in order. */
+  docsOf(pane: Pane): Doc[] {
+    return this.docs.filter((d) => d.pane === pane.id);
+  }
+
+  /** The pane under a point of the window. */
+  paneAt(x: number, y: number): Pane | undefined {
+    return this.panes.find((p) => {
+      const r = p.el.getBoundingClientRect();
+      return x >= r.left && x < r.right && y >= r.top && y < r.bottom;
+    });
+  }
+
+  /** Where a tab goes in `docs` to be before `before` in a pane (null: after the pane's last tab). */
+  private indexIn(pane: Pane, before: Doc | null): number {
+    if (before && before.pane === pane.id && this.docs.includes(before)) return this.docs.indexOf(before);
+    const mine = this.docsOf(pane);
+    return mine.length ? this.docs.indexOf(mine[mine.length - 1]) + 1 : this.docs.length;
+  }
+
+  /** Moves a tab into another pane (before `before`, or at the end), which takes the focus. A pane left without tabs closes. */
+  moveDocToPane(doc: Doc, target: Pane, before: Doc | null = null) {
+    if (!this.docs.includes(doc) || !this.panes.includes(target)) return;
+    const src = this.paneOf(doc);
+    if (src === target) {
+      this.placeDoc(doc, target, before);
+      this.activate(doc);
+      return;
+    }
+    if (src.active === doc) this.showInPane(src, this.nextInPane(src, doc));
+    this.docs.splice(this.docs.indexOf(doc), 1);
+    doc.pane = target.id;
+    // (Its group stays behind: groups are within a pane.)
+    doc.groupId = null;
+    this.docs.splice(this.indexIn(target, before), 0, doc);
+    this.focusPane(target, true);
+    this.showInPane(target, doc);
+    if (!this.docsOf(src).length && this.panes.length > 1) this.closePane(src);
+    this.normalizeOrder();
+    this.cleanGroups();
+    this.emit("docs");
+    this.emit("active");
+    target.view.focus();
+  }
+
+  /** A new pane next to `target` (null when the window has as many as it can hold). */
+  splitPane(target: Pane, side: Side): Pane | null {
+    if (this.panes.length >= MAX_PANES) {
+      toast(`A window holds ${MAX_PANES} panes at most.`);
+      return null;
+    }
+    const pane = this.createPane();
+    this.layout = splitLayout(this.layout, target.id, side, pane.id);
+    renderLayout(this, this.splitRoot);
+    this.saveSessionSoon();
+    return pane;
+  }
+
+  /** Splits the pane of a tab: the tab moves to the new pane (on `side`). */
+  splitDoc(doc: Doc, side: Side) {
+    const src = this.paneOf(doc);
+    if (this.docsOf(src).length < 2) {
+      this.splitEmpty(src, side);
+      return;
+    }
+    const pane = this.splitPane(src, side);
+    if (pane) this.moveDocToPane(doc, pane);
+  }
+
+  /** View: Split right / down. The current tab moves to the new pane; alone in its pane, it stays and the new pane waits for a note. */
+  splitActive(side: Side) {
+    if (this.active) this.splitDoc(this.active, side);
+    else this.splitEmpty(this.pane, side);
+  }
+
+  private splitEmpty(src: Pane, side: Side) {
+    const pane = this.splitPane(src, side);
+    if (!pane) return;
+    this.focusPane(pane);
+    pane.hint.focus();
+  }
+
+  /** Closes a pane: its tabs go to the pane next to it. The last pane stays. */
+  closePane(pane: Pane) {
+    if (this.panes.length < 2 || !this.panes.includes(pane)) return;
+    const order = panesInOrder(this.layout);
+    const at = order.indexOf(pane.id);
+    const heir = this.paneById(order[at - 1] ?? order[at + 1]) ?? this.panes.find((p) => p !== pane)!;
+    const focused = this.pane === pane;
+    if (pane.active) this.showInPane(pane, null);
+    const moved = this.docsOf(pane);
+    for (const d of moved) {
+      d.pane = heir.id;
+      d.groupId = null;
+    }
+    this.layout = removeFromLayout(this.layout, pane.id) ?? { pane: heir.id };
+    this.panes = this.panes.filter((p) => p !== pane);
+    pane.tabbar.destroy();
+    pane.view.destroy();
+    pane.el.remove();
+    if (focused) this.focusPane(heir, true);
+    if (!heir.active && moved.length) this.showInPane(heir, moved[0]);
+    renderLayout(this, this.splitRoot);
+    this.cleanGroups();
+    this.emit("docs");
+    this.emit("active");
+    if (focused) this.focusEditor();
+  }
+
+  /** View: Join all panes: every tab in the pane that has the focus. */
+  joinPanes() {
+    for (const p of [...this.panes]) if (p !== this.pane) this.closePane(p);
+  }
+
+  /** Moves a tab to the next pane (the first one after the last). */
+  moveToNextPane(doc: Doc) {
+    const order = panesInOrder(this.layout);
+    const at = order.indexOf(doc.pane);
+    const next = this.paneById(order[(at + 1) % order.length]);
+    if (next && next.id !== doc.pane) this.moveDocToPane(doc, next);
+  }
+
+  /** Gives the focus to the next (or previous) pane, in reading order. */
+  focusNextPane(dir: 1 | -1) {
+    const order = panesInOrder(this.layout);
+    if (order.length < 2) return;
+    const at = order.indexOf(this.pane.id);
+    const next = this.paneById(order[(at + dir + order.length) % order.length]);
+    if (!next) return;
+    this.focusPane(next);
+    this.focusEditor();
+  }
+
+  /** The pane on a side of the one that has the focus, if any. */
+  paneBeside(side: Side): Pane | undefined {
+    const id = neighborPane(this.layout, this.pane.id, side);
+    return id == null ? undefined : this.paneById(id);
+  }
+
+  /** Opens a file in a pane (a tab open in another pane moves there). */
+  async openInPane(path: string, pane: Pane): Promise<Doc | null> {
+    this.focusPane(pane);
+    const open = this.findDoc(path);
+    if (open) {
+      if (open.pane !== pane.id) this.moveDocToPane(open, pane);
+      else this.activate(open);
+      return open;
+    }
+    return this.openFile(path);
+  }
+
+  /** Opens a file to the side: in the pane on the right (made if needed). */
+  async openToSide(path: string) {
+    const pane = this.paneBeside("right") ?? this.splitPane(this.pane, "right");
+    if (!pane) return;
+    const doc = await this.openInPane(path, pane);
+    if (!doc && !this.docsOf(pane).length) this.closePane(pane);
+  }
+
+  /** The layout was changed from outside (a session restored): draw it. */
+  renderPanes() {
+    renderLayout(this, this.splitRoot);
+  }
+
+  // -------------------------------------------------------------------------
   // Workspace
 
   async openFolder(path?: string) {
@@ -1072,13 +1374,13 @@ export class App {
     if (!dir) return;
     if (path && !(await this.backend.stat(dir))?.isDir) {
       // A recent folder that was moved, deleted, or is on a disconnected drive.
-      this.recent = this.recent.filter((r) => !samePath(r, dir));
+      forgetFolder(dir);
       toast(`Folder not found: ${dir}`, { kind: "error" });
       this.emit("workspace");
       return;
     }
     this.workspace = dir;
-    this.recent = [dir, ...this.recent.filter((r) => !samePath(r, dir))].slice(0, 8);
+    folderOpened(dir);
     this.sidebar.visible = true;
     this.emit("workspace");
     await this.refreshWorkspaceFiles();
@@ -1235,8 +1537,9 @@ export class App {
   /** Every command (commands.ts), as the palette lists them. */
   commandList: Command[] = [];
 
+  /** The tabs shown in the bar of the pane that has the focus. */
   private visibleDocs() {
-    return this.docs.filter((d) => !this.isHidden(d) || d === this.active);
+    return this.docsOf(this.pane).filter((d) => !this.isHidden(d));
   }
 
   cycleTab(dir: number) {

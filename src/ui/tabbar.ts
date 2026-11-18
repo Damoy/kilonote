@@ -1,5 +1,7 @@
-// Tab bar: per-tab colors, browser-style collapsible groups,
-// mouse drag and drop (pointer events, works in WebView2 and WebKit).
+// The tab bar of a pane: per-tab colors, browser-style collapsible groups,
+// mouse drag and drop (pointer events, works in WebView2 and WebKit): within
+// the bar, onto another pane (or near its edge, for a new pane), or out of
+// the window.
 
 import type { App, Doc, TabGroup } from "../app/app";
 import { shortcutFor, titleWithKey } from "../core/commands";
@@ -13,11 +15,13 @@ import { copyText, renamePath } from "../app/files";
 import { openCommandPalette } from "../app/pickers";
 import { dropTabOutside, moveToNewWindow } from "../app/windows";
 import { isPinned, setPinned } from "../app/pins";
+import { DropIndicator, dropOn, dropTargetAt, type DropTarget, type Pane } from "./panes";
 
 export class TabBar {
   private scroller: HTMLElement;
   private dragging: {
-    doc: Doc; el: HTMLElement; startX: number; offset: number; active: boolean; pointerId: number; outside: boolean;
+    doc: Doc; el: HTMLElement; startX: number; startY: number; lastX: number; active: boolean; pointerId: number;
+    outside: boolean; own: boolean; target: DropTarget | null; indicator: DropIndicator | null;
   } | null = null;
   private marker = h("div", { class: "kn-tab-marker" });
   private wasCollapsed = new Set<string>();
@@ -25,17 +29,31 @@ export class TabBar {
   /** Preview / tree view of the active document (only when it has one). */
   private sideBtn = h("button", { class: "kn-side-btn" });
 
-  constructor(private app: App, private el: HTMLElement) {
+  private listeners: [Parameters<App["on"]>[0], () => void][];
+
+  constructor(private app: App, private el: HTMLElement, readonly pane: Pane) {
     this.scroller = h("div", { class: "kn-tabs" });
     this.listBtn = h("button", { class: "kn-icon-btn kn-tab-list", title: titleWithKey("All tabs", "tab.list"), onclick: (e: MouseEvent) => this.showTabList(e) }, icon("list"));
-    this.sideBtn.addEventListener("click", () => app.preview.toggle());
+    // (The buttons act on this pane: it takes the focus first.)
+    const here = (fn: () => unknown) => () => {
+      app.focusPane(pane);
+      fn();
+    };
+    this.sideBtn.addEventListener("click", here(() => app.preview.toggle()));
+    const splitBtn = h(
+      "button",
+      { class: "kn-icon-btn kn-split-btn", title: `${titleWithKey("Split right", "view.splitRight")} · Alt+click: split down` },
+      icon("splitRight"),
+    );
+    splitBtn.addEventListener("click", (e) => here(() => app.splitActive(e.altKey ? "bottom" : "right"))());
     const actions = h(
       "div",
       { class: "kn-tabbar-actions" },
       this.sideBtn,
       this.listBtn,
-      h("button", { class: "kn-icon-btn", title: titleWithKey("New note", "file.new"), onclick: () => app.newDoc() }, icon("plus")),
-      h("button", { class: "kn-icon-btn", title: titleWithKey("Command palette", "palette.commands"), onclick: () => openCommandPalette(app) }, icon("more")),
+      splitBtn,
+      h("button", { class: "kn-icon-btn kn-new-btn", title: titleWithKey("New note", "file.new"), onclick: here(() => app.newDoc()) }, icon("plus")),
+      h("button", { class: "kn-icon-btn kn-more-btn", title: titleWithKey("Command palette", "palette.commands"), onclick: here(() => openCommandPalette(app)) }, icon("more")),
     );
     // Shown only while the sidebar is hidden (see .no-sidebar in the CSS).
     const showSidebar = h("button", { class: "kn-icon-btn kn-show-sidebar", title: titleWithKey("Show sidebar", "view.sidebar"), onclick: () => app.sidebar.toggle() }, icon("panelOpen"));
@@ -47,22 +65,35 @@ export class TabBar {
       }
     }, { passive: false });
     this.scroller.addEventListener("dblclick", (e) => {
-      if (e.target === this.scroller) app.newDoc();
+      if (e.target === this.scroller) here(() => app.newDoc())();
     });
     // The list of all tabs shows up when they no longer fit.
-    new ResizeObserver(() => this.updateOverflow()).observe(this.scroller);
-    app.on("docs", () => this.render());
-    app.on("active", () => this.render());
-    app.on("settings", () => this.render());
-    app.on("workspace", () => this.updateSideBtn());
+    this.resizeObserver = new ResizeObserver(() => this.updateOverflow());
+    this.resizeObserver.observe(this.scroller);
+    const render = () => this.render();
+    this.listeners = [["docs", render], ["active", render], ["settings", render], ["workspace", () => this.updateSideBtn()]];
+    for (const [ev, fn] of this.listeners) app.on(ev, fn);
+  }
+
+  private resizeObserver: ResizeObserver;
+
+  /** The pane is closed. */
+  destroy() {
+    for (const [ev, fn] of this.listeners) this.app.off(ev, fn);
+    this.resizeObserver.disconnect();
+  }
+
+  /** The tabs of this pane, in order. */
+  private docs(): Doc[] {
+    return this.app.docs.filter((d) => d.pane === this.pane.id);
   }
 
   private updateSideBtn() {
-    const kind = sideKindFor(this.app.active);
+    const kind = sideKindFor(this.pane.active);
     this.sideBtn.hidden = !kind;
     if (!kind) return;
     const { label, icon: ic, title } = SIDE_LABELS[kind];
-    const on = this.app.preview?.visible ?? false;
+    const on = this.app.pane === this.pane && (this.app.preview?.visible ?? false);
     this.sideBtn.classList.toggle("active", on);
     this.sideBtn.title = titleWithKey(`${on ? "Hide" : "Show"} the ${title.toLowerCase()}`, "view.preview");
     this.sideBtn.setAttribute("aria-pressed", String(on));
@@ -85,13 +116,14 @@ export class TabBar {
     this.wasCollapsed = new Set(app.groups.filter((g) => g.collapsed).map((g) => g.id));
     const items: ({ group: TabGroup } | { doc: Doc; group?: TabGroup })[] = [];
     const seenGroups = new Set<string>();
-    for (const doc of app.docs) {
+    const active = this.pane.active;
+    for (const doc of this.docs()) {
       const group = doc.groupId ? app.groups.find((g) => g.id === doc.groupId) : undefined;
       if (group && !seenGroups.has(group.id)) {
         seenGroups.add(group.id);
         items.push({ group });
       }
-      if (group?.collapsed && doc !== app.active) continue;
+      if (group?.collapsed && doc !== active) continue;
       items.push({ doc, group });
     }
     const shown = items.map((i) => ("doc" in i ? `t${i.doc.id}` : `g${i.group.id}`)).join(",");
@@ -100,22 +132,22 @@ export class TabBar {
       // The same tabs: only their state changes (dirty, active, name…), no new elements.
       items.forEach((it, i) => {
         if ("doc" in it) this.applyTab(els[i], it.doc, it.group);
-        else els[i].replaceWith(this.renderGroupChip(it.group));
+        else if (els[i].dataset.sig !== this.groupSig(it.group)) els[i].replaceWith(this.renderGroupChip(it.group));
       });
     } else {
       this.scroller.replaceChildren(
         ...items.map((it) => {
           if (!("doc" in it)) return this.renderGroupChip(it.group);
           const tab = this.renderTab(it.doc, it.group);
-          if (it.group && opened.has(it.group.id) && it.doc !== app.active) tab.classList.add("appearing");
+          if (it.group && opened.has(it.group.id) && it.doc !== active) tab.classList.add("appearing");
           return tab;
         }),
       );
       this.shown = shown;
     }
     this.updateSideBtn();
-    if (app.active !== this.shownActive) {
-      this.shownActive = app.active;
+    if (active !== this.shownActive) {
+      this.shownActive = active;
       this.scroller.querySelector<HTMLElement>(".kn-tab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
     }
     // Measured once per frame (reading the widths forces a layout).
@@ -137,7 +169,7 @@ export class TabBar {
     const app = this.app;
     const items: MenuItem[] = [];
     let lastGroup: string | null = null;
-    for (const doc of app.docs) {
+    for (const doc of this.docs()) {
       if (doc.groupId !== lastGroup) {
         const g = app.groups.find((x) => x.id === doc.groupId);
         if (g) items.push({ header: g.name || "Group" });
@@ -148,7 +180,7 @@ export class TabBar {
         label: `${doc.dirty ? "● " : ""}${app.docName(doc)}`,
         color: doc.color ?? undefined,
         icon: doc.path ? fileIcon(doc.path, app.settings.archive_suffix)[0] : "file",
-        checked: doc === app.active,
+        checked: doc === this.pane.active,
         action: () => app.activate(doc),
       });
     }
@@ -157,8 +189,13 @@ export class TabBar {
     showMenu(items, r.right - 240, r.bottom + 4);
   }
 
+  /** What a group chip shows (it is redrawn only when that changes: a click on it is never lost). */
+  private groupSig(group: TabGroup) {
+    return `${group.name}|${group.color}|${group.collapsed}|${this.docs().filter((d) => d.groupId === group.id).length}`;
+  }
+
   private renderGroupChip(group: TabGroup) {
-    const count = this.app.docs.filter((d) => d.groupId === group.id).length;
+    const count = this.docs().filter((d) => d.groupId === group.id).length;
     const chip = h(
       "div",
       {
@@ -172,6 +209,7 @@ export class TabBar {
       h("span", { class: "kn-group-name" }, group.name || " "),
       group.collapsed ? h("span", { class: "kn-group-count" }, String(count)) : null,
     );
+    chip.dataset.sig = this.groupSig(group);
     chip.addEventListener("click", () => this.app.toggleGroup(group));
     chip.addEventListener("contextmenu", (e) => {
       e.preventDefault();
@@ -183,7 +221,7 @@ export class TabBar {
   /** Shows the state of a document on its tab (made by renderTab). */
   private applyTab(tab: HTMLElement, doc: Doc, group?: TabGroup) {
     const app = this.app;
-    const cls = `kn-tab${doc === app.active ? " active" : ""}${doc.dirty ? " dirty" : ""}${doc.missing ? " missing" : ""}${group ? " grouped" : ""}${doc.color ? " colored" : ""}`;
+    const cls = `kn-tab${doc === this.pane.active ? " active" : ""}${doc.dirty ? " dirty" : ""}${doc.missing ? " missing" : ""}${group ? " grouped" : ""}${doc.color ? " colored" : ""}`;
     if (tab.className !== cls) tab.className = cls;
     const tabColor = doc.color ? resolveColor(doc.color) : "";
     const groupColor = group ? resolveColor(group.color) : "";
@@ -203,7 +241,7 @@ export class TabBar {
     const app = this.app;
     const tab = h(
       "div",
-      { role: "tab" },
+      { role: "tab", "data-doc": String(doc.id) },
       h("span", { class: "kn-tab-name" }),
       h("button", { class: "kn-tab-close", title: "Close", tabindex: "-1" }, h("span", { class: "kn-tab-dirty" }), icon("x")),
     );
@@ -233,7 +271,10 @@ export class TabBar {
     if (e.button !== 0 || (e.target as HTMLElement).closest(".kn-tab-close")) return;
     this.app.activate(doc);
     const fresh = this.scroller.querySelector<HTMLElement>(".kn-tab.active") ?? el;
-    this.dragging = { doc, el: fresh, startX: e.clientX, offset: 0, active: false, pointerId: e.pointerId, outside: false };
+    this.dragging = {
+      doc, el: fresh, startX: e.clientX, startY: e.clientY, lastX: e.clientX, active: false, pointerId: e.pointerId,
+      outside: false, own: true, target: null, indicator: null,
+    };
     const move = (ev: PointerEvent) => this.onPointerMove(ev);
     const up = (ev: PointerEvent) => {
       window.removeEventListener("pointermove", move);
@@ -251,11 +292,12 @@ export class TabBar {
     if (!d) return;
     const dx = e.clientX - d.startX;
     if (!d.active) {
-      if (Math.abs(dx) < 5) return;
+      if (Math.abs(dx) < 5 && Math.abs(e.clientY - d.startY) < 5) return;
       d.active = true;
       d.el.classList.add("dragging");
       this.el.classList.add("is-dragging");
-      this.scroller.append(this.marker);
+      document.body.classList.add("kn-dragging");
+      d.indicator = new DropIndicator(this.app.docName(d.doc));
       // Keep receiving the pointer when it leaves the window (drop on another window).
       try {
         this.scroller.setPointerCapture(d.pointerId);
@@ -263,56 +305,88 @@ export class TabBar {
         /* not supported: the drop stays inside the window */
       }
     }
+    d.lastX = e.clientX;
     // Outside the window: the tab will move to another window.
     d.outside = e.clientX < 0 || e.clientY < 0 || e.clientX > innerWidth || e.clientY > innerHeight;
     this.el.classList.toggle("detaching", d.outside);
-    d.el.style.transform = `translateX(${dx}px)`;
-    const target = this.dropIndex(e.clientX);
-    const tabs = this.tabElements();
-    const ref = tabs[target.visualIndex];
-    const box = this.scroller.getBoundingClientRect();
-    const x = ref ? ref.getBoundingClientRect().left : (tabs[tabs.length - 1]?.getBoundingClientRect().right ?? box.left);
-    this.marker.style.left = `${x - box.left + this.scroller.scrollLeft - 1}px`;
+    // Over its own bar (or close to it), the tab follows the pointer; elsewhere, its name does.
+    const bar = this.el.getBoundingClientRect();
+    d.own = !d.outside && e.clientY >= bar.top - 6 && e.clientY <= bar.bottom + 6 && e.clientX >= bar.left && e.clientX <= bar.right;
+    if (d.own) {
+      d.target = null;
+      d.indicator!.update(null, e.clientX, e.clientY, false);
+      d.el.style.transform = `translateX(${dx}px)`;
+      this.showMarker(this.docAt(e.clientX));
+      return;
+    }
+    d.el.style.transform = "";
+    this.hideMarker();
+    d.target = d.outside ? null : dropTargetAt(this.app, e.clientX, e.clientY, d.doc);
+    d.indicator!.update(d.target, e.clientX, e.clientY, !d.outside, true);
   }
 
   private tabElements() {
     return [...this.scroller.querySelectorAll<HTMLElement>(".kn-tab")];
   }
 
-  /** Insertion index in app.docs for the given mouse position. */
-  private dropIndex(clientX: number): { docIndex: number; visualIndex: number } {
-    const tabs = this.tabElements();
-    const visibleDocs = this.app.docs.filter((d) => {
-      const g = d.groupId ? this.app.groups.find((x) => x.id === d.groupId) : null;
-      return !g?.collapsed || d === this.app.active;
-    });
-    for (let i = 0; i < tabs.length; i++) {
-      const r = tabs[i].getBoundingClientRect();
-      if (clientX < r.left + r.width / 2) return { docIndex: this.app.docs.indexOf(visibleDocs[i]), visualIndex: i };
+  /** The tab before which a tab dropped at `clientX` goes (null: at the end). */
+  docAt(clientX: number): Doc | null {
+    for (const tab of this.tabElements()) {
+      if (tab === this.dragging?.el) continue;
+      const r = tab.getBoundingClientRect();
+      if (clientX < r.left + r.width / 2) return this.app.docs.find((d) => String(d.id) === tab.dataset.doc) ?? null;
     }
-    return { docIndex: this.app.docs.length, visualIndex: tabs.length };
+    return null;
+  }
+
+  /** The insertion mark, before the tab of `before` (at the end for null). */
+  showMarker(before: Doc | null) {
+    const tabs = this.tabElements().filter((t) => t !== this.dragging?.el);
+    const ref = before ? tabs.find((t) => t.dataset.doc === String(before.id)) : undefined;
+    const box = this.scroller.getBoundingClientRect();
+    const x = ref ? ref.getBoundingClientRect().left : (tabs[tabs.length - 1]?.getBoundingClientRect().right ?? box.left);
+    if (this.marker.parentElement !== this.scroller) this.scroller.append(this.marker);
+    this.marker.style.left = `${x - box.left + this.scroller.scrollLeft - 1}px`;
+  }
+
+  hideMarker() {
+    this.marker.remove();
   }
 
   private onPointerUp(e: PointerEvent | null) {
     const d = this.dragging;
     if (!d) return;
-    if (d.active) {
-      const pointerX = d.startX + (parseFloat(d.el.style.transform.replace(/[^\d.-]/g, "")) || 0);
-      const { docIndex } = this.dropIndex(pointerX);
-      d.el.style.transform = "";
-      d.el.classList.remove("dragging");
-      this.el.classList.remove("is-dragging", "detaching");
-      this.marker.remove();
-      this.dragging = null;
-      if (d.outside && e) {
-        void dropTabOutside(this.app, d.doc, e.screenX, e.screenY);
-        return;
-      }
-      this.app.moveDoc(d.doc, docIndex);
-    } else this.dragging = null;
+    this.dragging = null;
+    if (!d.active) {
+      this.app.focusEditor();
+      return;
+    }
+    const before = d.own ? this.docAtExcept(d.lastX, d.doc) : null;
+    d.el.style.transform = "";
+    d.el.classList.remove("dragging");
+    this.el.classList.remove("is-dragging", "detaching");
+    document.body.classList.remove("kn-dragging");
+    this.hideMarker();
+    d.indicator?.remove();
+    if (!e) return;
+    if (d.outside) {
+      void dropTabOutside(this.app, d.doc, e.screenX, e.screenY);
+      return;
+    }
+    if (d.own) this.app.placeDoc(d.doc, this.pane, before);
+    else if (d.target) void dropOn(this.app, d.target, { doc: d.doc });
     this.app.focusEditor();
   }
 
+  /** docAt, once the dragged tab is back in place. */
+  private docAtExcept(clientX: number, doc: Doc): Doc | null {
+    for (const tab of this.tabElements()) {
+      if (tab.dataset.doc === String(doc.id)) continue;
+      const r = tab.getBoundingClientRect();
+      if (clientX < r.left + r.width / 2) return this.app.docs.find((x) => String(x.id) === tab.dataset.doc) ?? null;
+    }
+    return null;
+  }
   // ---------------------------------------------------------------------------
   // Menus
 
@@ -332,12 +406,18 @@ export class TabBar {
 
   private showTabMenu(doc: Doc, x: number, y: number) {
     const app = this.app;
-    const idx = app.docs.indexOf(doc);
+    const mine = this.docs();
+    const idx = mine.indexOf(doc);
+    const alone = mine.length < 2;
     const items: MenuItem[] = [
       { label: "Close", icon: "x", shortcut: shortcutFor("tab.close"), action: () => app.closeDoc(doc) },
-      { label: "Close others", action: () => app.closeMany(app.docs.filter((d) => d !== doc)) },
-      { label: "Close tabs to the right", disabled: idx === app.docs.length - 1, action: () => app.closeMany(app.docs.slice(idx + 1)) },
+      { label: "Close others", disabled: alone, action: () => app.closeMany(mine.filter((d) => d !== doc)) },
+      { label: "Close tabs to the right", disabled: idx === mine.length - 1, action: () => app.closeMany(mine.slice(idx + 1)) },
       { label: "Close all", shortcut: shortcutFor("tab.closeAll"), action: () => app.closeMany([...app.docs]) },
+      { separator: true },
+      { label: "Split right", icon: "splitRight", shortcut: shortcutFor("view.splitRight"), action: () => app.splitDoc(doc, "right") },
+      { label: "Split down", icon: "splitDown", shortcut: shortcutFor("view.splitDown"), action: () => app.splitDoc(doc, "bottom") },
+      ...(app.panes.length > 1 ? [{ label: "Move to the next pane", action: () => app.moveToNextPane(doc) }] : []),
       { label: "Move to new window", icon: "newWindow", disabled: !doc.path, action: () => moveToNewWindow(app, doc) },
       doc.path && isPinned(doc.path)
         ? { label: "Unpin note", icon: "pin", action: () => setPinned(doc.path!, false) }

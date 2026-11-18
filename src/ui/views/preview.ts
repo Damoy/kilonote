@@ -9,6 +9,7 @@
 
 import { ensureSyntaxTree } from "@codemirror/language";
 import type { Text } from "@codemirror/state";
+import type { EditorView } from "@codemirror/view";
 import type { App, Doc } from "../../app/app";
 import { handleKeydown } from "../../core/commands";
 import { extname, stem } from "../../core/path";
@@ -232,10 +233,10 @@ export class Preview {
     this.rendered = this.runsDoc;
   }
 
-  /** Called once the editor exists. */
-  attach() {
-    this.app.view.scrollDOM.addEventListener("scroll", () => {
-      if (this.views.markdown) this.follow(this.app.view.scrollDOM, this.views.markdown.el);
+  /** Called for the editor of each pane: the preview follows the scrolling of the one that has the focus. */
+  attach(view: EditorView) {
+    view.scrollDOM.addEventListener("scroll", () => {
+      if (view === this.app.view && this.views.markdown) this.follow(view.scrollDOM, this.views.markdown.el);
     });
   }
 

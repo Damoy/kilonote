@@ -59,6 +59,23 @@ it to the tasks of one tag (a client, a topic…).
 - Ctrl+Shift+T: reopen the last closed tab.
 - When the tabs no longer fit, the list button at the right shows them all.
 
+## Split view
+
+See several notes at once in the same window, side by side or one above the other.
+Each pane has its own tabs.
+
+- **Drag a tab** (or a file of the explorer) toward an edge of the editor: the zone where
+  it would land lights up ("Split right", "Split down"…). Drop it there for a new pane on
+  that side; in the middle of another pane, the tab moves to that pane.
+- **Ctrl+Alt+→** / **Ctrl+Alt+↓**: the current tab moves to a new pane on the right /
+  below (alone in its pane, it stays, and the new pane waits for a note).
+- Right-click a tab → "Split right", "Move to the next pane"; right-click a file of the
+  explorer → "Open to the side".
+- **F6** / **Shift+F6**: the next / previous pane. Drag the line between two panes to
+  resize them (double-click: same size).
+- Closing the last tab of a pane closes the pane; command palette → "View: Join all
+  panes" puts every tab back in one pane. The panes come back at the next launch.
+
 ## Windows
 
 - **Ctrl+Shift+N**: new window. Each window has its own tabs and folder.
@@ -67,6 +84,8 @@ it to the tasks of one tag (a client, a topic…).
 - Right-click a folder → "Open folder in new window".
 - Every window comes back the next time you open KiloNote.
 - The sidebar and the folder close from the buttons at the top of the sidebar (or Ctrl+B).
+- **Ctrl+Alt+O**: a folder you opened lately (in any window). Clicking the folder's name
+  at the top of the explorer lists them too.
 
 ## Navigation
 

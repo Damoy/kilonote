@@ -146,6 +146,15 @@ open it as a folder and follow its `README.md`.
 - **Pinned and recent notes**: right-click a note (in the explorer or on its tab) →
   *Pin to the top*: it stays above the folder tree and first in **Go to file** (Ctrl+P), from
   any folder. The notes opened lately come next in Go to file and on the welcome screen
+- **Split view**: several notes side by side or one above the other, in the same window, each
+  pane with its own tabs. Drag a tab (or a file of the explorer) toward an edge of the editor:
+  the zone where it would land lights up (*Split right*, *Split down*…), drop it there. Or
+  **Ctrl+Alt+→** / **Ctrl+Alt+↓** (the tab moves to a new pane on the right / below), *Open to
+  the side* in the explorer's menu, *Split right* in a tab's menu. Drag the separator to resize
+  (double-click: same size), **F6** moves to the next pane, closing a pane's last tab closes the
+  pane, *View: Join all panes* puts every tab back together. The panes come back at the next launch
+- **Recent folders**: **Ctrl+Alt+O** (*Folder: Open recent*), or click the folder's name at the
+  top of the explorer; shared by all windows
 - **Several windows** (Ctrl+Shift+N), each with its own tabs and folder; drag a tab onto another
   window (or out of the window to open a new one); every window comes back at the next launch
 - Colored tabs and **tab groups** with a name and a color; click a group to collapse it into a

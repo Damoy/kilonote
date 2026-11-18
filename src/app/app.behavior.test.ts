@@ -15,12 +15,14 @@ import { openDailyNote } from "./templates";
 import { openNoteLink } from "./links";
 import { provideCommands, provideFiles } from "./pickers";
 import { copyRich, exportHtml, printNote } from "./export";
-import { pinnedNotes, setPinned } from "./pins";
+import { mergeRecentFolders, pinnedNotes, recentFolders, setPinned } from "./pins";
 import { slashMenu } from "../editor/slash";
 import { SECRET_BEGIN, SECRET_END } from "../text/secrets";
 import { encryptSelection, revealSecret } from "./secrets";
 import { secretsField } from "../editor/secrets";
 import { saveSessionNow } from "./session";
+import { dropOn, dropTargetAt } from "../ui/panes";
+import { runCommand } from "../core/commands";
 import { archiveLines, changeTaskInNote, cycleTasks } from "./tasks";
 
 interface Disk {
@@ -171,7 +173,7 @@ const type = (app: App, text: string) => app.view.dispatch({ changes: { from: ap
 beforeEach(() => {
   document.body.innerHTML = `
     <div id="app"><aside id="sidebar"></aside><div id="sb-resizer"></div>
-      <main id="main"><div id="tabbar"></div><div id="editor-host"></div><div id="welcome" hidden></div></main>
+      <main id="main"><div id="editor-area"><div id="editor-host"></div><div id="preview" hidden></div></div><div id="welcome" hidden></div></main>
       <footer id="statusbar"></footer></div>
     <div id="overlay-root"></div>`;
 });
@@ -270,6 +272,191 @@ describe("session", () => {
   });
 });
 
+describe("panes", () => {
+  const names = (el: Element) => [...el.querySelectorAll(".kn-tab-name")].map((e) => e.textContent);
+  const rect = (left: number, top: number, width: number, height: number) => () =>
+    ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
+
+  it("split right: the tab moves to a new pane, and each pane edits its own note", async () => {
+    const { app, disk } = await start({ "/notes/a.txt": "A", "/notes/b.txt": "B" });
+    const a = (await app.openFile("/notes/a.txt"))!;
+    const b = (await app.openFile("/notes/b.txt"))!;
+    app.splitActive("right");
+    const [left, right] = app.panes;
+    expect([left.active, right.active]).toEqual([a, b]);
+    expect(app.active).toBe(b);
+    expect(document.querySelectorAll(".kn-split.row > .kn-pane")).toHaveLength(2);
+    expect(document.querySelectorAll(".kn-split.row > .kn-split-resizer")).toHaveLength(1);
+    expect(names(left.tabbarEl)).toEqual(["a.txt"]);
+    expect(names(right.tabbarEl)).toEqual(["b.txt"]);
+    type(app, "!");
+    app.focusPane(left);
+    expect(app.active).toBe(a);
+    type(app, "?");
+    expect(a.state.doc.toString()).toBe("A?");
+    expect(b.state.doc.toString()).toBe("B!");
+    expect(right.view.state.doc.toString()).toBe("B!");
+    // A note changed on disk is reloaded in the pane that shows it, with the focus or not.
+    await app.save(b);
+    disk.external("/notes/b.txt", "B from disk");
+    await app.checkExternalChanges();
+    expect(right.view.state.doc.toString()).toBe("B from disk");
+    expect(app.active).toBe(a);
+  });
+
+  it("closing the last tab of a pane closes it; the other pane gets the focus", async () => {
+    const { app } = await start({ "/notes/a.txt": "A", "/notes/b.txt": "B" });
+    const a = (await app.openFile("/notes/a.txt"))!;
+    const b = (await app.openFile("/notes/b.txt"))!;
+    app.splitActive("bottom");
+    expect(document.querySelectorAll(".kn-split.column > .kn-pane")).toHaveLength(2);
+    await app.closeDoc(b);
+    expect(app.panes).toHaveLength(1);
+    expect(app.active).toBe(a);
+    expect(document.querySelector(".kn-split")).toBeNull();
+  });
+
+  it("a tab alone in its pane: the new pane waits for a note, which opens there", async () => {
+    const { app } = await start({ "/notes/a.txt": "A", "/notes/b.txt": "B", "/notes/c.txt": "C" });
+    const a = (await app.openFile("/notes/a.txt"))!;
+    app.splitActive("right");
+    const [left, right] = app.panes;
+    expect(left.active).toBe(a);
+    expect(app.pane).toBe(right);
+    expect(app.active).toBeNull();
+    expect(right.el.classList.contains("empty")).toBe(true);
+    // No welcome screen in a split: the pane says what to do.
+    expect(document.getElementById("welcome")!.hidden).toBe(true);
+    const c = (await app.openFile("/notes/c.txt"))!;
+    expect(right.active).toBe(c);
+    expect(names(right.tabbarEl)).toEqual(["c.txt"]);
+    // A note open in another pane moves to the pane waiting for one (its pane, left empty, closes).
+    app.splitActive("bottom");
+    const below = app.pane;
+    expect(below.active).toBeNull();
+    await app.openFile("/notes/a.txt");
+    expect(below.active).toBe(a);
+    expect(app.panes).toHaveLength(2);
+    expect(app.panes.includes(left)).toBe(false);
+    // Close in a pane without tabs: the pane closes.
+    app.splitActive("right");
+    expect(app.panes).toHaveLength(3);
+    runCommand("tab.close");
+    expect(app.panes).toHaveLength(2);
+    expect(app.active).toBe(a);
+  });
+
+  it("the panes come back with the session: each tab in its pane, the focus where it was", async () => {
+    const files = { "/notes/a.txt": "A", "/notes/b.txt": "B", "/notes/c.txt": "C" };
+    const first = await start(files);
+    await first.app.openFile("/notes/a.txt");
+    await first.app.openFile("/notes/b.txt");
+    first.app.splitActive("right");
+    await first.app.openFile("/notes/c.txt");
+    first.app.focusPane(first.app.panes[0]);
+    saveSessionNow(first.app);
+    await tick(5);
+    const session = first.disk.text("/config/session.json")!;
+    document.body.innerHTML = `
+      <div id="app"><aside id="sidebar"></aside><div id="sb-resizer"></div>
+        <main id="main"><div id="editor-area"><div id="editor-host"></div><div id="preview" hidden></div></div><div id="welcome" hidden></div></main>
+        <footer id="statusbar"></footer></div>
+      <div id="overlay-root"></div>`;
+    const { backend } = memoryBackend({ "/config/settings.json": SETTINGS(), "/config/session.json": session, ...files });
+    const app = new App(backend);
+    await app.init();
+    const [left, right] = app.panes;
+    expect(app.panes).toHaveLength(2);
+    expect(app.docsOf(left).map((d) => d.title)).toEqual(["a.txt"]);
+    expect(app.docsOf(right).map((d) => d.title)).toEqual(["b.txt", "c.txt"]);
+    expect(right.active?.title).toBe("c.txt");
+    expect(app.pane).toBe(left);
+    expect(app.active?.title).toBe("a.txt");
+    expect(right.view.state.doc.toString()).toBe("C");
+  });
+
+  it("a pane waiting for a note is not restored, and the tabs stay in their panes", async () => {
+    const files = { "/notes/a.txt": "A", "/notes/b.txt": "B" };
+    const first = await start(files);
+    await first.app.openFile("/notes/a.txt");
+    await first.app.openFile("/notes/b.txt");
+    first.app.splitActive("right");
+    first.app.splitActive("right");
+    expect(first.app.panes).toHaveLength(3);
+    expect(first.app.active).toBeNull();
+    saveSessionNow(first.app);
+    await tick(5);
+    const session = first.disk.text("/config/session.json")!;
+    document.body.innerHTML = `
+      <div id="app"><aside id="sidebar"></aside><div id="sb-resizer"></div>
+        <main id="main"><div id="editor-area"><div id="editor-host"></div><div id="preview" hidden></div></div><div id="welcome" hidden></div></main>
+        <footer id="statusbar"></footer></div>
+      <div id="overlay-root"></div>`;
+    const { backend } = memoryBackend({ "/config/settings.json": SETTINGS(), "/config/session.json": session, ...files });
+    const app = new App(backend);
+    await app.init();
+    expect(app.panes.map((p) => app.docsOf(p).map((d) => d.title))).toEqual([["a.txt"], ["b.txt"]]);
+    expect(app.active?.title).toBe("b.txt");
+  });
+
+  it("a tab or a file dropped near the edge of a pane opens in a new pane on that side", async () => {
+    const { app } = await start({ "/notes/a.txt": "A", "/notes/b.txt": "B", "/notes/c.txt": "C" });
+    const a = (await app.openFile("/notes/a.txt"))!;
+    const b = (await app.openFile("/notes/b.txt"))!;
+    const main = app.pane;
+    main.tabbarEl.getBoundingClientRect = rect(0, 0, 600, 38);
+    main.body.getBoundingClientRect = rect(0, 38, 600, 400);
+    // A file near the right edge: a split on the right; in the middle: this pane.
+    expect(dropTargetAt(app, 590, 200, null)).toEqual({ kind: "zone", pane: main, zone: "right" });
+    expect(dropTargetAt(app, 300, 200, null)).toEqual({ kind: "zone", pane: main, zone: "center" });
+    expect(dropTargetAt(app, 300, 10, null)).toMatchObject({ kind: "tabs", pane: main });
+    // A tab over its own pane: only a split, and only if another tab stays behind.
+    expect(dropTargetAt(app, 300, 200, b)).toBeNull();
+    expect(dropTargetAt(app, 590, 200, b)).toEqual({ kind: "zone", pane: main, zone: "right" });
+    await dropOn(app, { kind: "zone", pane: main, zone: "right" }, { doc: b });
+    const right = app.paneById(b.pane)!;
+    expect(app.panes).toHaveLength(2);
+    expect(right).not.toBe(main);
+    expect(main.active).toBe(a);
+    // Alone in its pane, a tab cannot split it.
+    expect(dropTargetAt(app, 590, 200, a)).toBeNull();
+    // A file from the explorer, below the right pane.
+    await dropOn(app, { kind: "zone", pane: right, zone: "bottom" }, { path: "/notes/c.txt" });
+    expect(app.active?.title).toBe("c.txt");
+    expect(app.panes).toHaveLength(3);
+    expect(document.querySelectorAll(".kn-split.column .kn-pane")).toHaveLength(2);
+    // The tab of the left pane dropped in the middle of another pane: it moves there, its pane closes.
+    await dropOn(app, { kind: "zone", pane: right, zone: "center" }, { doc: a });
+    expect(app.panes).toHaveLength(2);
+    expect(app.docsOf(right).map((d) => d.title)).toEqual(["b.txt", "a.txt"]);
+    // Onto the tabs of a pane, before one of them.
+    const c = app.findDoc("/notes/c.txt")!;
+    await dropOn(app, { kind: "tabs", pane: right, before: b }, { doc: c });
+    expect(app.docsOf(right).map((d) => d.title)).toEqual(["c.txt", "b.txt", "a.txt"]);
+    expect(app.panes).toHaveLength(1);
+  });
+
+  it("open to the side, move to the next pane, join all panes", async () => {
+    const { app } = await start({ "/notes/a.txt": "A", "/notes/b.txt": "B", "/notes/c.txt": "C" });
+    await app.openFile("/notes/a.txt");
+    await app.openFile("/notes/b.txt");
+    await app.openToSide("/notes/c.txt");
+    expect(app.panes).toHaveLength(2);
+    const [left, right] = app.panes;
+    expect(app.docsOf(right).map((d) => d.title)).toEqual(["c.txt"]);
+    // To the side again: the pane on the right takes it (a tab open on the left moves).
+    app.focusPane(left);
+    await app.openToSide("/notes/a.txt");
+    expect(app.docsOf(right).map((d) => d.title)).toEqual(["c.txt", "a.txt"]);
+    app.moveToNextPane(app.active!);
+    expect(app.docsOf(left).map((d) => d.title)).toEqual(["b.txt", "a.txt"]);
+    app.joinPanes();
+    expect(app.panes).toHaveLength(1);
+    expect(app.docs.map((d) => d.title).sort()).toEqual(["a.txt", "b.txt", "c.txt"]);
+    expect(names(app.pane.tabbarEl).sort()).toEqual(["a.txt", "b.txt", "c.txt"]);
+  });
+});
+
 describe("local history", () => {
   it("names sort by time and keep the kind; Windows paths hash case-insensitively", () => {
     const name = historyName("C:\\Notes\\work_v2.txt", "disk", new Date(2026, 10, 7, 9, 5, 3, 7));
@@ -334,11 +521,28 @@ describe("replace in files", () => {
 
 describe("folders", () => {
   it("a recent folder that no longer exists is not opened, and leaves the list", async () => {
+    localStorage.clear();
     const { app } = await start({});
-    app.recent = ["/gone", "/notes"];
+    mergeRecentFolders(["/gone", "/notes"]);
     await app.openFolder("/gone");
     expect(app.workspace).toBeNull();
     expect(app.recent).toEqual(["/notes"]);
+  });
+
+  it("the recent folders are shared by the windows, the last opened first, and older sessions add theirs", async () => {
+    localStorage.clear();
+    const session = {
+      version: 1, workspace: null, recent: ["/old/a", "/notes"], active: -1, groups: [],
+      sidebar: { visible: true, width: 260, panel: "files", expanded: [] }, tabs: [],
+    };
+    const { backend, disk } = memoryBackend({ "/config/settings.json": SETTINGS(), "/config/session.json": JSON.stringify(session), "/notes/a.txt": "a", "/work/b.txt": "b" });
+    disk.dirs.add("/work");
+    const app = new App(backend);
+    await app.init();
+    expect(app.recent).toEqual(["/old/a", "/notes"]);
+    await app.openFolder("/work");
+    await app.openFolder("/notes");
+    expect(recentFolders()).toEqual(["/notes", "/work", "/old/a"]);
   });
 });
 

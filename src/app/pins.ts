@@ -1,14 +1,17 @@
-// Pinned and recent notes, kept at hand. A pinned note stays at the top of the
-// explorer and of "Go to file" until it is unpinned; the recent notes are the
-// ones opened lately (first in "Go to file" and on the welcome screen).
-// Both lists are kept by the app's web view, shared by its windows: nothing is
-// written into the notes folder.
+// Pinned and recent notes, and recent folders, kept at hand. A pinned note stays
+// at the top of the explorer and of "Go to file" until it is unpinned; the
+// recent notes are the ones opened lately (first in "Go to file" and on the
+// welcome screen); the recent folders, the ones opened lately (Folder: Open
+// recent). The lists are kept by the app's web view, shared by its windows:
+// nothing is written into the notes folder.
 
 import { isInside, samePath } from "../core/path";
 
 const PINS_KEY = "kilonote-pinned-notes";
 const RECENT_KEY = "kilonote-recent-notes";
+const FOLDERS_KEY = "kilonote-recent-folders";
 export const RECENT_MAX = 30;
+export const RECENT_FOLDERS_MAX = 15;
 const PINS_MAX = 50;
 
 function read(key: string): string[] {
@@ -21,7 +24,7 @@ function read(key: string): string[] {
 }
 
 /** Which list changed. */
-export type PinsChange = "pins" | "recent";
+export type PinsChange = "pins" | "recent" | "folders";
 
 const listeners = new Set<(change: PinsChange) => void>();
 const notify = (change: PinsChange) => {
@@ -34,7 +37,7 @@ function write(key: string, list: string[]) {
   } catch {
     /* storage unavailable: the lists stay as they were */
   }
-  notify(key === PINS_KEY ? "pins" : "recent");
+  notify(key === PINS_KEY ? "pins" : key === FOLDERS_KEY ? "folders" : "recent");
 }
 
 /** Called when a list changes, in this window or in another one. */
@@ -47,6 +50,7 @@ if (typeof window !== "undefined") {
   window.addEventListener("storage", (e) => {
     if (e.key === PINS_KEY || e.key === null) notify("pins");
     if (e.key === RECENT_KEY || e.key === null) notify("recent");
+    if (e.key === FOLDERS_KEY || e.key === null) notify("folders");
   });
 }
 
@@ -66,6 +70,28 @@ export function noteOpened(path: string) {
   write(RECENT_KEY, [path, ...list.filter((p) => !samePath(p, path))].slice(0, RECENT_MAX));
 }
 
+export const recentFolders = (): string[] => read(FOLDERS_KEY);
+
+/** A folder was opened: it goes first among the recent ones. */
+export function folderOpened(path: string) {
+  const list = recentFolders();
+  if (list[0] && samePath(list[0], path)) return;
+  write(FOLDERS_KEY, [path, ...list.filter((p) => !samePath(p, path))].slice(0, RECENT_FOLDERS_MAX));
+}
+
+/** A recent folder that is gone (moved, deleted, on a drive not connected), or removed from the list. */
+export function forgetFolder(path: string) {
+  const list = recentFolders();
+  if (list.some((p) => samePath(p, path))) write(FOLDERS_KEY, list.filter((p) => !samePath(p, path)));
+}
+
+/** Folders known from an older version (kept with the window's session), after the ones known here. */
+export function mergeRecentFolders(paths: string[]) {
+  const list = recentFolders();
+  const extra = paths.filter((p) => typeof p === "string" && p && !list.some((q) => samePath(p, q)));
+  if (extra.length) write(FOLDERS_KEY, [...list, ...extra].slice(0, RECENT_FOLDERS_MAX));
+}
+
 /** A note that could not be opened (deleted, moved by another program): no longer recent. */
 export function forgetRecent(path: string) {
   const list = recentNotes();
@@ -75,7 +101,7 @@ export function forgetRecent(path: string) {
 /** A file or a folder was renamed: its notes keep their pin and their place among the recent ones. */
 export function pathRenamed(from: string, to: string) {
   const move = (p: string) => (samePath(p, from) ? to : isInside(p, from) ? to + p.slice(from.length) : p);
-  for (const key of [PINS_KEY, RECENT_KEY]) {
+  for (const key of [PINS_KEY, RECENT_KEY, FOLDERS_KEY]) {
     const list = read(key);
     const next = list.map(move);
     if (next.some((p, i) => p !== list[i])) write(key, next);
@@ -85,7 +111,7 @@ export function pathRenamed(from: string, to: string) {
 /** A file or a folder went to the trash: its notes are neither pinned nor recent any more. */
 export function pathRemoved(path: string) {
   const gone = (p: string) => samePath(p, path) || isInside(p, path);
-  for (const key of [PINS_KEY, RECENT_KEY]) {
+  for (const key of [PINS_KEY, RECENT_KEY, FOLDERS_KEY]) {
     const list = read(key);
     if (list.some(gone)) write(key, list.filter((p) => !gone(p)));
   }

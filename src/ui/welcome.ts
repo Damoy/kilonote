@@ -13,6 +13,7 @@ const TIPS = [
   "{task.cycle} turns a line into a task, then cycles its status.",
   "{task.archive} moves the task to the _done file, stamped with today's date.",
   "Right-click a tab for colors and tab groups.",
+  "Drag a tab toward the right edge of the editor to see two notes side by side.",
   "{palette.symbol} jumps to a heading or a task of the note.",
   "The command palette ({palette.commands}) gives access to everything.",
   "Settings ({settings.open}): every option, also kept in a plain, commented JSON file.",
@@ -39,10 +40,12 @@ export class Welcome {
 
   render() {
     const app = this.app;
-    const visible = !app.active;
+    // No tab at all: the screen takes the place of the editor (the tab bar stays).
+    const visible = !app.active && app.panes.length < 2;
     this.el.hidden = !visible;
-    (document.getElementById("editor-area") ?? document.getElementById("editor-host")!).hidden = visible;
+    document.getElementById("editor-area")?.classList.toggle("no-doc", visible);
     if (!visible) return;
+    if (this.el.parentElement !== app.pane.body) app.pane.body.append(this.el);
     const key = (id: string) => shortcutFor(id);
     const action = (label: string, ic: string, id: string, run: () => unknown) =>
       h("button", { class: "wl-action", onclick: run }, icon(ic), h("span", {}, label), h("kbd", {}, key(id)));

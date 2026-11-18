@@ -68,7 +68,7 @@ async function run(code, ...args) {
   if (r?.err) throw new Error(r.err);
   return r?.ok;
 }
-const KEYS = { Control: "", Shift: "", Alt: "", Enter: "", Escape: "", F3: "" };
+const KEYS = { Control: "", Shift: "", Alt: "", Enter: "", Escape: "", F3: "", ArrowRight: "\uE014", F6: "\uE036" };
 /** A key chord, e.g. press("Control", "Enter"). */
 async function press(...keys) {
   const codes = keys.map((k) => KEYS[k] ?? k);
@@ -321,6 +321,19 @@ try {
     await until(async () => existsSync(file) && readFileSync(file, "utf8").includes('"theme": "latte"'), "settings.json");
     await press("Escape");
     expect(await run("return document.querySelector('.kn-settings') === null;"), true, "closed");
+  });
+
+  await test("split view: Ctrl+Alt+→ moves the tab to a new pane on the right; F6 goes back", async () => {
+    await run("await app.openFile(args[0]); await app.openFile(args[1]); app.focusEditor();", join(notes, "work.txt"), join(notes, "build.py"));
+    await press("Control", "Alt", "ArrowRight");
+    await until(() => run("return app.panes.length === 2;"), "two panes");
+    expect(await run("return document.querySelectorAll('.kn-split.row > .kn-pane').length;"), 2, "panes side by side");
+    expect(await run("return [app.panes[1].active?.title, app.pane === app.panes[1]];"), ["build.py", true], "right pane");
+    expect(await run("return !!app.panes[0].active && app.panes[0].active.title !== 'build.py';"), true, "left pane keeps a tab");
+    await press("F6");
+    expect(await run("return app.pane === app.panes[0];"), true, "focus on the left pane");
+    await run("app.joinPanes();");
+    expect(await run("return app.panes.length;"), 1, "joined");
   });
 
   await test("the session is saved", async () => {

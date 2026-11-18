@@ -64,6 +64,7 @@ export function showCheatSheet(app: App, opts: { startup?: boolean } = {}) {
       cmd("Today's note", "file.dailyNote"),
       cmd("Open file", "file.open"),
       cmd("Open folder", "folder.open"),
+      cmd("Recent folders", "folder.recent"),
       cmd("Save", "file.save"),
       cmd("Save as", "file.saveAs"),
       cmd("New window", "window.new"),
@@ -75,6 +76,12 @@ export function showCheatSheet(app: App, opts: { startup?: boolean } = {}) {
       cmd("Previous tab", "tab.prev"),
       ["Tab 1 to 9", goto ? goto.replace(/1$/, "1…9") : ""],
       cmd("Move to a new window", "window.moveTab"),
+    ]],
+    ["Split view", "splitRight", [
+      cmd("Split right", "view.splitRight"),
+      cmd("Split down", "view.splitDown"),
+      cmd("Next pane", "view.nextPane"),
+      fixed("With the mouse", "Drag a tab to an edge"),
     ]],
     ["Editing", "command", [
       cmd("Find", "edit.find"),

@@ -213,4 +213,6 @@ export const GENERAL_TIPS = [
   "{edit.copyRich} copies the note as rich text: paste it into an e-mail or a chat, tasks and colors included.",
   "Right-click a note → Pin to the top: it stays above the explorer and first in {palette.files}.",
   "Command palette → Print or save as PDF: the note alone on the page, ready for a PDF.",
+  "Drag a tab toward an edge of the editor to see two notes side by side; {view.splitRight} does it too.",
+  "{folder.recent} goes back to a folder opened lately, in any window.",
 ];

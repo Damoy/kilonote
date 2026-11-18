@@ -13,7 +13,9 @@ import { copyText, createFileIn, createFolderIn, renamePath, trashPath } from ".
 import { replaceInFiles } from "../app/history";
 import { changeTaskInNote, generateReport } from "../app/tasks";
 import { openBoard } from "./lazy";
+import { openRecentFolder } from "../app/pickers";
 import { pinnedNotes, setPinned } from "../app/pins";
+import { startFileDrag } from "./panes";
 
 export type Panel = "files" | "tasks" | "search";
 
@@ -280,10 +282,18 @@ export class Sidebar {
 
   private renderFilesHeader() {
     const app = this.app;
-    this.filesHeader.replaceChildren(
-      h("span", { class: "sb-title", title: app.workspace ?? "" }, app.workspace ? basename(app.workspace) : "Explorer"),
-      h("span", { class: "kn-spacer" }),
+    // The folder's name: a click lists the recent folders.
+    const title = h(
+      "button",
+      { class: "sb-title sb-title-btn", title: `${app.workspace ? `${app.workspace}\n` : ""}${titleWithKey("Recent folders", "folder.recent")}` },
+      h("span", {}, app.workspace ? basename(app.workspace) : "Explorer"),
+      icon("chevronDown", "sb-title-caret"),
     );
+    title.addEventListener("click", () => {
+      const r = title.getBoundingClientRect();
+      this.recentFoldersMenu(r.left, r.bottom + 4);
+    });
+    this.filesHeader.replaceChildren(title, h("span", { class: "kn-spacer" }));
     if (app.workspace) {
       const ws = app.workspace;
       this.filesHeader.append(
@@ -294,6 +304,22 @@ export class Sidebar {
         h("button", { class: "kn-icon-btn", title: "Close folder", onclick: () => app.closeFolder() }, icon("x")),
       );
     }
+  }
+
+  /** The recent folders (in any window), to switch to one; then opening another one. */
+  private recentFoldersMenu(x: number, y: number) {
+    const app = this.app;
+    const others = app.recent.filter((r) => !app.workspace || !samePath(r, app.workspace)).slice(0, 10);
+    const items: MenuItem[] = [{ header: others.length ? "Recent folders" : "No other recent folder" }];
+    // (Two folders of the same name: their parent tells them apart.)
+    const named = (r: string) => others.filter((o) => basename(o) === basename(r)).length > 1 ? `${basename(r)} · ${basename(dirname(r))}` : basename(r) || r;
+    for (const r of others) items.push({ label: named(r), icon: "folder", action: () => app.openFolder(r) });
+    items.push(
+      { separator: true },
+      { label: "Open folder…", icon: "folderOpen", shortcut: shortcutFor("folder.open"), action: () => app.openFolder() },
+      { label: "Search the recent folders…", icon: "search", shortcut: shortcutFor("folder.recent"), action: () => openRecentFolder(app) },
+    );
+    showMenu(items, x, y);
   }
 
   expand(dir: string) {
@@ -384,6 +410,8 @@ export class Sidebar {
           }
         } else void this.app.openFile(e.path);
       });
+      // A file dragged onto a pane opens there (near an edge: in a new pane on that side).
+      if (!e.isDir) row.addEventListener("pointerdown", (ev) => startFileDrag(this.app, ev, e.path));
       row.addEventListener("contextmenu", (ev) => {
         ev.preventDefault();
         if (e.isDir) this.showDirMenu(e.path, ev.clientX, ev.clientY);
@@ -421,6 +449,7 @@ export class Sidebar {
           unpin,
         );
         row.addEventListener("click", () => void app.openFile(p));
+        row.addEventListener("pointerdown", (ev) => startFileDrag(app, ev, p));
         row.addEventListener("contextmenu", (ev) => {
           ev.preventDefault();
           this.showFileMenu(p, ev.clientX, ev.clientY);
@@ -517,6 +546,7 @@ export class Sidebar {
     showMenu(
       [
         { label: "Open", icon: "file", action: () => app.openFile(path) },
+        { label: "Open to the side", icon: "splitRight", action: () => app.openToSide(path) },
         { label: "Open in new window", icon: "newWindow", action: () => app.backend.openWindow([path]) },
         pinnedNotes().some((p) => samePath(p, path))
           ? { label: "Unpin", icon: "pin", action: () => setPinned(path, false) }

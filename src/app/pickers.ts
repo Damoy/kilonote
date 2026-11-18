@@ -2,7 +2,7 @@
 // color, Kilo's color and document type.
 
 import { runCommand, shortcutFor, type Command } from "../core/commands";
-import { basename, dirname, isDoneFile, isWindowsPath, relative } from "../core/path";
+import { basename, dirname, isDoneFile, isWindowsPath, relative, samePath } from "../core/path";
 import { applyMascot, findTheme, MASCOT_VARIANTS, PALETTE_LABELS, THEMES } from "../core/themes";
 import { fuzzyFilter } from "../core/fuzzy";
 import { type LangId } from "../editor/setup";
@@ -10,7 +10,7 @@ import { LANGUAGES } from "../editor/languages";
 import { parseTask } from "../text/tasks";
 import { openPicker, type PickItem } from "../ui/palette";
 import type { App, Doc } from "./app";
-import { forgetRecent, pinnedNotes, recentNotes } from "./pins";
+import { forgetRecent, pinnedNotes, recentFolders, recentNotes } from "./pins";
 
 /** Picker of the document types (status bar, palette). */
 export function selectLanguage(app: App, doc = app.active) {
@@ -188,6 +188,33 @@ export function provideFiles(app: App, q: string) {
     }),
     empty: app.workspace ? "No matching file" : `Open a folder to search your notes (${shortcutFor("folder.open")})`,
   };
+}
+
+/** Folder: Open recent: the folders opened lately, in any window (the last one first). */
+export function openRecentFolder(app: App) {
+  openPicker({
+    placeholder: "Recent folder…",
+    provide: (q) => {
+      const folders = recentFolders();
+      const results = fuzzyFilter(q, folders, (p) => p);
+      const items: PickItem[] = results.map(({ item, result }) => {
+        const name = basename(item) || item;
+        const offset = item.length - name.length;
+        return {
+          label: name,
+          detail: item,
+          positions: result.positions.filter((i) => i >= offset).map((i) => i - offset),
+          detailPositions: result.positions,
+          icon: "folder",
+          hint: app.workspace && samePath(item, app.workspace) ? "open" : undefined,
+          value: item,
+        };
+      });
+      if (!q) items.push({ label: "Open another folder…", icon: "folderOpen", hint: shortcutFor("folder.open"), value: null });
+      return { items, empty: folders.length ? "No matching folder" : "No recent folder yet" };
+    },
+    pick: (it) => app.openFolder((it.value as string | null) ?? undefined),
+  });
 }
 
 export function selectTheme(app: App) {

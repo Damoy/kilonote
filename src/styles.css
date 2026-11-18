@@ -115,7 +115,72 @@ body.resizing * { pointer-events: none; }
 #editor-area { flex: 1; min-height: 0; display: flex; }
 #editor-area[hidden] { display: none; }
 #editor-host { flex: 1; min-height: 0; min-width: 0; position: relative; }
-#editor-host .cm-editor { position: absolute; inset: 0; }
+
+/* ------------------------------------------------------------------ Panes */
+
+/* The panes of the window, side by side or one above the other (ui/panes.ts). */
+.kn-split-root { position: absolute; inset: 0; display: flex; }
+.kn-split { display: flex; min-width: 0; min-height: 0; }
+.kn-split.row { flex-direction: row; }
+.kn-split.column { flex-direction: column; }
+.kn-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1 1 0; }
+.kn-pane-body { position: relative; flex: 1; min-height: 0; min-width: 0; }
+.kn-pane-body > .cm-editor { position: absolute; inset: 0; }
+.kn-pane.empty .kn-pane-body > .cm-editor { visibility: hidden; }
+.kn-pane-body > #welcome { position: absolute; inset: 0; z-index: 2; }
+#editor-area.no-doc .kn-kilo { display: none; }
+/* A pane without tabs (a new split): what to do. */
+.kn-pane-hint {
+  display: none; position: absolute; inset: 0; z-index: 1; outline: none;
+  flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  padding: 24px; text-align: center; color: var(--kn-fg-muted); background: var(--kn-bg);
+}
+.kn-split-root.split .kn-pane.empty .kn-pane-hint { display: flex; }
+.kn-pane-hint p { margin: 0 0 6px; }
+.kn-pane-hint-icon { width: 40px; height: 40px; color: var(--kn-fg-faint); margin-bottom: 8px; }
+.kn-pane-hint-keys { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; }
+.kn-pane-hint kbd { font-size: 11.5px; color: var(--kn-fg-faint); letter-spacing: 0.02em; }
+.kn-pane-hint .kn-btn { margin-top: 12px; }
+/* The separators between panes: drag to resize. */
+.kn-split-resizer { flex: none; position: relative; z-index: 3; }
+.kn-split.row > .kn-split-resizer { width: 5px; margin: 0 -2px; cursor: col-resize; }
+.kn-split.column > .kn-split-resizer { height: 5px; margin: -2px 0; cursor: row-resize; }
+.kn-split-resizer::after { content: ""; position: absolute; background: var(--kn-border); transition: background 100ms; }
+.kn-split.row > .kn-split-resizer::after { top: 0; bottom: 0; left: 2px; width: 1px; }
+.kn-split.column > .kn-split-resizer::after { left: 0; right: 0; top: 2px; height: 1px; }
+.kn-split-resizer:hover::after, .kn-split-resizer:active::after { background: var(--kn-accent); }
+body.resizing.rows { cursor: row-resize; }
+/* Split: the palette button once (top left pane); a narrow pane keeps its room for its tabs. */
+.kn-split-root.split .kn-tabbar:not(.lead) .kn-more-btn { display: none; }
+@container (max-width: 440px) {
+  .kn-tabbar-actions :is(.kn-split-btn, .kn-new-btn, .kn-more-btn) { display: none; }
+  .kn-side-btn { padding: 0 6px; }
+  .kn-side-btn > span:not(.kn-icon) { display: none; }
+}
+/* The panes without the focus: their tab is shown, without the accent line. */
+.kn-split-root.split .kn-pane:not(.focused) .kn-tab.active:not(.colored) { --accent-line: color-mix(in srgb, var(--kn-fg) 18%, transparent); color: var(--kn-fg-muted); }
+
+/* Dragging a tab or a file: where it would land, and its name under the pointer. */
+.kn-drop-zone {
+  position: fixed; z-index: 90; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--kn-accent) 14%, transparent);
+  border: 2px solid color-mix(in srgb, var(--kn-accent) 65%, transparent); border-radius: 8px;
+  transition: left 90ms var(--ease), top 90ms var(--ease), width 90ms var(--ease), height 90ms var(--ease);
+}
+.kn-drop-label {
+  display: inline-flex; align-items: center; gap: 7px; padding: 6px 14px; border-radius: 999px;
+  background: var(--kn-accent); color: var(--kn-bg); font-weight: 650; box-shadow: var(--shadow);
+}
+.kn-drop-label .kn-icon { width: 15px; height: 15px; }
+.kn-drag-ghost {
+  position: fixed; left: 0; top: 0; z-index: 91; pointer-events: none;
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px;
+  background: var(--kn-bg-alt); color: var(--kn-fg); border: 1px solid var(--kn-border); box-shadow: var(--shadow);
+  white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis;
+}
+.kn-drag-ghost .kn-icon { width: 14px; height: 14px; color: var(--kn-fg-muted); }
+body.kn-dragging, body.kn-dragging * { cursor: grabbing !important; user-select: none !important; -webkit-user-select: none !important; }
 
 #statusbar {
   grid-column: 1 / -1; grid-row: 2;
@@ -129,15 +194,15 @@ body.resizing * { pointer-events: none; }
 }
 
 /* Zen mode: only the text, centered. */
-body.zen #sidebar, body.zen #sb-resizer, body.zen #tabbar, body.zen #statusbar { display: none; }
+body.zen #sidebar, body.zen #sb-resizer, body.zen .kn-tabbar, body.zen #statusbar { display: none; }
 body.zen #app { grid-template-columns: 0 minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 0; }
 body.zen .cm-content { max-width: 78ch; margin: 0 auto; padding-top: 8vh !important; }
 body.zen .cm-gutters { display: none !important; }
 
 /* ------------------------------------------------------------------ Tabs */
 
-#tabbar {
-  flex: none; display: flex; align-items: stretch;
+.kn-tabbar {
+  flex: none; container-type: inline-size; display: flex; align-items: stretch;
   height: var(--bar-h);
   background: var(--kn-bg-alt);
   border-bottom: 1px solid var(--kn-border);
@@ -150,7 +215,7 @@ body.zen .cm-gutters { display: none !important; }
 .kn-tabs::-webkit-scrollbar { display: none; }
 .kn-tabbar-actions { display: flex; align-items: center; gap: 2px; padding: 0 6px; border-left: 1px solid var(--kn-border); }
 .kn-show-sidebar { display: none; flex: none; align-self: center; margin: 0 4px 0 8px; }
-#app.no-sidebar .kn-show-sidebar { display: inline-flex; }
+#app.no-sidebar .kn-tabbar.lead .kn-show-sidebar { display: inline-flex; }
 .sb-hide { margin-left: 2px; }
 
 .kn-tab {
@@ -177,12 +242,12 @@ body.zen .cm-gutters { display: none !important; }
 .kn-tab.grouped.active::after { display: none; }
 .kn-tab.missing .kn-tab-name { text-decoration: line-through; opacity: 0.7; }
 .kn-tab.dragging { z-index: 3; background: var(--kn-bg-hover); box-shadow: var(--shadow); transition: none; opacity: 0.95; }
-#tabbar.is-dragging .kn-tab { pointer-events: none; }
+.kn-tabbar.is-dragging .kn-tab { pointer-events: none; }
 /* Dragged out of the window: the tab will move to another window. */
-#tabbar.detaching .kn-tab.dragging { opacity: 0.45; outline: 1px dashed var(--kn-accent); }
-#tabbar.detaching .kn-tab-marker { display: none; }
+.kn-tabbar.detaching .kn-tab.dragging { opacity: 0.45; outline: 1px dashed var(--kn-accent); }
+.kn-tabbar.detaching .kn-tab-marker { display: none; }
 /* The list of all tabs only when they no longer fit. */
-#tabbar:not(.overflowing) .kn-tab-list { display: none; }
+.kn-tabbar:not(.overflowing) .kn-tab-list { display: none; }
 .kn-tab-marker { position: absolute; top: 6px; bottom: 6px; width: 2px; border-radius: 1px; background: var(--kn-accent); pointer-events: none; }
 .kn-tab-icon { width: 14px; height: 14px; color: var(--kn-green); opacity: 0.8; }
 .kn-tab-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -249,6 +314,10 @@ body.zen .cm-gutters { display: none !important; }
   font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--kn-fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.sb-title-btn { display: inline-flex; align-items: center; gap: 4px; min-width: 0; padding: 3px 4px; margin-left: -4px; border-radius: 5px; }
+.sb-title-btn > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.sb-title-btn:hover { background: var(--kn-hover); color: var(--kn-fg); }
+.sb-title-caret { width: 12px; height: 12px; opacity: 0.7; }
 .sb-tree, .sb-list { flex: 1; min-height: 0; overflow: auto; padding-bottom: 12px; outline: none; }
 
 .sb-row {
@@ -469,7 +538,7 @@ button.st-item:hover { background: var(--kn-hover); color: var(--kn-fg); }
 
 /* ------------------------------------------------------------------ Welcome screen */
 
-#welcome { flex: 1; display: flex; align-items: center; justify-content: center; overflow: auto; background: var(--kn-bg); }
+#welcome { display: flex; align-items: center; justify-content: center; overflow: auto; background: var(--kn-bg); }
 .wl-inner { width: min(460px, 90%); display: flex; flex-direction: column; align-items: center; padding: 40px 0; }
 .kilo svg { width: 100%; height: 100%; overflow: visible; }
 /* 40×40 drawn pixels: 160 px = 4 screen pixels per pixel, crisp rendering. */

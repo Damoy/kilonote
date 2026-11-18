@@ -120,8 +120,9 @@ export function titleWithKey(label: string, id: string): string {
 }
 
 export function formatCombo(combo: string): string {
-  if (platform !== "macos") return combo.replace("ArrowUp", "↑").replace("ArrowDown", "↓");
-  const sym: Record<string, string> = { Ctrl: "⌃", Alt: "⌥", Shift: "⇧", Meta: "⌘", Enter: "↩", ArrowUp: "↑", ArrowDown: "↓" };
+  const arrows = (c: string) => c.replace("ArrowUp", "↑").replace("ArrowDown", "↓").replace("ArrowLeft", "←").replace("ArrowRight", "→");
+  if (platform !== "macos") return arrows(combo);
+  const sym: Record<string, string> = { Ctrl: "⌃", Alt: "⌥", Shift: "⇧", Meta: "⌘", Enter: "↩", ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→" };
   return combo.split("+").map((p) => sym[p] ?? p).join("");
 }
 

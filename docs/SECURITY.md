@@ -74,8 +74,9 @@ program.
   `<name>_done.txt` archive files it creates next to them on request, and the `.html`
   page of *File: Export as HTML page*, where the user chooses in the save dialog (never
   over a note open in a tab).
-- The pinned notes and the notes opened lately (their paths only) are kept in the web
-  view's local storage, in `%LOCALAPPDATA%\dev.damoy.kilonote\`: never in the notes folder.
+- The pinned notes, the notes and the folders opened lately (their paths only) are kept in
+  the web view's local storage, in `%LOCALAPPDATA%\dev.damoy.kilonote\`: never in the notes
+  folder.
 - Files are saved one at a time, when the user types or saves. "Replace in files" only
   rewrites the files of the folder the user opened, after a confirmation, keeps a copy of
   each in the local history and can be undone.

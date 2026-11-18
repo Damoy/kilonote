@@ -9,7 +9,7 @@ import { formatDocument } from "./editing";
 import { deleteUnusedImages } from "./images";
 import { copyText, renamePath } from "./files";
 import { showLocalHistory } from "./history";
-import { openCommandPalette, openQuickOpen, selectAccent, selectLanguage, selectMascot, selectTheme } from "./pickers";
+import { openCommandPalette, openQuickOpen, openRecentFolder, selectAccent, selectLanguage, selectMascot, selectTheme } from "./pickers";
 import { archiveAllDone, archiveSelection, cycleTasks, generateReport, generateTagReport, setDueDate, toggleDoneFile } from "./tasks";
 import { moveToNewWindow } from "./windows";
 import { isPinned, setPinned } from "./pins";
@@ -87,6 +87,12 @@ export function defaultKeybindings(app: App): Record<string, string> {
     "Mod+Shift+F3": "edit.prevOccurrence",
     "Mod+Shift+C": "edit.copyRich",
     "Mod+?": "help.shortcuts",
+    "Mod+Alt+ArrowRight": "view.splitRight",
+    "Mod+\\": "view.splitRight",
+    "Mod+Alt+ArrowDown": "view.splitDown",
+    F6: "view.nextPane",
+    "Shift+F6": "view.prevPane",
+    "Mod+Alt+O": "folder.recent",
   };
   if (app.backend.platform !== "macos") keys["Mod+H"] = "edit.replace";
   for (let i = 1; i <= 9; i++) keys[`Mod+${i}`] = `tab.goto.${i}`;
@@ -111,6 +117,7 @@ export function registerAllCommands(app: App) {
     { id: "window.moveTab", title: "Window: Move tab to new window", run: () => app.active && moveToNewWindow(app, app.active) },
     { id: "file.open", title: "File: Open…", run: async () => { for (const p of await app.backend.pickFiles()) await app.openFile(p); } },
     { id: "folder.open", title: "Folder: Open…", run: () => app.openFolder() },
+    { id: "folder.recent", title: "Folder: Open recent…", run: () => openRecentFolder(app) },
     { id: "folder.close", title: "Folder: Close", run: () => app.closeFolder() },
     { id: "file.save", title: "File: Save", run: () => app.active && app.save(app.active) },
     { id: "file.saveAs", title: "File: Save as…", run: () => app.active && app.saveAs(app.active) },
@@ -125,8 +132,9 @@ export function registerAllCommands(app: App) {
     { id: "file.toggleDone", title: "Tasks: Switch between note and its _done archive", run: () => toggleDoneFile(app) },
     { id: "file.reload", title: "File: Reload from disk", run: () => app.active && app.reloadDoc(app.active, true) },
     { id: "file.history", title: "File: Local history (earlier versions)…", run: () => showLocalHistory(app) },
-    { id: "tab.close", title: "Tab: Close", run: () => app.active && app.closeDoc(app.active) },
-    { id: "tab.closeOthers", title: "Tab: Close others", run: () => app.closeMany(app.docs.filter((d) => d !== app.active)) },
+    // (In a pane without tabs, Close closes the pane.)
+    { id: "tab.close", title: "Tab: Close", run: () => (app.active ? app.closeDoc(app.active) : app.closePane(app.pane)) },
+    { id: "tab.closeOthers", title: "Tab: Close the other tabs of the pane", run: () => app.closeMany(app.docsOf(app.pane).filter((d) => d !== app.active)) },
     { id: "tab.closeAll", title: "Tab: Close all", run: () => app.closeMany(app.docs) },
     { id: "tab.reopen", title: "Tab: Reopen last closed", run: () => app.reopenClosed() },
     { id: "tab.list", title: "Tab: List all tabs", run: () => app.tabbar.showTabList() },
@@ -138,6 +146,13 @@ export function registerAllCommands(app: App) {
     { id: "tab.toggleGroup", title: "Tab: Collapse or expand its group", run: () => app.toggleActiveGroup() },
     { id: "tab.collapseGroups", title: "Tab: Collapse all groups", run: () => app.setAllGroupsCollapsed(true) },
     { id: "tab.expandGroups", title: "Tab: Expand all groups", run: () => app.setAllGroupsCollapsed(false) },
+    { id: "tab.moveToNextPane", title: "Tab: Move to the next pane", run: () => app.active && app.moveToNextPane(app.active) },
+    { id: "view.splitRight", title: "View: Split right (the tab moves to a new pane, side by side)", run: () => app.splitActive("right") },
+    { id: "view.splitDown", title: "View: Split down (the tab moves to a new pane, below)", run: () => app.splitActive("bottom") },
+    { id: "view.nextPane", title: "View: Focus the next pane", run: () => app.focusNextPane(1) },
+    { id: "view.prevPane", title: "View: Focus the previous pane", run: () => app.focusNextPane(-1) },
+    { id: "view.closePane", title: "View: Close this pane (its tabs join the next one)", run: () => app.closePane(app.pane) },
+    { id: "view.joinPanes", title: "View: Join all panes (every tab in one pane)", run: () => app.joinPanes() },
     { id: "palette.commands", title: "Command palette", run: () => openCommandPalette(app) },
     { id: "palette.files", title: "Go to file…", run: () => openQuickOpen(app) },
     { id: "palette.line", title: "Go to line…", run: () => openQuickOpen(app, ":") },
