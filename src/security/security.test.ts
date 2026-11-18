@@ -111,10 +111,10 @@ describe("hardening of the Windows build and of the release", () => {
     expect(read("src-tauri/Cargo.toml")).not.toMatch(/devtools/);
   });
 
-  it("every GitHub Action is pinned to a commit", () => {
+  it("every GitHub Action is pinned to a commit (or is a workflow of this repository)", () => {
     for (const f of [".github/workflows/ci.yml", ".github/workflows/release.yml"]) {
       for (const line of read(f).split("\n").filter((l) => /^\s*-?\s*uses:/.test(l))) {
-        expect(line, `${f}: ${line.trim()}`).toMatch(/@[0-9a-f]{40}(\s|$)/);
+        expect(line, `${f}: ${line.trim()}`).toMatch(/@[0-9a-f]{40}(\s|$)|uses: \.\/\.github\/workflows\/[\w-]+\.yml$/);
       }
     }
   });

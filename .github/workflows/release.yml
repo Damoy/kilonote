@@ -1,19 +1,87 @@
 # Builds the Windows, macOS and Linux installers and publishes them in the
-# matching GitHub release. Triggered by scripts/release.sh (which pushes a
-# "vX.Y.Z" tag), or manually from the Actions tab.
+# matching GitHub release. Started by:
+#   - a new version on main (the "Version X.Y.Z" commit, e.g. from a Claude Code
+#     session): the workflow creates the vX.Y.Z tag itself;
+#   - the vX.Y.Z tag pushed by scripts/release.sh (with main: the run of main then
+#     sees the tag and does nothing, so nothing is built twice);
+#   - a run by hand from the Actions tab: releases the version on main again (to
+#     retry a failed release), or only shows what would happen ("dry run").
+# Steps: version (what to do, scripts/release-plan.sh) → check (the CI) → tag →
+# build → checksums and build provenance → Scoop and winget manifests.
 name: Release
 
 on:
   push:
+    branches: [main]
+    # (Path filters are not applied to tag pushes.)
+    paths: [src-tauri/tauri.conf.json]
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run: only show what would be released, publish nothing"
+        type: boolean
+        default: false
+
+# One release at a time; a release in progress is never cancelled.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 # Each job asks for what it needs, nothing more.
 permissions:
   contents: read
 
 jobs:
+  # What to release, if anything: the version of src-tauri/tauri.conf.json, and
+  # whether its tag still has to be created.
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      release: ${{ steps.plan.outputs.release }}
+      create_tag: ${{ steps.plan.outputs.create_tag }}
+      notes: ${{ steps.plan.outputs.notes }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - id: plan
+        env:
+          DRY_RUN: ${{ inputs.dry_run == true }}
+        run: bash scripts/release-plan.sh
+
+  # The same checks as on every push (tests, build, Rust, macOS, end-to-end):
+  # nothing is tagged, built or published before they pass.
+  check:
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    uses: ./.github/workflows/ci.yml
+
+  # A new version on main: its tag, on the commit that was checked. (A tag pushed
+  # with the workflow's token starts no other run: no second build.)
+  tag:
+    needs: [version, check]
+    if: needs.version.outputs.create_tag == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Tag v${{ needs.version.outputs.version }}
+        env:
+          V: ${{ needs.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$V" -m "KiloNote $V" "$GITHUB_SHA"
+          git push origin "v$V"
+
   build:
+    needs: [version, check, tag]
+    # (always(): also when the tag job was skipped, the tag being there already.)
+    if: always() && needs.version.outputs.release == 'true' && needs.check.result == 'success' && (needs.tag.result == 'success' || needs.tag.result == 'skipped')
     permissions:
       contents: write
     strategy:
@@ -28,7 +96,10 @@ jobs:
             args: ""
     runs-on: ${{ matrix.platform }}
     steps:
+      # Exactly the tagged commit.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v${{ needs.version.outputs.version }}
 
       - name: System dependencies (Linux)
         if: matrix.platform == 'ubuntu-22.04'
@@ -74,6 +145,10 @@ jobs:
             code-signed yet: see the [README](https://github.com/Damoy/kilonote#install) for the
             first-launch steps, and the [security sheet](https://github.com/Damoy/kilonote/blob/main/docs/SECURITY.md)
             for managed workstations.
+
+            ## Changes
+
+            ${{ needs.version.outputs.notes }}
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
@@ -93,7 +168,9 @@ jobs:
   # SHA-256 checksums of every installer, published with the release
   # (to verify a file, or to allow it by hash in a corporate environment).
   checksums:
-    needs: build
+    needs: [version, build]
+    # (Spelled out: the build ran with always(), after a tag job that may be skipped.)
+    if: always() && needs.build.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -106,8 +183,8 @@ jobs:
       - name: SHA256SUMS.txt
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: v${{ needs.version.outputs.version }}
         run: |
-          TAG="v$(jq -r .version src-tauri/tauri.conf.json)"
           mkdir assets && cd assets
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY"
           rm -f SHA256SUMS.txt
@@ -121,7 +198,8 @@ jobs:
 
   # Scoop and winget manifests of the new version (packaging/), committed to main.
   packaging:
-    needs: checksums
+    needs: [version, checksums]
+    if: always() && needs.checksums.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -130,12 +208,15 @@ jobs:
         with:
           ref: main
       - name: Update the manifests
+        env:
+          # The version released by this run (main may hold a newer one by now).
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then VERSION="${GITHUB_REF_NAME#v}"; else VERSION=$(jq -r .version src-tauri/tauri.conf.json); fi
           bash scripts/update-packaging.sh "$VERSION"
           git add packaging
           if git diff --cached --quiet; then exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Packaging manifests for $VERSION"
-          git push
+          # (main may have moved while the release was built.)
+          git push || { git pull --rebase origin main && git push; }

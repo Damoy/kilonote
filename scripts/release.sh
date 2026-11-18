@@ -10,12 +10,15 @@
 #
 # Steps:
 #   1. checks that everything is clean (main branch, nothing uncommitted, "origin" remote);
-#   2. bumps the version everywhere (package.json, tauri.conf.json, Cargo.toml, Cargo.lock);
+#   2. bumps the version everywhere (scripts/bump-version.mjs: package.json, package-lock.json,
+#      tauri.conf.json, Cargo.toml, Cargo.lock);
 #   3. runs the tests and the build;
 #   4. commits "Version X.Y.Z", tags vX.Y.Z, pushes.
 #
 # GitHub Actions (.github/workflows/release.yml) then builds the Windows, macOS
-# and Linux installers and publishes them in the vX.Y.Z release.
+# and Linux installers and publishes them in the vX.Y.Z release. (Without a PC,
+# e.g. from a Claude Code session: npm run version:bump -- patch, commit
+# "Version X.Y.Z", push to main: the workflow tags and releases it. See AGENTS.md.)
 #
 #   --local    also builds the Windows installer here and creates the release right
 #              away with the GitHub CLI (gh), without waiting for CI
@@ -33,7 +36,7 @@ for arg in "$@"; do
   case "$arg" in
     --local) LOCAL=1 ;;
     --dry-run) DRY=1 ;;
-    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
     patch|minor|major) BUMP="$arg" ;;
     [0-9]*.[0-9]*.[0-9]*) BUMP="$arg" ;;
     *) die "Unknown argument: $arg (see --help)" ;;
@@ -53,13 +56,7 @@ if [ "$LOCAL" = 1 ]; then
 fi
 
 CURRENT=$(node -p "require('./package.json').version")
-NEXT=$(node -e '
-  const [cur, bump] = process.argv.slice(1);
-  const [a, b, c] = cur.split(".").map(Number);
-  const next = bump === "major" ? [a + 1, 0, 0] : bump === "minor" ? [a, b + 1, 0] : bump === "patch" ? [a, b, c + 1] : bump.split(".").map(Number);
-  if (next.some(Number.isNaN)) process.exit(1);
-  console.log(next.join("."));
-' "$CURRENT" "$BUMP") || die "Invalid version: $BUMP"
+NEXT=$(node scripts/bump-version.mjs "$BUMP" --print 2>/dev/null) || die "Invalid version: $BUMP"
 TAG="v$NEXT"
 git rev-parse "$TAG" >/dev/null 2>&1 && die "Tag $TAG already exists"
 PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
@@ -74,24 +71,8 @@ if [ "$DRY" = 1 ]; then
 fi
 
 # --- 2. Version numbers -----------------------------------------------------
-# (first release of the current version: nothing to change, just tag it)
-[ "$NEXT" != "$CURRENT" ] && node -e '
-  const fs = require("fs");
-  const v = process.argv[1];
-  for (const f of ["package.json", "src-tauri/tauri.conf.json"]) {
-    const j = JSON.parse(fs.readFileSync(f, "utf8"));
-    j.version = v;
-    fs.writeFileSync(f, JSON.stringify(j, null, 2) + "\n");
-  }
-  const lock = JSON.parse(fs.readFileSync("package-lock.json", "utf8"));
-  lock.version = v;
-  if (lock.packages && lock.packages[""]) lock.packages[""].version = v;
-  fs.writeFileSync("package-lock.json", JSON.stringify(lock, null, 2) + "\n");
-  const cargo = fs.readFileSync("src-tauri/Cargo.toml", "utf8").replace(/^version = ".*"$/m, `version = "${v}"`);
-  fs.writeFileSync("src-tauri/Cargo.toml", cargo);
-  const clock = fs.readFileSync("src-tauri/Cargo.lock", "utf8").replace(/(name = "kilonote"\nversion = ")[^"]+/, `$1${v}`);
-  fs.writeFileSync("src-tauri/Cargo.lock", clock);
-' "$NEXT"
+# (scripts/bump-version.mjs; first release of the current version: nothing to change, just tag it)
+[ "$NEXT" != "$CURRENT" ] && node scripts/bump-version.mjs "$NEXT" >/dev/null
 
 # --- 3. Checks: tests and build ---------------------------------------------
 say "Tests and build…"

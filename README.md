@@ -449,6 +449,8 @@ another of the eight), then build as usual; `npm run icons` brings the classic p
 
 ## Release a new version
 
+**From a PC:**
+
 ```bash
 npm run release -- patch            # 0.1.0 → 0.1.1   (minor: 0.2.0, major: 1.0.0, or an explicit 1.4.2)
 npm run release -- patch --dry-run  # shows what would happen
@@ -456,11 +458,20 @@ npm run release -- patch --dry-run  # shows what would happen
 
 The script checks that everything is committed, bumps the version everywhere, runs the tests,
 creates the `Version X.Y.Z` commit and the `vX.Y.Z` tag, then pushes to GitHub. GitHub
-Actions then builds the installers for the three systems and publishes them, with their
-checksums, in the release. With `--local`, the Windows installer is built on your machine and
-published right away with the [GitHub CLI](https://cli.github.com). Once the checksums are
-online, the workflow also updates the Scoop and winget manifests in `packaging/`
+Actions then checks the code again, builds the installers for the three systems and publishes
+them, with their checksums, in the release. With `--local`, the Windows installer is built on
+your machine and published right away with the [GitHub CLI](https://cli.github.com). Once the
+checksums are online, the workflow also updates the Scoop and winget manifests in `packaging/`
 (`scripts/update-packaging.sh`).
+
+**From a phone (Claude Code):** in a Claude Code session on this repository, ask for a patch,
+minor or major version. The session bumps the version (`npm run version:bump -- patch`), runs
+the tests and pushes the `Version X.Y.Z` commit. If it pushed a branch, merge its pull request
+in the GitHub app. When a new version reaches `main`, the release workflow runs the checks,
+creates the `vX.Y.Z` tag itself, builds the three systems and publishes the release: it appears
+on the Releases page about 15 to 25 minutes later (follow it in Actions → Release). A failed
+release can be run again from Actions → Release → Run workflow; *Dry run* only shows what
+would be released. See [AGENTS.md](AGENTS.md) for the details.
 
 ## Development
 
@@ -479,7 +490,8 @@ src/
   security/     tests that lock the security rules (CSP, sandbox, no innerHTML, permissions)
   vendor/       small stand-ins for optional dependencies that are left out
 src-tauri/      native Rust backend: atomic reads/writes, archives, trash, single instance
-scripts/        Windows builds (WSL or PowerShell), releases, packaging manifests, pixel art icons
+scripts/        Windows builds (WSL or PowerShell), releases and version bump, packaging
+                manifests, pixel art icons, cloud session setup
 packaging/      Scoop and winget manifests
 examples/       sample files for the side views
 e2e/            end-to-end tests of the real app (WebDriver)

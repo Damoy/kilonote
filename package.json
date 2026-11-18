@@ -24,6 +24,7 @@
     "install:windows": "bash scripts/build-windows.sh --install",
     "install:linux": "bash scripts/install-linux.sh",
     "release": "bash scripts/release.sh",
+    "version:bump": "node scripts/bump-version.mjs",
     "test:e2e": "node e2e/app.e2e.mjs"
   },
   "dependencies": {

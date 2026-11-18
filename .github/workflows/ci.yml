@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Also run by the release workflow, before anything is built or published.
+  workflow_call:
 
 # Read-only token: CI never writes to the repository.
 permissions:
@@ -24,6 +26,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # A half bump (the version changed in some of its five places only) is never merged.
+      - name: The version is the same everywhere
+        run: node scripts/check-versions.mjs
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
