@@ -73,19 +73,25 @@ npm run version:bump -- patch   # or minor, major, X.Y.Z: prints the new version
 npm test
 npm run build
 git add -A && git commit -m "Version X.Y.Z"
-git pull --rebase origin main   # the release workflow commits packaging manifests to main
-git push                        # main if allowed, otherwise this session's branch
 ```
 
-The commit must only bump the version (do the work in earlier commits). When `main`
-receives a new version, `.github/workflows/release.yml` runs the checks, creates the tag
-`vX.Y.Z`, builds Windows, macOS and Linux and publishes the release "KiloNote vX.Y.Z" with
-the list of changes (about 15 to 25 minutes). If the push went to a branch, tell Damoy to
-merge the pull request from the GitHub app (Pull requests → the PR → Merge): the release
-starts once it is merged. Do not create the tag yourself.
+The commit must only bump the version (do the work in earlier commits). Then push:
 
-If a release fails, it can be run again from the GitHub app or site: Actions → Release →
-Run workflow (on main). "Dry run" only shows what would be released.
+- **to `main`** when the session may: `git pull --rebase origin main` first (the release
+  workflow commits packaging manifests to `main` after each release), then `git push origin HEAD:main`;
+- **otherwise to the session's branch**: `git push -u origin HEAD` (if the branch was pushed
+  before, `git merge origin/main` rather than a rebase: never force-push), and tell Damoy to
+  merge the pull request from the GitHub app (Pull requests → the PR → Merge). The release
+  starts once it is merged.
+
+When `main` receives a new version, `.github/workflows/release.yml` runs the checks, creates
+the tag `vX.Y.Z`, builds Windows, macOS and Linux and publishes the release "KiloNote vX.Y.Z"
+with the list of changes (about 15 to 25 minutes). Do not create the tag yourself.
+
+If the checks fail, nothing is tagged or published. Fix the problem on `main` (a fix alone
+does not start the release: only a change of `src-tauri/tauri.conf.json` does), then run the
+release by hand: Actions → Release → Run workflow, on `main`. The same button retries a
+release whose build failed. "Dry run" only shows what would be released.
 
 ## What works in a cloud session
 

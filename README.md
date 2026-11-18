@@ -469,9 +469,10 @@ minor or major version. The session bumps the version (`npm run version:bump -- 
 the tests and pushes the `Version X.Y.Z` commit. If it pushed a branch, merge its pull request
 in the GitHub app. When a new version reaches `main`, the release workflow runs the checks,
 creates the `vX.Y.Z` tag itself, builds the three systems and publishes the release: it appears
-on the Releases page about 15 to 25 minutes later (follow it in Actions → Release). A failed
-release can be run again from Actions → Release → Run workflow; *Dry run* only shows what
-would be released. See [AGENTS.md](AGENTS.md) for the details.
+on the Releases page about 15 to 25 minutes later (follow it in Actions → Release). If the
+checks fail, nothing is published: once fixed, run the release again from Actions → Release →
+Run workflow (on `main`); *Dry run* only shows what would be released. See [AGENTS.md](AGENTS.md)
+for the details.
 
 ## Development
 

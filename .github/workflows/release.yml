@@ -23,9 +23,10 @@ on:
         type: boolean
         default: false
 
-# One release at a time; a release in progress is never cancelled.
+# One release at a time; a release in progress is never cancelled. A dry run has
+# a group of its own: it never waits for a release, nor replaces one that waits.
 concurrency:
-  group: release
+  group: ${{ inputs.dry_run && format('release-dry-run-{0}', github.run_id) || 'release' }}
   cancel-in-progress: false
 
 # Each job asks for what it needs, nothing more.
@@ -207,11 +208,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
+          fetch-tags: true
       - name: Update the manifests
         env:
           # The version released by this run (main may hold a newer one by now).
           VERSION: ${{ needs.version.outputs.version }}
         run: |
+          # An older version released again (a retry) leaves the manifests of the newest one.
+          git fetch --quiet --tags origin
+          NEWEST=$(git tag -l 'v[0-9]*' --sort=-v:refname | head -n 1)
+          if [ "v$VERSION" != "$NEWEST" ]; then
+            echo "v$VERSION is not the newest version ($NEWEST): the manifests stay as they are."
+            exit 0
+          fi
           bash scripts/update-packaging.sh "$VERSION"
           git add packaging
           if git diff --cached --quiet; then exit 0; fi
