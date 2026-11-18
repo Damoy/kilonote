@@ -110,6 +110,9 @@ export function registerStatusCommands(app: App) {
   registerCommands(cmds);
 }
 
+/** Commands of the desktop app only (several windows, the file manager, the system dialogs, printing). */
+export const DESKTOP_ONLY_COMMANDS = new Set(["window.new", "window.moveTab", "file.open", "file.reveal", "file.print"]);
+
 export function registerAllCommands(app: App) {
   const cmds: Command[] = [
     { id: "file.new", title: "File: New note", run: () => app.newDoc() },
@@ -209,6 +212,6 @@ export function registerAllCommands(app: App) {
   for (let i = 1; i <= 9; i++) {
     cmds.push({ id: `tab.goto.${i}`, title: `Tab ${i}`, hidden: true, run: () => app.gotoTab(i) });
   }
-  app.commandList = cmds;
-  registerCommands(cmds);
+  app.commandList = app.desktop ? cmds : cmds.filter((c) => !DESKTOP_ONLY_COMMANDS.has(c.id));
+  registerCommands(app.commandList);
 }

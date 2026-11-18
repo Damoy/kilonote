@@ -10,14 +10,35 @@ import { isProbablyBinary } from "../core/path";
 
 /** A file of the repository, from its root. */
 const read = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), "utf8");
+/** The native backend: the library (lib.rs) and the desktop executable that starts it (main.rs). */
+const rustSource = () => read("src-tauri/src/lib.rs") + read("src-tauri/src/main.rs");
+/** The capabilities of the windows: desktop, and the Android app. */
+const CAPABILITIES = ["src-tauri/capabilities/default.json", "src-tauri/capabilities/mobile.json"];
 
 describe("no program execution", () => {
   it("the window capabilities grant no way to open or run files", () => {
-    const caps = JSON.parse(read("src-tauri/capabilities/default.json")) as { permissions: unknown[] };
-    const ids = caps.permissions.map((p) => (typeof p === "string" ? p : (p as { identifier: string }).identifier));
-    for (const id of ids) {
-      expect(id).not.toMatch(/open-path|^shell:|^process:|execute|spawn/);
+    for (const f of CAPABILITIES) {
+      const caps = JSON.parse(read(f)) as { permissions: unknown[] };
+      const ids = caps.permissions.map((p) => (typeof p === "string" ? p : (p as { identifier: string }).identifier));
+      for (const id of ids) {
+        expect(id, f).not.toMatch(/open-path|^shell:|^process:|execute|spawn/);
+      }
     }
+  });
+
+  it("the Android app has fewer permissions than the desktop one, and asks the system for nothing but the network", () => {
+    const ids = (f: string) =>
+      (JSON.parse(read(f)) as { permissions: unknown[] }).permissions.map((p) => (typeof p === "string" ? p : (p as { identifier: string }).identifier));
+    const desktop = new Set(ids(CAPABILITIES[0]));
+    for (const id of ids(CAPABILITIES[1])) expect(desktop.has(id), id).toBe(true);
+    expect(ids(CAPABILITIES[1])).not.toContain("opener:allow-reveal-item-in-dir");
+    expect((JSON.parse(read(CAPABILITIES[0])) as { platforms: string[] }).platforms).not.toContain("android");
+    // The manifest: no access to the phone's files, contacts, camera… (the notes stay in the app's folder).
+    const manifest = read("src-tauri/gen/android/app/src/main/AndroidManifest.xml");
+    const asked = [...manifest.matchAll(/uses-permission android:name="([^"]+)"/g)].map((m) => m[1]);
+    expect(asked).toEqual(["android.permission.INTERNET"]);
+    // Plain http only in the debug build (the release has usesCleartextTraffic false).
+    expect(read("src-tauri/gen/android/app/build.gradle.kts")).toMatch(/defaultConfig \{\s*manifestPlaceholders\["usesCleartextTraffic"\] = "false"/);
   });
 
   it("no shell or process plugin is compiled in", () => {
@@ -28,12 +49,12 @@ describe("no program execution", () => {
   });
 
   it("the native backend never starts a process", () => {
-    const rust = read("src-tauri/src/main.rs");
+    const rust = rustSource();
     expect(rust).not.toMatch(/std::process::Command|Command::new|ShellExecute|CreateProcess/);
   });
 
   it("the video protocol only reads video files, piece by piece, and media load from nowhere else", () => {
-    const rust = read("src-tauri/src/main.rs");
+    const rust = rustSource();
     expect(rust).toMatch(/register_asynchronous_uri_scheme_protocol\("knmedia"/);
     const types = /const VIDEO_TYPES: &\[\(&str, &str\)\] = &\[([\s\S]*?)\];/.exec(rust)![1];
     const exts = [...types.matchAll(/\("(\w+)",/g)].map((m) => m[1]);
@@ -46,7 +67,7 @@ describe("no program execution", () => {
   });
 
   it("the image commands only read and write image files, and never overwrite one", () => {
-    const rust = read("src-tauri/src/main.rs");
+    const rust = rustSource();
     expect(rust).toMatch(/const IMAGE_EXTS: &\[&str\] = &\["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"\];/);
     const fn = (name: string) => rust.slice(rust.indexOf(`fn ${name}(`), rust.indexOf("\n}\n", rust.indexOf(`fn ${name}(`)));
     expect(fn("read_image")).toMatch(/if !is_image_path\(&p\)/);
@@ -85,12 +106,14 @@ describe("previews never run the content", () => {
 
 describe("hardening of the Windows build and of the release", () => {
   it("links: only web pages and e-mail addresses, at both ends", async () => {
-    const caps = read("src-tauri/capabilities/default.json");
-    expect(caps).not.toContain("opener:default");
-    const opener = (JSON.parse(caps) as { permissions: unknown[] }).permissions.find(
-      (p) => typeof p === "object" && (p as { identifier: string }).identifier === "opener:allow-open-url",
-    ) as { allow: { url: string }[] };
-    expect(opener.allow.map((a) => a.url).sort()).toEqual(["http://*", "https://*", "mailto:*"]);
+    for (const f of CAPABILITIES) {
+      const caps = read(f);
+      expect(caps, f).not.toContain("opener:default");
+      const opener = (JSON.parse(caps) as { permissions: unknown[] }).permissions.find(
+        (p) => typeof p === "object" && (p as { identifier: string }).identifier === "opener:allow-open-url",
+      ) as { allow: { url: string }[] };
+      expect(opener.allow.map((a) => a.url).sort(), f).toEqual(["http://*", "https://*", "mailto:*"]);
+    }
     const { isSafeUrl } = await import("../core/backend");
     for (const ok of ["https://example.com/a?b=1", "http://x.y", "mailto:a@b.c"]) expect(isSafeUrl(ok), ok).toBe(true);
     for (const bad of ["file:///C:/Windows/System32/calc.exe", "C:\\\\x.exe", "ms-settings:", "search-ms:query=x", "ms-msdt:/id", "javascript:alert(1)", "tel:123", "https://a b", "\\\\\\\\server\\\\share"])

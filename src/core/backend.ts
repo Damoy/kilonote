@@ -31,7 +31,7 @@ export interface Entry {
   path: string;
   isDir: boolean;
 }
-export type Platform = "windows" | "macos" | "linux";
+export type Platform = "windows" | "macos" | "linux" | "android";
 
 /** Links KiloNote hands to the system: web pages and e-mail addresses only. */
 export function isSafeUrl(url: string): boolean {
@@ -101,6 +101,8 @@ export interface Backend {
 
 function detectPlatform(): Platform {
   const ua = navigator.userAgent;
+  // (Before Linux: the Android user agent names Linux too.)
+  if (/Android/i.test(ua)) return "android";
   if (/Windows/i.test(ua)) return "windows";
   if (/Mac/i.test(ua)) return "macos";
   return "linux";
@@ -120,10 +122,14 @@ export async function createTauriBackend(): Promise<Backend> {
   const opener = await import("@tauri-apps/plugin-opener");
   const win = getCurrentWindow();
   let cfgDir: string | null = null;
+  const platform = detectPlatform();
+  // Android: the app's notes folder (opened at startup); new files are saved there.
+  let notesDir: string | null = null;
+  const android = platform === "android";
 
   return {
     kind: "tauri",
-    platform: detectPlatform(),
+    platform,
     readText: (path) => invoke<FileText>("read_text", { path }),
     writeText: (path, text, encoding) => invoke<Written>("write_text", { path, text, encoding: encoding ?? null }),
     appendLines: (path, lines) => invoke<Meta>("append_lines", { path, lines }),
@@ -143,7 +149,11 @@ export async function createTauriBackend(): Promise<Backend> {
       return cfgDir;
     },
     windowLabel: win.label,
-    windowPaths: () => invoke<string[]>("window_paths"),
+    windowPaths: async () => {
+      const paths = await invoke<string[]>("window_paths");
+      if (android && paths[0]) notesDir = paths[0];
+      return paths;
+    },
     openWindow: async (paths, label, position) =>
       void (await invoke<string>("open_window", { paths, label: label ?? null, position: position ? [position.x, position.y] : null })),
     windowCount: () => invoke<number>("window_count"),
@@ -158,14 +168,18 @@ export async function createTauriBackend(): Promise<Backend> {
       });
     },
     async pickFolder() {
+      // (Android: the system pickers give documents, not paths; the notes stay in the app's folder.)
+      if (android) return notesDir;
       const r = await dialog.open({ directory: true, multiple: false, title: "Open folder" });
       return typeof r === "string" ? r : null;
     },
     async pickFiles() {
+      if (android) return [];
       const r = await dialog.open({ multiple: true, title: "Open files" });
       return Array.isArray(r) ? r : r ? [r] : [];
     },
     async pickSavePath(defaultPath) {
+      if (android) return askSavePath(defaultPath, notesDir);
       return (await dialog.save({ defaultPath, title: "Save as" })) ?? null;
     },
     // Only web and mail links, in the default browser or mail app (the window
@@ -181,8 +195,9 @@ export async function createTauriBackend(): Promise<Backend> {
     setZoom: (scale) => getCurrentWebview().setZoom(scale),
     mediaUrl: (path) => convertFileSrc(path, "knmedia"),
     show: async () => {
-      await win.show();
-      await win.setFocus();
+      // (Android: the window is always shown; these calls may not be supported.)
+      await win.show().catch((e) => { if (!android) throw e; });
+      await win.setFocus().catch((e) => { if (!android) throw e; });
     },
     async toggleFullscreen() {
       await win.setFullscreen(!(await win.isFullscreen()));
@@ -208,6 +223,32 @@ export async function createTauriBackend(): Promise<Backend> {
       void listen<string[]>("kilonote://open-paths", (ev) => handler(ev.payload));
     },
   };
+}
+
+/**
+ * Where a file named `name` is saved, in `dir` (Android, which has no save
+ * dialog for paths): subfolders are allowed, but not leaving the folder.
+ */
+export function savePathIn(dir: string, name: string): string | null {
+  const parts = name.trim().split(/[\\/]+/).filter(Boolean);
+  if (!parts.length || parts.some((p) => p === "." || p === ".." || /[:*?"<>|]/.test(p))) return null;
+  return join(dir, ...parts);
+}
+
+/** Save as, on Android: the file name, asked in the app, in the folder of the note (or the notes folder). */
+async function askSavePath(defaultPath: string | undefined, notesDir: string | null): Promise<string | null> {
+  const { prompt } = await import("../ui/overlay");
+  const dir = defaultPath && /[\\/]/.test(defaultPath) ? dirname(defaultPath) : notesDir;
+  if (!dir) return null;
+  const r = await prompt({
+    title: "Save as",
+    value: defaultPath ? basename(defaultPath) : "note.txt",
+    placeholder: "File name (e.g. ideas.txt, or work/ideas.txt)",
+    okLabel: "Save",
+    selectStem: true,
+    validate: (v) => (savePathIn(dir, v) ? null : "Give a file name (without .. or : * ? \" < > |)"),
+  });
+  return r ? savePathIn(dir, r.value) : null;
 }
 
 // ---------------------------------------------------------------------------

@@ -66,6 +66,34 @@ jobs:
       - name: Lint the Rust backend (macOS)
         run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
 
+  # Android-only code (one window, the notes folder, the app's trash) is only
+  # compiled for Android: checked and linted here, the APK is built at release.
+  check-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          targets: aarch64-linux-android
+          components: clippy
+      - uses: swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: "./src-tauri -> target"
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - name: Lint the Rust backend (Android)
+        run: |
+          BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export CC_aarch64_linux_android="$BIN/aarch64-linux-android24-clang"
+          export AR_aarch64_linux_android="$BIN/llvm-ar"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$BIN/aarch64-linux-android24-clang"
+          cargo clippy --manifest-path src-tauri/Cargo.toml --lib --target aarch64-linux-android -- -D warnings
+
   # The real app, driven through WebDriver (tauri-driver + WebKitWebDriver)
   # in a virtual display: e2e/app.e2e.mjs.
   e2e:

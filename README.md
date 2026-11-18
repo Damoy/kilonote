@@ -13,10 +13,10 @@
   <a href="https://github.com/Damoy/kilonote/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Damoy/kilonote?color=7b6cf6"></a>
   <a href="https://github.com/Damoy/kilonote/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Damoy/kilonote/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-7b6cf6"></a>
-  <img alt="Windows, macOS, Linux" src="https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-555">
+  <img alt="Windows, macOS, Linux, Android" src="https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-555">
 </p>
 
-KiloNote is a desktop note editor for Windows, macOS and Linux. It is minimal, fast and
+KiloNote is a note editor for Windows, macOS and Linux, with an Android app. It is minimal, fast and
 fully usable from the keyboard, and it is built around one workflow: **tracking your work
 tasks and keeping a history of what you got done**. Your notes stay plain text files that any
 other tool can read.
@@ -260,6 +260,26 @@ in your file manager's *Open with* menu.
 
 To build it yourself on Linux, see [Build from source](#build-from-source).
 
+### Android
+
+On the phone (Android 7 or later, 64-bit: every recent phone, Pixel included), open the
+[latest release](https://github.com/Damoy/kilonote/releases/latest) and download
+`KiloNote_<version>_android-arm64.apk`, then open it. The first time, Android asks to allow
+the app you downloaded it with (the browser, or *Files*) to install apps: *Settings* → allow,
+then go back and tap *Install*. Google Play Protect may warn about an app it does not know
+(it is not on the Play Store): *More details* → *Install anyway*. A new version installs the
+same way, over the old one: the notes stay.
+
+What is different on Android:
+- The notes are in the app's own folder, opened at startup: other apps do not see it, and
+  **uninstalling the app deletes them** (copy what you want to keep first). New notes are
+  saved there (*Save as* asks for a name, subfolders allowed: `work/ideas.txt`).
+- The sidebar opens from the button at the left of the tabs, over the editor, and closes
+  once a note is open. The **⋯** button of the tab bar opens the command palette, which has
+  every command; with a keyboard, the shortcuts work too.
+- One window, no file manager, no printing, no opening files from other apps. A deleted file
+  goes to the app's own trash folder.
+
 ### Using KiloNote at work
 
 KiloNote is a plain local file editor: **no network access, no telemetry, no administrator
@@ -430,6 +450,21 @@ if your Windows profile is not detected.
 
 `xcode-select --install`, then `npm ci --ignore-scripts && npm run app:build`.
 
+### Android
+
+With the Android SDK and NDK (`ANDROID_HOME`, `NDK_HOME`), Java 17 or later, and the Rust
+target (`rustup target add aarch64-linux-android`):
+
+```bash
+npx tauri android build --apk --target aarch64
+```
+
+The APK is in `src-tauri/gen/android/app/build/outputs/apk/universal/release/`. To sign it,
+put a `keystore.properties` in `src-tauri/gen/android/` (`storeFile`, `storePassword`,
+`keyAlias`, `keyPassword`; never committed); without it, the APK is not signed and Android
+does not install it. `npx tauri android build --apk --debug` gives a debug build, signed
+with the debug key of your machine.
+
 You can pass a folder or a file as an argument: `kilonote ~/notes` or `KiloNote.exe C:\notes`.
 If KiloNote is already open, the existing window comes to the front and opens it.
 
@@ -460,8 +495,11 @@ npm run release -- patch --dry-run  # shows what would happen
 
 The script checks that everything is committed, bumps the version everywhere, runs the tests,
 creates the `Version X.Y.Z` commit and the `vX.Y.Z` tag, then pushes to GitHub. GitHub
-Actions then checks the code again, builds the installers for the three systems and publishes
-them, with their checksums, in the release. With `--local`, the Windows installer is built on
+Actions then checks the code again, builds the installers for the three systems and the
+Android app, and publishes them, with their checksums, in the release. The Android app is
+signed with the key of the repository's secrets `ANDROID_KEYSTORE` (a PKCS12 keystore in
+base64, key alias `kilonote`) and `ANDROID_KEYSTORE_PASSWORD`: always the same key, or
+Android refuses to install the update over the installed app. With `--local`, the Windows installer is built on
 your machine and published right away with the [GitHub CLI](https://cli.github.com). Once the
 checksums are online, the workflow also updates the Scoop and winget manifests in `packaging/`
 (`scripts/update-packaging.sh`).
@@ -493,7 +531,9 @@ src/
                 (each loaded the first time it is shown)
   security/     tests that lock the security rules (CSP, sandbox, no innerHTML, permissions)
   vendor/       small stand-ins for optional dependencies that are left out
-src-tauri/      native Rust backend: atomic reads/writes, archives, trash, single instance
+src-tauri/      native Rust backend (lib.rs; main.rs starts it on the desktop): atomic
+                reads/writes, archives, trash, single instance; gen/android: the Android
+                project (its signing settings, and the room left for the system bars)
 scripts/        Windows builds (WSL or PowerShell), releases and version bump, packaging
                 manifests, pixel art icons, cloud session setup
 packaging/      Scoop and winget manifests

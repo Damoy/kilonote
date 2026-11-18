@@ -1,7 +1,9 @@
 node_modules/
 dist/
 src-tauri/target/
-src-tauri/gen/
+# (The Android project is kept: its build settings and the window insets are ours.)
+src-tauri/gen/*
+!src-tauri/gen/android/
 *.log
 .DS_Store
 dist-windows/

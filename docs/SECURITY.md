@@ -14,7 +14,7 @@ automated tests.
 | Child processes | Only the WebView2 engine (`msedgewebview2.exe`), and the default browser or mail app when the user clicks a web or mail link |
 | Data | Text files chosen by the user, on the local disk, in plain text (like Notepad) |
 | Privileges | **Standard user.** No administrator rights, no service, no driver, nothing launched at startup, no scheduled task |
-| Rendering engine | Microsoft Edge WebView2, a component of Windows 10/11 |
+| Rendering engine | Microsoft Edge WebView2, a component of Windows 10/11 (Android: the system WebView) |
 | Source code | Public, MIT license; widely used open-source dependencies (Tauri, CodeMirror) |
 | Signature | **Not signed** (no Authenticode certificate): see [Points of attention](#points-of-attention) |
 | Provenance | Every release file has a SHA-256 checksum and a signed build provenance ([Verify a file](#verify-a-file)) |
@@ -52,8 +52,7 @@ program.
 
 - The binary contains no HTTP request library: in `src-tauri`,
   `cargo tree -e normal -i reqwest --target x86_64-pc-windows-msvc` returns nothing (the
-  same for macOS and Linux; Tauri only uses an HTTP client on mobile platforms, which
-  KiloNote does not target).
+  same for macOS and Linux). The Android app is different: see [Android](#android).
 - The interface runs under a strict content security policy
   (`src-tauri/tauri.conf.json`): `connect-src 'self' ipc:` forbids any request to the
   outside, `script-src 'self'` forbids any remote or inline script. Fonts, images and
@@ -155,10 +154,11 @@ npx tauri build --no-bundle
 ## Technical surface
 
 - The web interface runs in WebView2, isolated from the system: it can only call a
-  closed list of native commands declared in `src-tauri/src/main.rs` (read/write a text
+  closed list of native commands declared in `src-tauri/src/lib.rs` (read/write a text
   file, read an image or save a pasted one, list a folder, rename, move to the trash,
   open a KiloNote window, open the print dialog) and the
-  permissions of `src-tauri/capabilities/default.json`. The only "opener" permissions are
+  permissions of `src-tauri/capabilities/default.json` (`mobile.json` on Android: the
+  same, minus the file manager and the window places). The only "opener" permissions are
   opening `http(s)://` and `mailto:` addresses with the default app and revealing a file
   in the file manager: there is no permission to open or execute files, and no shell or
   process plugin. Developer tools are not compiled into the distributed build.
@@ -184,7 +184,7 @@ npx tauri build --no-bundle
   (explorer, Ctrl+O, a file dropped outside a note) is read the same way and shown in
   the app's image viewer: it is never handed to another program.
 - Videos opened in KiloNote play in the same viewer. The player reads the file through
-  the app's own `knmedia` protocol (registered in `src-tauri/src/main.rs`): it answers
+  the app's own `knmedia` protocol (registered in `src-tauri/src/lib.rs`): it answers
   only for video files (mp4, m4v, mov, webm, mkv, ogv), only by reading, and piece by
   piece (HTTP ranges of 4 MB at most), so a long video is never loaded whole. The
   interface's content security policy allows media from that protocol only
@@ -249,6 +249,31 @@ npx tauri build --no-bundle
 - The content security policy keeps `'unsafe-inline'` for styles only (the editor sets
   element styles); `dangerousDisableAssetCspModification: ["style-src"]` stops Tauri from
   replacing it with nonces, which would block those styles. Scripts stay `'self'` only.
+
+## Android
+
+The Android app (`KiloNote_<version>_android-arm64.apk`) is the same interface and the same
+native commands, built from the same source, with less reach:
+
+- **Permissions asked of the system: Internet only** (`AndroidManifest.xml`, checked by a
+  test). It is part of the Tauri template: the app's code makes no request, and the
+  interface runs under the same content security policy, which forbids any request to the
+  outside. No access to the phone's files, photos, contacts, camera, microphone or location.
+- On Android, Tauri itself compiles in an HTTP client (`reqwest`: `cargo tree -e normal -i
+  reqwest --target aarch64-linux-android`), which it uses in development builds to reach the
+  development server. KiloNote never calls it. Plain `http://` traffic is only allowed in
+  debug builds (`usesCleartextTraffic` is false in the release).
+- The notes live in the app's private folder (`<app data>/Notes`): no other app can read
+  them, and uninstalling the app deletes them. KiloNote cannot open files elsewhere on the
+  phone. Deleting moves a file to `<app data>/trash`.
+- No other windows, no file manager, no printing: those native commands answer with an
+  error on Android, and their permissions are not granted (`src-tauri/capabilities/mobile.json`).
+- Links: like on the desktop, only `http(s)://` and `mailto:`, handed to the phone's browser
+  or mail app.
+- The APK is built by the release workflow on a GitHub-hosted runner and signed with the
+  project's release key (a repository secret, never in the code): Android only installs an
+  update signed with the same key as the installed app. It is not distributed through
+  Google Play.
 
 ## Dependencies and supply chain
 

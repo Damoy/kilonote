@@ -463,7 +463,7 @@ export class TabBar {
       { label: "Split right", icon: "splitRight", shortcut: shortcutFor("view.splitRight"), action: () => app.splitDoc(doc, "right") },
       { label: "Split down", icon: "splitDown", shortcut: shortcutFor("view.splitDown"), action: () => app.splitDoc(doc, "bottom") },
       ...(app.panes.length > 1 ? [{ label: "Move to the next pane", action: () => app.moveToNextPane(doc) }] : []),
-      { label: "Move to new window", icon: "newWindow", disabled: !doc.path, action: () => moveToNewWindow(app, doc) },
+      ...(app.desktop ? [{ label: "Move to new window", icon: "newWindow", disabled: !doc.path, action: () => moveToNewWindow(app, doc) }] : []),
       doc.path && isPinned(doc.path)
         ? { label: "Unpin note", icon: "pin", action: () => setPinned(doc.path!, false) }
         : { label: "Pin note to the top", icon: "pin", disabled: !doc.path, action: () => doc.path && setPinned(doc.path, true) },
@@ -483,7 +483,7 @@ export class TabBar {
       items.push(
         { separator: true },
         { label: "Copy path", action: () => copyText(path) },
-        { label: "Reveal in file manager", icon: "folderOpen", action: () => app.backend.reveal(path) },
+        ...(app.desktop ? [{ label: "Reveal in file manager", icon: "folderOpen", action: () => app.backend.reveal(path) }] : []),
         { label: "Rename…", action: () => renamePath(app, path) },
       );
     }

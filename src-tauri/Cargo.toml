@@ -8,6 +8,12 @@ authors = ["Damoy"]
 edition = "2021"
 rust-version = "1.77"
 
+[lib]
+# The desktop executable (main.rs) and the Android app (a shared library) both
+# start the app from here.
+name = "kilonote_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -15,10 +21,13 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
-tauri-plugin-window-state = "2"
-tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+# Desktop only: a single process, the place of each window, the system trash.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-window-state = "2"
+tauri-plugin-single-instance = "2"
 trash = "5"
 
 [profile.release]

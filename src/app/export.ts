@@ -103,7 +103,7 @@ export async function exportHtml(app: App) {
     return;
   }
   app.refreshWorkspaceFilesSoon();
-  toast(`Exported to ${basename(target)}`, { action: { label: "Show in folder", run: () => void app.backend.reveal(target) } });
+  toast(`Exported to ${basename(target)}`, { action: app.desktop ? { label: "Show in folder", run: () => void app.backend.reveal(target) } : undefined });
 }
 
 /** The note being printed (shown only by the printer). */

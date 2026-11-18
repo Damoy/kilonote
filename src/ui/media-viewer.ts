@@ -83,7 +83,7 @@ class MediaViewer {
       h("div", { class: "kn-viewer-head" },
         this.kindIcon, this.title, this.info, h("span", { class: "kn-spacer" }), this.count, this.prevBtn, this.nextBtn,
         this.zoomBtn, this.copyBtn, this.addBtn,
-        h("button", { class: "kn-icon-btn", title: "Reveal in file manager", onclick: () => void app.backend.reveal(this.path) }, icon("folderOpen")),
+        app.desktop ? h("button", { class: "kn-icon-btn", title: "Reveal in file manager", onclick: () => void app.backend.reveal(this.path) }, icon("folderOpen")) : null,
         h("button", { class: "kn-icon-btn", title: "Close (Esc)", onclick: () => this.close() }, icon("x"))),
       this.stage,
       this.hint,

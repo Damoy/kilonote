@@ -32,6 +32,7 @@ import { debounce, h } from "../ui/dom";
 import { confirm, prompt, setFocusRestorer, toast } from "../ui/overlay";
 import { setPaletteFocusRestorer } from "../ui/palette";
 import { TabBar } from "../ui/tabbar";
+import { installPhoneLayout } from "../ui/phone";
 import { Pane, renderLayout } from "../ui/panes";
 import { MAX_PANES, neighborPane, panesInOrder, removeFromLayout, splitLayout, type Layout, type Side } from "./layout";
 import { Sidebar } from "../ui/sidebar";
@@ -142,6 +143,11 @@ export class App {
     return this.pane.tabbar;
   }
 
+  /** A desktop app (several windows, a file manager, printing), not the Android one. */
+  get desktop(): boolean {
+    return this.backend.platform !== "android";
+  }
+
   // -------------------------------------------------------------------------
   // Events
 
@@ -202,6 +208,8 @@ export class App {
       this.refreshWorkspaceFilesSoon();
     });
     window.addEventListener("blur", () => this.flushAutosaves());
+    // (On Android the app goes to the background without a blur, and may be stopped there.)
+    document.addEventListener("visibilitychange", () => document.hidden && this.flushAutosaves());
     // The notes on screen (one per pane) are checked often; the other tabs when the window gets the focus.
     setInterval(() => {
       const shown = this.panes.flatMap((p) => (p.active?.path ? [p.active] : []));
@@ -220,8 +228,8 @@ export class App {
 
     await restoreSession(this);
     const startup = await this.backend.windowPaths().catch(() => [] as string[]);
-    if (this.backend.kind === "web" && this.backend.windowLabel === "main") {
-      // Browser demo: the main window opens the demo folder.
+    if ((this.backend.kind === "web" || !this.desktop) && this.backend.windowLabel === "main") {
+      // Browser demo and Android: the main window opens the demo folder, or the app's notes folder.
       if (startup.length && !this.workspace) await this.openFolder(startup[0]);
     } else if (startup.length) await this.openPaths(startup);
     this.on("settings", () => syncAssistant(this));
@@ -232,10 +240,12 @@ export class App {
       if (p && !isInside(p, this.configDir)) noteOpened(p);
     });
     this.renderAll();
+    if (!this.desktop) installPhoneLayout(this);
     if (this.backend.windowLabel === "main") {
       void restoreOtherWindows(this);
       // Once per launch, in the first window, until "Don't show at startup" is ticked.
-      if (this.settings.show_shortcuts_at_startup) void openCheatSheet(this, { startup: true });
+      // (Not on Android: the shortcuts need a keyboard, the ⋯ button of the tab bar opens the commands.)
+      if (this.settings.show_shortcuts_at_startup && this.desktop) void openCheatSheet(this, { startup: true });
     }
   }
 
@@ -624,7 +634,7 @@ export class App {
   private refuseBinary(path: string): null {
     toast(`"${basename(path)}" is not a text file. KiloNote opens text files, images and videos, and never runs programs.`, {
       kind: "error",
-      action: { label: "Reveal in file manager", run: () => this.backend.reveal(path) },
+      action: this.desktop ? { label: "Reveal in file manager", run: () => this.backend.reveal(path) } : undefined,
     });
     return null;
   }

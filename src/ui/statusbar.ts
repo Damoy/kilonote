@@ -28,8 +28,8 @@ export class StatusBar {
   private words = h("span", { class: "st-item st-dim" });
   private tasks = h("button", { class: "st-item st-tasks", title: titleWithKey("Headings and tasks of this note", "palette.symbol") });
   private encoding = h("button", { class: "st-item st-dim", title: "Encoding: click to convert" });
-  private eol = h("button", { class: "st-item", title: "Line endings" });
-  private lang = h("button", { class: "st-item", title: titleWithKey("Document type (syntax coloring)", "view.language") });
+  private eol = h("button", { class: "st-item st-wide", title: "Line endings" });
+  private lang = h("button", { class: "st-item st-wide", title: titleWithKey("Document type (syntax coloring)", "view.language") });
   private save = h("button", { class: "st-item st-save" });
   private previewBtn = h("button", { class: "st-item st-icon st-preview" });
   private counted: unknown = null;
@@ -38,7 +38,7 @@ export class StatusBar {
     const sidebarBtn = h("button", { class: "st-item st-icon", title: titleWithKey("Sidebar", "view.sidebar"), onclick: () => app.sidebar.toggle() }, icon("sidebar"));
     const themeBtn = h("button", { class: "st-item st-icon", title: "Theme", onclick: () => selectTheme(app) }, icon("palette"));
     const settingsBtn = h("button", { class: "st-item st-icon", title: titleWithKey("Settings", "settings.open"), onclick: () => app.openSettings() }, icon("gear"));
-    const keysBtn = h("button", { class: "st-item st-icon", title: titleWithKey("Keyboard shortcuts", "help.shortcuts"), onclick: () => void openCheatSheet(app) }, icon("keyboard"));
+    const keysBtn = h("button", { class: "st-item st-icon st-wide", title: titleWithKey("Keyboard shortcuts", "help.shortcuts"), onclick: () => void openCheatSheet(app) }, icon("keyboard"));
     this.left.append(sidebarBtn, this.tasks);
     this.right.append(this.pos, this.occurrences, this.words, this.encoding, this.eol, this.lang, this.previewBtn, this.save, themeBtn, keysBtn, settingsBtn);
     this.previewBtn.addEventListener("click", () => app.preview.toggle());

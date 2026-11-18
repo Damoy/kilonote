@@ -1367,3 +1367,47 @@ describe("video files", () => {
     expect(document.querySelector(".kn-viewer")).toBeNull();
   });
 });
+
+describe("Android", () => {
+  async function startAndroid(files: Record<string, string>) {
+    const { backend, disk } = memoryBackend({ "/config/settings.json": SETTINGS(), ...files });
+    Object.assign(backend, { platform: "android", windowPaths: async () => ["/notes"] });
+    const app = new App(backend);
+    await app.init();
+    return { app, disk };
+  }
+
+  it("opens the app's notes folder at startup and leaves out the desktop-only commands", async () => {
+    const { app } = await startAndroid({ "/notes/a.txt": "A" });
+    expect(app.desktop).toBe(false);
+    expect(app.workspace).toBe("/notes");
+    const ids = app.commandList.map((c) => c.id);
+    for (const id of ["window.new", "window.moveTab", "file.open", "file.reveal", "file.print"]) expect(ids).not.toContain(id);
+    expect(ids).toContain("file.saveAs");
+  });
+
+  it("on a phone, the sidebar is a drawer that closes once a note is opened or the editor is touched", async () => {
+    const { app } = await startAndroid({ "/notes/a.txt": "A", "/notes/b.txt": "B" });
+    const { installPhoneLayout } = await import("../ui/phone");
+    const appEl = document.getElementById("app")!;
+    const show = () => !app.sidebar.visible && app.sidebar.toggle();
+    show();
+    expect(app.sidebar.visible).toBe(true);
+    const phone = { matches: true };
+    installPhoneLayout(app, phone);
+    // At startup the editor shows first.
+    expect(app.sidebar.visible).toBe(false);
+    expect(appEl.classList.contains("no-sidebar")).toBe(true);
+    show();
+    await app.openFile("/notes/a.txt");
+    expect(app.sidebar.visible).toBe(false);
+    show();
+    document.getElementById("main")!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    expect(app.sidebar.visible).toBe(false);
+    // A tablet keeps the sidebar next to the editor.
+    phone.matches = false;
+    show();
+    await app.openFile("/notes/b.txt");
+    expect(app.sidebar.visible).toBe(true);
+  });
+});

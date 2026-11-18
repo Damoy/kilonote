@@ -1195,3 +1195,27 @@ body.zen .kn-kilo { display: none; }
 .kn-viewer-stage.video .kn-viewer-img { display: none; }
 .kn-viewer-error { color: var(--kn-fg-muted); max-width: 420px; text-align: center; line-height: 1.5; }
 .kn-viewer-hint { padding: 6px 16px 8px; font-size: 11.5px; color: var(--kn-fg-faint); border-top: 1px solid var(--kn-border); }
+
+/* ------------------------------------------------------------------ Android */
+
+/* Touch: room for a finger on the small buttons. */
+html[data-platform="android"] .kn-tab-close { width: 28px; height: 28px; }
+html[data-platform="android"] .kn-tab-close .kn-icon { opacity: 1; }
+html[data-platform="android"] .kn-group-chip { height: 26px; }
+/* A phone: the sidebar is a drawer over the editor (see src/ui/phone.ts), no split button. */
+@media (max-width: 760px) {
+  html[data-platform="android"] #app { grid-template-columns: 0 minmax(0, 1fr); }
+  html[data-platform="android"] #sidebar {
+    position: absolute; z-index: 30; top: 0; bottom: var(--status-h); left: 0;
+    width: min(86vw, 340px); box-shadow: var(--shadow);
+  }
+  html[data-platform="android"] #sb-resizer { display: none; }
+  html[data-platform="android"] .kn-tabbar.lead .kn-show-sidebar { display: inline-flex; }
+  html[data-platform="android"] .kn-split-btn { display: none; }
+  /* (The narrow tab bar hides them on the desktop: here they are the way to the commands.) */
+  html[data-platform="android"] .kn-tabbar-actions :is(.kn-new-btn, .kn-more-btn) { display: inline-flex; }
+  /* The status bar keeps the cursor, the tasks and the saving state. */
+  html[data-platform="android"] #statusbar :is(.st-dim, .st-wide) { display: none; }
+  html[data-platform="android"] .st-left { overflow: hidden; }
+  html[data-platform="android"] .st-tasks { gap: 6px; }
+}

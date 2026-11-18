@@ -7,7 +7,7 @@
 #   - a run by hand from the Actions tab: releases the version on main again (to
 #     retry a failed release), or only shows what would happen ("dry run").
 # Steps: version (what to do, scripts/release-plan.sh) → check (the CI) → tag →
-# build → checksums and build provenance → Scoop and winget manifests.
+# build → Android app → checksums and build provenance → Scoop and winget manifests.
 name: Release
 
 on:
@@ -140,6 +140,7 @@ jobs:
             | Windows 10/11 | `KiloNote_<version>_x64-setup.exe`: per-user install, no administrator rights; `KiloNote_<version>_x64-portable.exe`: single file, nothing to install |
             | macOS (Intel and Apple Silicon) | `KiloNote_<version>_universal.dmg` |
             | Linux | `.AppImage` (portable), `.deb` (Debian, Ubuntu), `.rpm` (Fedora, openSUSE) |
+            | Android 7 or later (64-bit phones) | `KiloNote_<version>_android-arm64.apk`: open it on the phone to install it ([how](https://github.com/Damoy/kilonote#android)) |
 
             `SHA256SUMS.txt` lists the checksum of every file, and every file comes with a signed
             build provenance (`gh attestation verify <file> -R Damoy/kilonote`). The apps are not
@@ -166,10 +167,84 @@ jobs:
           cp src-tauri/target/release/kilonote.exe "KiloNote_${VERSION}_x64-portable.exe"
           gh release upload "v$VERSION" "KiloNote_${VERSION}_x64-portable.exe" --clobber --repo "$GITHUB_REPOSITORY"
 
+  # The Android app (64-bit ARM: every recent phone), signed with the release key
+  # of the repository's secrets, added to the release once the desktop builds
+  # have created it. A failure here does not hold back the desktop release.
+  android:
+    needs: [version, build]
+    if: always() && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v${{ needs.version.outputs.version }}
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          targets: aarch64-linux-android
+
+      - uses: swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - run: npm ci --ignore-scripts
+
+      # The same key for every version: Android installs an update only when it is
+      # signed like the installed app. ANDROID_KEYSTORE: the PKCS12 keystore in base64
+      # (key alias "kilonote"); ANDROID_KEYSTORE_PASSWORD: its password (and the key's).
+      - name: Signing key
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+          PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE" ] || [ -z "$PASSWORD" ]; then
+            echo "::error::The ANDROID_KEYSTORE and ANDROID_KEYSTORE_PASSWORD secrets are missing (Settings → Secrets and variables → Actions): add them, then re-run this job."
+            exit 1
+          fi
+          echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/kilonote.jks"
+          {
+            echo "storeFile=$RUNNER_TEMP/kilonote.jks"
+            echo "storePassword=$PASSWORD"
+            echo "keyAlias=kilonote"
+            echo "keyPassword=$PASSWORD"
+          } > src-tauri/gen/android/keystore.properties
+
+      - name: Build the APK
+        run: |
+          export NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          # (Gradle downloads its plugins from Maven Central, which sometimes answers
+          # "too many requests": up to three tries, the Rust build is kept between them.)
+          for try in 1 2 3; do
+            npx tauri android build --apk --target aarch64 && exit 0
+            echo "::warning::Android build failed (try $try of 3)"
+            sleep 60
+          done
+          exit 1
+
+      - name: Add it to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          V: ${{ needs.version.outputs.version }}
+        run: |
+          rm -f src-tauri/gen/android/keystore.properties "$RUNNER_TEMP/kilonote.jks"
+          cp src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk "KiloNote_${V}_android-arm64.apk"
+          gh release upload "v$V" "KiloNote_${V}_android-arm64.apk" --clobber --repo "$GITHUB_REPOSITORY"
+
   # SHA-256 checksums of every installer, published with the release
   # (to verify a file, or to allow it by hash in a corporate environment).
+  # (After the Android app, even when it failed. A re-run of the failed Android job
+  # alone adds the app, not its checksum: Actions → Release → Run workflow, on main,
+  # releases everything again.)
   checksums:
-    needs: [version, build]
+    needs: [version, build, android]
     # (Spelled out: the build ran with always(), after a tag job that may be skipped.)
     if: always() && needs.build.result == 'success'
     runs-on: ubuntu-latest

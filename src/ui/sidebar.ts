@@ -221,6 +221,14 @@ export class Sidebar {
     }
   }
 
+  /** Hides the sidebar without moving the focus (the drawer of the phone layout). */
+  hide() {
+    if (!this.visible) return;
+    this.visible = false;
+    this.applyLayout();
+    this.app.emit("workspace");
+  }
+
   toggle() {
     this.visible = !this.visible;
     this.applyLayout();
@@ -547,14 +555,14 @@ export class Sidebar {
       [
         { label: "Open", icon: "file", action: () => app.openFile(path) },
         { label: "Open to the side", icon: "splitRight", action: () => app.openToSide(path) },
-        { label: "Open in new window", icon: "newWindow", action: () => app.backend.openWindow([path]) },
+        ...(app.desktop ? [{ label: "Open in new window", icon: "newWindow", action: () => app.backend.openWindow([path]) }] : []),
         pinnedNotes().some((p) => samePath(p, path))
           ? { label: "Unpin", icon: "pin", action: () => setPinned(path, false) }
           : { label: "Pin to the top", icon: "pin", action: () => setPinned(path, true) },
         { separator: true },
         { label: "Rename…", action: () => renamePath(app, path) },
         { label: "Copy path", action: () => copyText(path) },
-        { label: "Reveal in file manager", icon: "folderOpen", action: () => app.backend.reveal(path) },
+        ...(app.desktop ? [{ label: "Reveal in file manager", icon: "folderOpen", action: () => app.backend.reveal(path) }] : []),
         { separator: true },
         { label: "Move to trash", danger: true, action: () => trashPath(app, path) },
       ],
@@ -568,13 +576,13 @@ export class Sidebar {
     const items: MenuItem[] = [
       { label: "New note here…", icon: "newFile", action: () => { this.expanded.add(path); return createFileIn(app, path); } },
       { label: "New folder…", icon: "newFolder", action: () => createFolderIn(app, path) },
-      { label: "Open folder in new window", icon: "newWindow", action: () => app.backend.openWindow([path]) },
+      ...(app.desktop ? [{ label: "Open folder in new window", icon: "newWindow", action: () => app.backend.openWindow([path]) }] : []),
       { separator: true },
       { label: "Expand all", icon: "expand", action: () => this.expandAll(path) },
       { label: "Collapse all", icon: "collapse", action: () => this.collapseAll(path) },
       { separator: true },
       { label: "Copy path", action: () => copyText(path) },
-      { label: "Reveal in file manager", icon: "folderOpen", action: () => app.backend.reveal(path) },
+      ...(app.desktop ? [{ label: "Reveal in file manager", icon: "folderOpen", action: () => app.backend.reveal(path) }] : []),
     ];
     if (isRoot) items.push({ separator: true }, { label: "Refresh", icon: "refresh", action: () => this.refreshTree() }, { label: "Close folder", action: () => app.closeFolder() });
     else items.push({ separator: true }, { label: "Rename…", action: () => renamePath(app, path) }, { label: "Move to trash", danger: true, action: () => trashPath(app, path) });
