@@ -68,6 +68,9 @@
     },
     "license": "MIT",
     "homepage": "https://github.com/Damoy/kilonote",
-    "publisher": "Damoy"
+    "publisher": "Damoy",
+    "android": {
+      "minSdkVersion": 30
+    }
   }
 }

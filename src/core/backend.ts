@@ -77,8 +77,9 @@ export interface Backend {
   /** Tells the other windows that the settings file changed. */
   broadcastSettingsChanged(): void;
   onSettingsChanged(handler: () => void): void;
-  pickFolder(): Promise<string | null>;
-  pickFiles(): Promise<string[]>;
+  /** A folder chosen by the user (`start`: where the chooser opens, when it can). */
+  pickFolder(start?: string | null): Promise<string | null>;
+  pickFiles(start?: string | null): Promise<string[]>;
   pickSavePath(defaultPath?: string): Promise<string | null>;
   openUrl(url: string): Promise<void>;
   reveal(path: string): Promise<void>;
@@ -97,6 +98,8 @@ export interface Backend {
   onFileDrop(handler: (paths: string[], at?: { x: number; y: number }) => void): void;
   /** Files requested by a second instance of the application. */
   onOpenRequest(handler: (paths: string[]) => void): void;
+  /** Android: the files handed to KiloNote by other apps ("Open with") since the last call. */
+  takeOpened?(): Promise<string[]>;
 }
 
 function detectPlatform(): Platform {
@@ -126,6 +129,27 @@ export async function createTauriBackend(): Promise<Backend> {
   // Android: the app's notes folder (opened at startup); new files are saved there.
   let notesDir: string | null = null;
   const android = platform === "android";
+  // Android: "All files access" is asked once per launch, when a folder or a file is to be chosen.
+  let accessAsked = false;
+  /** Android: the folder chooser of the app (the system's gives documents, not paths), with the places it may show. */
+  async function choosePath(mode: "folder" | "file", start?: string | null): Promise<string | null> {
+    const access = await invoke<{ granted: boolean; root: string }>("storage_access", { request: !accessAsked }).catch(() => ({ granted: false, root: "" }));
+    accessAsked = true;
+    const places = [
+      ...(access.granted && access.root ? [{ label: "Phone", path: access.root }] : []),
+      ...(notesDir ? [{ label: "KiloNote", path: notesDir }] : []),
+    ];
+    const { pickPath } = await import("../ui/file-picker");
+    return pickPath({
+      mode,
+      start,
+      places,
+      listDir: (path) => invoke<Entry[]>("list_dir", { path, showHidden: false }),
+      note: access.granted
+        ? undefined
+        : 'Only the KiloNote folder: to open your other folders, allow "All files access" (Settings → Apps → KiloNote → Permissions), then try again.',
+    });
+  }
 
   return {
     kind: "tauri",
@@ -167,14 +191,16 @@ export async function createTauriBackend(): Promise<Backend> {
         if (ev.payload.from !== win.label) handler();
       });
     },
-    async pickFolder() {
-      // (Android: the system pickers give documents, not paths; the notes stay in the app's folder.)
-      if (android) return notesDir;
+    async pickFolder(start) {
+      if (android) return choosePath("folder", start);
       const r = await dialog.open({ directory: true, multiple: false, title: "Open folder" });
       return typeof r === "string" ? r : null;
     },
-    async pickFiles() {
-      if (android) return [];
+    async pickFiles(start) {
+      if (android) {
+        const path = await choosePath("file", start);
+        return path ? [path] : [];
+      }
       const r = await dialog.open({ multiple: true, title: "Open files" });
       return Array.isArray(r) ? r : r ? [r] : [];
     },
@@ -222,6 +248,7 @@ export async function createTauriBackend(): Promise<Backend> {
     onOpenRequest(handler) {
       void listen<string[]>("kilonote://open-paths", (ev) => handler(ev.payload));
     },
+    takeOpened: android ? () => invoke<string[]>("take_opened") : undefined,
   };
 }
 
@@ -465,11 +492,17 @@ export function createWebBackend(): Backend {
         handler();
       });
     },
-    async pickFolder() {
-      return DEMO_ROOT;
+    async pickFolder(start) {
+      // (In a phone's browser: the folder chooser of the Android app, on the demo files.)
+      if (detectPlatform() !== "android") return DEMO_ROOT;
+      const { pickPath } = await import("../ui/file-picker");
+      return pickPath({ mode: "folder", start, places: [{ label: "Demo", path: DEMO_ROOT }], listDir: (p) => this.listDir(p, false) });
     },
-    async pickFiles() {
-      return [];
+    async pickFiles(start) {
+      if (detectPlatform() !== "android") return [];
+      const { pickPath } = await import("../ui/file-picker");
+      const path = await pickPath({ mode: "file", start, places: [{ label: "Demo", path: DEMO_ROOT }], listDir: (p) => this.listDir(p, false) });
+      return path ? [path] : [];
     },
     async pickSavePath(defaultPath) {
       const name = window.prompt("Save as (path in the demo)", defaultPath ?? join(DEMO_ROOT, "note.txt"));

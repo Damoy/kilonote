@@ -1,7 +1,7 @@
 // Welcome screen (no open tab), featuring Kilo the mascot.
 
 import type { App } from "../app/app";
-import { shortcutFor } from "../core/commands";
+import { runCommand, shortcutFor } from "../core/commands";
 import { basename, dirname, isInside, samePath } from "../core/path";
 import { forgetRecent, pinnedNotes, recentNotes } from "../app/pins";
 import kiloSvg from "../assets/kilo.svg?raw";
@@ -47,8 +47,10 @@ export class Welcome {
     if (!visible) return;
     if (this.el.parentElement !== app.pane.body) app.pane.body.append(this.el);
     const key = (id: string) => shortcutFor(id);
+    // (On a phone: no shortcuts, which need a keyboard.)
+    const phone = !app.desktop;
     const action = (label: string, ic: string, id: string, run: () => unknown) =>
-      h("button", { class: "wl-action", onclick: run }, icon(ic), h("span", {}, label), h("kbd", {}, key(id)));
+      h("button", { class: "wl-action", onclick: run }, icon(ic), h("span", {}, label), phone ? null : h("kbd", {}, key(id)));
     const recent = app.recent.filter((r) => r !== app.workspace).slice(0, 4);
     // The pinned notes, then the ones opened lately (outside the settings folder).
     const pins = pinnedNotes();
@@ -66,11 +68,22 @@ export class Welcome {
         h(
           "div",
           { class: "wl-actions" },
-          action("New note", "newFile", "file.new", () => app.newDoc()),
-          action(app.workspace ? "Go to file" : "Open folder", app.workspace ? "search" : "folder", app.workspace ? "palette.files" : "folder.open", () =>
-            app.workspace ? openQuickOpen(app) : app.openFolder()),
-          action("Ongoing tasks", "tasks", "view.tasks", () => app.sidebar.show("tasks")),
-          action("Commands", "command", "palette.commands", () => openCommandPalette(app)),
+          ...(phone
+            ? // Opening a folder or a file comes first on a phone (no drag and drop, no command line).
+              [
+                action("Open folder", "folderOpen", "folder.open", () => app.openFolder()),
+                action("Open file", "file", "file.open", () => runCommand("file.open")),
+                action("New note", "newFile", "file.new", () => app.newDoc()),
+                ...(app.workspace ? [action("Go to file", "search", "palette.files", () => openQuickOpen(app))] : []),
+                action("Ongoing tasks", "tasks", "view.tasks", () => app.sidebar.show("tasks")),
+              ]
+            : [
+                action("New note", "newFile", "file.new", () => app.newDoc()),
+                action(app.workspace ? "Go to file" : "Open folder", app.workspace ? "search" : "folder", app.workspace ? "palette.files" : "folder.open", () =>
+                  app.workspace ? openQuickOpen(app) : app.openFolder()),
+                action("Ongoing tasks", "tasks", "view.tasks", () => app.sidebar.show("tasks")),
+                action("Commands", "command", "palette.commands", () => openCommandPalette(app)),
+              ]),
         ),
         notes.length
           ? h("div", { class: "wl-recent" }, h("div", { class: "wl-section" }, pins.length ? "Pinned and recent notes" : "Recent notes"),
@@ -80,7 +93,7 @@ export class Welcome {
           ? h("div", { class: "wl-recent" }, h("div", { class: "wl-section" }, "Recent folders"),
               ...recent.map((r) => h("button", { class: "wl-recent-item", title: r, onclick: () => app.openFolder(r) }, icon("folder"), h("span", {}, basename(r)), h("small", {}, ltr(r)))))
           : null,
-        h("div", { class: "wl-tip" }, h("strong", {}, "Tip · "), tip.replace(/\{([\w.]+)\}/g, (_m, id: string) => key(id) || id)),
+        phone ? null : h("div", { class: "wl-tip" }, h("strong", {}, "Tip · "), tip.replace(/\{([\w.]+)\}/g, (_m, id: string) => key(id) || id)),
       ),
     );
   }

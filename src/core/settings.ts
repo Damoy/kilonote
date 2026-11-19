@@ -156,8 +156,18 @@ export const SETTINGS_TEMPLATE = `// KiloNote settings
 export const DEFAULT_SETTINGS: Settings = parseJsonc<Settings>(SETTINGS_TEMPLATE);
 
 /** Merges user settings into the defaults (checking value types). */
-export function mergeSettings(user: Partial<Settings> | null | undefined): Settings {
-  const out: Settings = structuredClone(DEFAULT_SETTINGS);
+/** The defaults of a platform: on a phone, bigger text (read at arm's length, used with a finger). */
+export function defaultSettingsFor(platform: string): Settings {
+  const s = structuredClone(DEFAULT_SETTINGS);
+  if (platform === "android") {
+    s.font_size = 16;
+    s.ui_font_size = 16;
+  }
+  return s;
+}
+
+export function mergeSettings(user: Partial<Settings> | null | undefined, defaults: Settings = DEFAULT_SETTINGS): Settings {
+  const out: Settings = structuredClone(defaults);
   if (!user || typeof user !== "object") return out;
   const target = out as unknown as Record<string, unknown>;
   for (const [k, v] of Object.entries(user)) {

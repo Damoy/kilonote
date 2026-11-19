@@ -15,6 +15,7 @@ import { copyText, renamePath } from "../app/files";
 import { openCommandPalette } from "../app/pickers";
 import { dropTabOutside, moveToNewWindow } from "../app/windows";
 import { isPinned, setPinned } from "../app/pins";
+import { showPhoneMenu } from "./phone";
 import { DropIndicator, dropOn, dropTargetAt, type DropTarget, type Pane } from "./panes";
 
 export class TabBar {
@@ -57,7 +58,12 @@ export class TabBar {
       this.listBtn,
       splitBtn,
       h("button", { class: "kn-icon-btn kn-new-btn", title: titleWithKey("New note", "file.new"), onclick: here(() => app.newDoc()) }, icon("plus")),
-      h("button", { class: "kn-icon-btn kn-more-btn", title: titleWithKey("Command palette", "palette.commands"), onclick: here(() => openCommandPalette(app)) }, icon("more")),
+      h("button", {
+        class: "kn-icon-btn kn-more-btn",
+        title: app.desktop ? titleWithKey("Command palette", "palette.commands") : "Menu",
+        // (On a phone: a menu with Open folder first, and the palette in it.)
+        onclick: (e: MouseEvent) => here(() => (app.desktop ? openCommandPalette(app) : showPhoneMenu(app, e.currentTarget as HTMLElement)))(),
+      }, icon("more")),
     );
     // Shown only while the sidebar is hidden (see .no-sidebar in the CSS).
     const showSidebar = h("button", { class: "kn-icon-btn kn-show-sidebar", title: titleWithKey("Show sidebar", "view.sidebar"), onclick: () => app.sidebar.toggle() }, icon("panelOpen"));

@@ -59,8 +59,9 @@ it to the tasks of one tag (a client, a topic…).
 - Ctrl+1…9: go to tab number N. Ctrl+Tab: next tab.
 - Ctrl+Shift+T: reopen the last closed tab.
 - When the tabs no longer fit, the list button at the right shows them all.
-- On Android, the sidebar opens from the button at the left of the tabs and closes
-  once a note is open; the ⋯ button opens the command palette (every command).
+- On Android, the ⋯ button opens the menu: Open folder, Open file, recent folders,
+  then All commands. The sidebar opens from the button at the left of the tabs and
+  closes once a note is open. KiloNote is in "Open with" for the phone's files.
 
 ## Split view
 

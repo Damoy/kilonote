@@ -140,7 +140,7 @@ jobs:
             | Windows 10/11 | `KiloNote_<version>_x64-setup.exe`: per-user install, no administrator rights; `KiloNote_<version>_x64-portable.exe`: single file, nothing to install |
             | macOS (Intel and Apple Silicon) | `KiloNote_<version>_universal.dmg` |
             | Linux | `.AppImage` (portable), `.deb` (Debian, Ubuntu), `.rpm` (Fedora, openSUSE) |
-            | Android 7 or later (64-bit phones) | `KiloNote_<version>_android-arm64.apk`: open it on the phone to install it ([how](https://github.com/Damoy/kilonote#android)) |
+            | Android 11 or later (64-bit phones) | `KiloNote_<version>_android-arm64.apk`: open it on the phone to install it ([how](https://github.com/Damoy/kilonote#android)) |
 
             `SHA256SUMS.txt` lists the checksum of every file, and every file comes with a signed
             build provenance (`gh attestation verify <file> -R Damoy/kilonote`). The apps are not

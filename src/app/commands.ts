@@ -1,5 +1,6 @@
 // Every command of the app (the palette lists them) and the default shortcuts.
 
+import { dirname } from "../core/path";
 import { registerCommands, type Command } from "../core/commands";
 import { goToOccurrence, openFind } from "../editor/matches";
 import { confirm, toast } from "../ui/overlay";
@@ -111,14 +112,14 @@ export function registerStatusCommands(app: App) {
 }
 
 /** Commands of the desktop app only (several windows, the file manager, the system dialogs, printing). */
-export const DESKTOP_ONLY_COMMANDS = new Set(["window.new", "window.moveTab", "file.open", "file.reveal", "file.print"]);
+export const DESKTOP_ONLY_COMMANDS = new Set(["window.new", "window.moveTab", "file.reveal", "file.print"]);
 
 export function registerAllCommands(app: App) {
   const cmds: Command[] = [
     { id: "file.new", title: "File: New note", run: () => app.newDoc() },
     { id: "window.new", title: "Window: New window", run: () => app.backend.openWindow([]) },
     { id: "window.moveTab", title: "Window: Move tab to new window", run: () => app.active && moveToNewWindow(app, app.active) },
-    { id: "file.open", title: "File: Open…", run: async () => { for (const p of await app.backend.pickFiles()) await app.openFile(p); } },
+    { id: "file.open", title: "File: Open…", run: async () => { for (const p of await app.backend.pickFiles(app.active?.path ? dirname(app.active.path) : app.workspace)) await app.openFile(p); } },
     { id: "folder.open", title: "Folder: Open…", run: () => app.openFolder() },
     { id: "folder.recent", title: "Folder: Open recent…", run: () => openRecentFolder(app) },
     { id: "folder.close", title: "Folder: Close", run: () => app.closeFolder() },

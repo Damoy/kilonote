@@ -31,7 +31,8 @@ android {
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
         applicationId = "dev.damoy.kilonote"
-        minSdk = 24
+        // Android 11: "All files access" (MANAGE_EXTERNAL_STORAGE) for the note folders.
+        minSdk = 30
         targetSdk = 37
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")

@@ -22,7 +22,7 @@ import type { Backend } from "../core/backend";
 import { setKeybindings, setPlatform, type Command } from "../core/commands";
 import { parseJsonc } from "../core/jsonc";
 import { basename, dirname, extname, isInside, isProbablyBinary, join, samePath } from "../core/path";
-import { mergeSettings, setSettingInText, SETTINGS_TEMPLATE, ZOOM_LEVELS, type Settings } from "../core/settings";
+import { defaultSettingsFor, mergeSettings, setSettingInText, SETTINGS_TEMPLATE, ZOOM_LEVELS, type Settings } from "../core/settings";
 import { applyMascot, applyTheme, findTheme } from "../core/themes";
 import { editorHooks } from "../editor/decorations";
 import { closeSlashMenu } from "../editor/slash";
@@ -143,6 +143,11 @@ export class App {
     return this.pane.tabbar;
   }
 
+  /** The default settings of this platform (bigger text on a phone). */
+  get defaults(): Settings {
+    return defaultSettingsFor(this.backend.platform);
+  }
+
   /** A desktop app (several windows, a file manager, printing), not the Android one. */
   get desktop(): boolean {
     return this.backend.platform !== "android";
@@ -175,7 +180,7 @@ export class App {
     this.configDir = await this.backend.configDir();
     this.settingsPath = join(this.configDir, "settings.json");
     this.sessionPath = join(this.configDir, sessionFileName(this.backend.windowLabel));
-    this.settings = mergeSettings(await this.readSettingsFile());
+    this.settings = mergeSettings(await this.readSettingsFile(), this.defaults);
     this.taskCfg = this.makeTaskCfg();
     // Shortcuts first: the widgets below show them in their tooltips.
     setKeybindings(defaultKeybindings(this), this.settings.keybindings);
@@ -232,6 +237,11 @@ export class App {
       // Browser demo and Android: the main window opens the demo folder, or the app's notes folder.
       if (startup.length && !this.workspace) await this.openFolder(startup[0]);
     } else if (startup.length) await this.openPaths(startup);
+    // Android: files handed to KiloNote by other apps ("Open with"), at launch and each time it comes back.
+    if (this.backend.takeOpened) {
+      await this.openHandedFiles();
+      document.addEventListener("visibilitychange", () => !document.hidden && void this.openHandedFiles());
+    }
     this.on("settings", () => syncAssistant(this));
     // Pinned and recent notes: the explorer, "Go to file" and the welcome screen follow.
     onPinsChanged((change) => (change === "pins" || change === "folders") && this.emit("pins"));
@@ -247,6 +257,15 @@ export class App {
       // (Not on Android: the shortcuts need a keyboard, the ⋯ button of the tab bar opens the commands.)
       if (this.settings.show_shortcuts_at_startup && this.desktop) void openCheatSheet(this, { startup: true });
     }
+  }
+
+  /** Android: opens the files other apps handed to KiloNote; one without a path came as a copy. */
+  async openHandedFiles() {
+    const paths = (await this.backend.takeOpened?.().catch(() => [] as string[])) ?? [];
+    if (!paths.length) return;
+    await this.openPaths(paths);
+    const copies = paths.filter((p) => basename(dirname(p)) === "Received");
+    if (copies.length) toast(`Opened a copy, in the Received folder: the app that shared ${copies.length > 1 ? "these files" : "it"} gives no path to edit in place.`);
   }
 
   private blankState() {
@@ -334,7 +353,7 @@ export class App {
     const next = setSettingInText(text, key, value);
     try {
       // Through mergeSettings: values are checked and normalized like on startup.
-      this.settings = mergeSettings(parseJsonc<Partial<Settings>>(next));
+      this.settings = mergeSettings(parseJsonc<Partial<Settings>>(next), this.defaults);
     } catch {
       (this.settings as unknown as Record<string, unknown>)[key] = value;
     }
@@ -372,7 +391,7 @@ export class App {
       if (!auto) toast(`Error in settings.json: ${(e as Error).message}`, { kind: "error" });
       return;
     }
-    this.settings = mergeSettings(parsed);
+    this.settings = mergeSettings(parsed, this.defaults);
     this.applySettings();
     this.backend.broadcastSettingsChanged();
     if (!auto && !this.quietSettings) toast("Settings applied", { kind: "success", timeout: 1600 });
@@ -382,7 +401,7 @@ export class App {
   private async reloadSettingsFromDisk() {
     const user = await this.readSettingsFile();
     if (!user) return;
-    this.settings = mergeSettings(user);
+    this.settings = mergeSettings(user, this.defaults);
     this.applySettings();
   }
 
@@ -1383,7 +1402,7 @@ export class App {
   // Workspace
 
   async openFolder(path?: string) {
-    const dir = path ?? (await this.backend.pickFolder());
+    const dir = path ?? (await this.backend.pickFolder(this.workspace));
     if (!dir) return;
     if (path && !(await this.backend.stat(dir))?.isDir) {
       // A recent folder that was moved, deleted, or is on a disconnected drive.
@@ -1495,7 +1514,7 @@ export class App {
       this.quietSettings = true;
       await this.save(open).finally(() => (this.quietSettings = false));
     } else await this.backend.writeText(this.settingsPath, SETTINGS_TEMPLATE);
-    this.settings = mergeSettings(null);
+    this.settings = mergeSettings(null, this.defaults);
     this.applySettings();
     this.backend.broadcastSettingsChanged();
   }

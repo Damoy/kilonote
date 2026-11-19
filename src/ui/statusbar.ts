@@ -23,7 +23,7 @@ const ENCODINGS: [string, string][] = [
 export class StatusBar {
   private left = h("div", { class: "st-left" });
   private right = h("div", { class: "st-right" });
-  private pos = h("button", { class: "st-item", title: titleWithKey("Go to line", "palette.line") });
+  private pos = h("button", { class: "st-item st-wide", title: titleWithKey("Go to line", "palette.line") });
   private occurrences = h("button", { class: "st-item st-occ" });
   private words = h("span", { class: "st-item st-dim" });
   private tasks = h("button", { class: "st-item st-tasks", title: titleWithKey("Headings and tasks of this note", "palette.symbol") });

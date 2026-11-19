@@ -1369,9 +1369,9 @@ describe("video files", () => {
 });
 
 describe("Android", () => {
-  async function startAndroid(files: Record<string, string>) {
+  async function startAndroid(files: Record<string, string>, handed: string[][] = []) {
     const { backend, disk } = memoryBackend({ "/config/settings.json": SETTINGS(), ...files });
-    Object.assign(backend, { platform: "android", windowPaths: async () => ["/notes"] });
+    Object.assign(backend, { platform: "android", windowPaths: async () => ["/notes"], takeOpened: async () => handed.shift() ?? [] });
     const app = new App(backend);
     await app.init();
     return { app, disk };
@@ -1382,8 +1382,11 @@ describe("Android", () => {
     expect(app.desktop).toBe(false);
     expect(app.workspace).toBe("/notes");
     const ids = app.commandList.map((c) => c.id);
-    for (const id of ["window.new", "window.moveTab", "file.open", "file.reveal", "file.print"]) expect(ids).not.toContain(id);
-    expect(ids).toContain("file.saveAs");
+    for (const id of ["window.new", "window.moveTab", "file.reveal", "file.print"]) expect(ids).not.toContain(id);
+    for (const id of ["file.saveAs", "file.open", "folder.open"]) expect(ids).toContain(id);
+    // Bigger text by default on a phone; the user's settings still win.
+    expect(app.settings.ui_font_size).toBe(16);
+    expect(app.settings.font_size).toBe(16);
   });
 
   it("on a phone, the sidebar is a drawer that closes once a note is opened or the editor is touched", async () => {
@@ -1409,5 +1412,27 @@ describe("Android", () => {
     show();
     await app.openFile("/notes/b.txt");
     expect(app.sidebar.visible).toBe(true);
+  });
+
+  it("opens the files other apps hand to KiloNote, at launch and when it comes back", async () => {
+    const handed = [["/notes/a.txt"], [], ["/notes/Received/mail.txt"]];
+    const { app } = await startAndroid({ "/notes/a.txt": "A", "/notes/Received/mail.txt": "M" }, handed);
+    expect(app.active?.title).toBe("a.txt");
+    await app.openHandedFiles();
+    expect(app.active?.title).toBe("a.txt");
+    await app.openHandedFiles();
+    expect(app.active?.title).toBe("mail.txt");
+    // A file without a path came as a copy: the user is told.
+    expect(document.querySelector(".kn-toast")?.textContent).toMatch(/copy, in the Received folder/);
+  });
+
+  it("the menu button of a phone opens a menu with Open folder first, and the palette in it", async () => {
+    const { app } = await startAndroid({ "/notes/a.txt": "A" });
+    document.querySelector<HTMLElement>(".kn-more-btn")!.click();
+    const labels = [...document.querySelectorAll(".kn-menu-item .kn-menu-label")].map((e) => e.textContent);
+    expect(labels.slice(0, 3)).toEqual(["Open folder…", "Open file…", "Recent folders…"]);
+    expect(labels).toContain("All commands…");
+    expect(document.querySelector(".kn-palette")).toBeNull();
+    expect(app.desktop).toBe(false);
   });
 });

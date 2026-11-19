@@ -255,17 +255,26 @@ npx tauri build --no-bundle
 The Android app (`KiloNote_<version>_android-arm64.apk`) is the same interface and the same
 native commands, built from the same source, with less reach:
 
-- **Permissions asked of the system: Internet only** (`AndroidManifest.xml`, checked by a
-  test). It is part of the Tauri template: the app's code makes no request, and the
-  interface runs under the same content security policy, which forbids any request to the
-  outside. No access to the phone's files, photos, contacts, camera, microphone or location.
+- **Permissions asked of the system: Internet and "All files access"**
+  (`AndroidManifest.xml`, checked by a test). Internet is part of the Tauri template: the
+  app's code makes no request, and the interface runs under the same content security
+  policy, which forbids any request to the outside. "All files access"
+  (`MANAGE_EXTERNAL_STORAGE`) lets the user open note folders anywhere on the phone, as on
+  a computer: Android only grants it in its own settings screen, which KiloNote opens the
+  first time the user chooses *Open folder* or *Open file*; it can be withdrawn there at
+  any time. No access to contacts, camera, microphone or location.
 - On Android, Tauri itself compiles in an HTTP client (`reqwest`: `cargo tree -e normal -i
   reqwest --target aarch64-linux-android`), which it uses in development builds to reach the
   development server. KiloNote never calls it. Plain `http://` traffic is only allowed in
   debug builds (`usesCleartextTraffic` is false in the release).
-- The notes live in the app's private folder (`<app data>/Notes`): no other app can read
-  them, and uninstalling the app deletes them. KiloNote cannot open files elsewhere on the
-  phone. Deleting moves a file to `<app data>/trash`.
+- Without "All files access", the notes live in the app's private folder
+  (`<app data>/Notes`): no other app can read them, and uninstalling the app deletes them.
+  Deleting moves a file to `<app data>/trash`.
+- *Open with*: other apps can hand KiloNote a file to view or edit (`VIEW` and `EDIT`
+  intents, any type). The Android side (`StoragePlugin.kt`) only turns it into a path, or
+  copies it into `<app data>/Notes/Received` when it has none; the file then goes through
+  the same rules as on the desktop (text, images and videos are shown; anything else is
+  refused, never run). Nothing else in the app can be started by other apps.
 - No other windows, no file manager, no printing: those native commands answer with an
   error on Android, and their permissions are not granted (`src-tauri/capabilities/mobile.json`).
 - Links: like on the desktop, only `http(s)://` and `mailto:`, handed to the phone's browser

@@ -26,17 +26,27 @@ describe("no program execution", () => {
     }
   });
 
-  it("the Android app has fewer permissions than the desktop one, and asks the system for nothing but the network", () => {
+  it("the Android app has fewer permissions than the desktop one, and asks the system only for the network and the files", () => {
     const ids = (f: string) =>
       (JSON.parse(read(f)) as { permissions: unknown[] }).permissions.map((p) => (typeof p === "string" ? p : (p as { identifier: string }).identifier));
     const desktop = new Set(ids(CAPABILITIES[0]));
     for (const id of ids(CAPABILITIES[1])) expect(desktop.has(id), id).toBe(true);
     expect(ids(CAPABILITIES[1])).not.toContain("opener:allow-reveal-item-in-dir");
     expect((JSON.parse(read(CAPABILITIES[0])) as { platforms: string[] }).platforms).not.toContain("android");
-    // The manifest: no access to the phone's files, contacts, camera… (the notes stay in the app's folder).
+    // The manifest: the files ("All files access", granted by the user in the system
+    // settings), nothing else (contacts, camera, microphone, location…).
     const manifest = read("src-tauri/gen/android/app/src/main/AndroidManifest.xml");
     const asked = [...manifest.matchAll(/uses-permission android:name="([^"]+)"/g)].map((m) => m[1]);
-    expect(asked).toEqual(["android.permission.INTERNET"]);
+    expect(asked.sort()).toEqual(["android.permission.INTERNET", "android.permission.MANAGE_EXTERNAL_STORAGE"]);
+    // Other apps can only launch it, or hand it a file to view or edit ("Open with").
+    const actions = [...manifest.matchAll(/<action android:name="([^"]+)"/g)].map((m) => m[1]);
+    expect(actions.sort()).toEqual(["android.intent.action.EDIT", "android.intent.action.MAIN", "android.intent.action.VIEW"]);
+    expect([...manifest.matchAll(/android:exported="true"/g)]).toHaveLength(1);
+    // The Android side only reads paths and copies what other apps hand to it: it starts nothing else.
+    const plugin = read("src-tauri/gen/android/app/src/main/java/dev/damoy/kilonote/StoragePlugin.kt");
+    expect(plugin.match(/startActivity\w*\(/g)).toEqual(["startActivityForResult("]);
+    expect(plugin).toMatch(/ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION/);
+    expect(plugin).not.toMatch(/Runtime\.getRuntime|ProcessBuilder|ACTION_VIEW, |setDataAndType/);
     // Plain http only in the debug build (the release has usesCleartextTraffic false).
     expect(read("src-tauri/gen/android/app/build.gradle.kts")).toMatch(/defaultConfig \{\s*manifestPlaceholders\["usesCleartextTraffic"\] = "false"/);
   });

@@ -262,7 +262,7 @@ To build it yourself on Linux, see [Build from source](#build-from-source).
 
 ### Android
 
-On the phone (Android 7 or later, 64-bit: every recent phone, Pixel included), open the
+On the phone (Android 11 or later, 64-bit: every recent phone, Pixel included), open the
 [latest release](https://github.com/Damoy/kilonote/releases/latest) and download
 `KiloNote_<version>_android-arm64.apk`, then open it. The first time, Android asks to allow
 the app you downloaded it with (the browser, or *Files*) to install apps: *Settings* → allow,
@@ -271,14 +271,21 @@ then go back and tap *Install*. Google Play Protect may warn about an app it doe
 same way, over the old one: the notes stay.
 
 What is different on Android:
-- The notes are in the app's own folder, opened at startup: other apps do not see it, and
-  **uninstalling the app deletes them** (copy what you want to keep first). New notes are
-  saved there (*Save as* asks for a name, subfolders allowed: `work/ideas.txt`).
-- The sidebar opens from the button at the left of the tabs, over the editor, and closes
-  once a note is open. The **⋯** button of the tab bar opens the command palette, which has
-  every command; with a keyboard, the shortcuts work too.
-- One window, no file manager, no printing, no opening files from other apps. A deleted file
-  goes to the app's own trash folder.
+- **Open folder** and **Open file** (first in the **⋯** menu of the tab bar, and on the start
+  screen) show a folder chooser made for a finger. The first time, Android asks to let
+  KiloNote access all files (*Allow access to manage all files*): then any folder of the
+  phone opens, as on a computer. Without it, only the app's own KiloNote folder (opened at
+  the first launch) can be used: other apps do not see that one, and **uninstalling the app
+  deletes it**.
+- **Open with**: KiloNote is offered when you open a file from another app (Files, a
+  download, an attachment). A file that has no place on the phone (an e-mail attachment, a
+  cloud file) is opened as a copy, in the `Received` folder of the KiloNote folder.
+- *Save as* asks for a name in the folder of the note (subfolders allowed: `work/ideas.txt`).
+- Made for a small screen: bigger text (16 px, changeable in the settings) and touch-sized
+  menus; the sidebar opens from the button at the left of the tabs, over the editor, and
+  closes once a note is open; the **⋯** menu has the everyday actions and *All commands*;
+  with a keyboard, the shortcuts work too.
+- One window, no file manager, no printing. A deleted file goes to the app's own trash folder.
 
 ### Using KiloNote at work
 

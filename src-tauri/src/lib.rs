@@ -4,7 +4,7 @@
 // native stays here: fast disk access, atomic writes, trash, single instance.
 // On Android: one window, the notes in the app's own folder, an in-app trash.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
@@ -719,6 +719,82 @@ fn notes_dir(app: &AppHandle) -> Result<String, String> {
     Ok(dir.to_string_lossy().into_owned())
 }
 
+// ---------------------------------------------------------------------------
+// The phone's files (Android): StoragePlugin.kt, in the Android project, asks
+// for "All files access" and turns the files handed to KiloNote ("Open with")
+// into paths.
+
+#[cfg(target_os = "android")]
+struct AndroidStorage(tauri::plugin::PluginHandle<tauri::Wry>);
+
+#[cfg(target_os = "android")]
+fn android_storage() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+    tauri::plugin::Builder::new("kn-storage")
+        .setup(|app, api| {
+            let handle = api.register_android_plugin("dev.damoy.kilonote", "StoragePlugin")?;
+            app.manage(AndroidStorage(handle));
+            Ok(())
+        })
+        .build()
+}
+
+/// Whether KiloNote may read the phone's files, and where they start.
+#[derive(Serialize, Deserialize)]
+struct StorageAccess {
+    granted: bool,
+    root: String,
+}
+
+/// Android: whether "All files access" is granted; with `request`, opens the
+/// system screen where the user allows it (answers once they come back).
+#[cfg(target_os = "android")]
+#[tauri::command]
+async fn storage_access(app: AppHandle, request: bool) -> Result<StorageAccess, String> {
+    let storage = app.state::<AndroidStorage>();
+    storage
+        .0
+        .run_mobile_plugin_async("access", serde_json::json!({ "request": request }))
+        .await
+        .map_err(err)
+}
+
+/// The desktop reads the files the user can read: nothing to ask.
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+async fn storage_access() -> Result<StorageAccess, String> {
+    Ok(StorageAccess {
+        granted: true,
+        root: String::new(),
+    })
+}
+
+/// Android: the files handed to KiloNote since the last call ("Open with"). A
+/// file without a path (an attachment, a cloud file) arrives as a copy in the
+/// "Received" folder of the notes folder.
+#[cfg(target_os = "android")]
+#[tauri::command]
+async fn take_opened(app: AppHandle) -> Result<Vec<String>, String> {
+    #[derive(Deserialize)]
+    struct Opened {
+        paths: Vec<String>,
+    }
+    let inbox = Path::new(&notes_dir(&app)?).join("Received");
+    let storage = app.state::<AndroidStorage>();
+    let opened: Opened = storage
+        .0
+        .run_mobile_plugin_async("takeOpened", serde_json::json!({ "inbox": inbox }))
+        .await
+        .map_err(err)?;
+    Ok(opened.paths)
+}
+
+/// The desktop gets them through the command line and the single instance.
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+async fn take_opened() -> Vec<String> {
+    Vec::new()
+}
+
 /// Paths this window must open: the command line for the main window (once),
 /// otherwise the paths given when the window was created. On Android: the
 /// notes folder, once.
@@ -979,6 +1055,8 @@ pub fn run() {
                 .with_state_flags(StateFlags::all() & !StateFlags::VISIBLE)
                 .build(),
         );
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(android_storage());
     builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -1023,7 +1101,9 @@ pub fn run() {
             send_paths,
             delete_session,
             prune_history,
-            print_page
+            print_page,
+            storage_access,
+            take_opened
         ])
         .build(tauri::generate_context!())
         .expect("failed to start KiloNote")
